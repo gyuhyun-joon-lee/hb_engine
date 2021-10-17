@@ -32,3 +32,6 @@ Thumbs.db
 external_libraries/
 
 *.bat
+*.pdb
+*.map
+*.rdbg
