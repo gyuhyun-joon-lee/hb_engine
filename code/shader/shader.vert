@@ -1,15 +1,33 @@
 #version 450
 
-layout(location = 0) in float x;
-layout(location = 1) in float y;
-layout(location = 2) in float z;
+struct vertex
+{
+    float x, y, z;
+    //float nx, ny, nz;
+    //float tu, tv;
+};
+
+// Storage Buffer
+layout(binding = 0) buffer Vertices
+{
+    vertex vertices[];
+};
+
+layout(binding = 1) uniform uniform_buffer
+{
+    mat4 model; 
+    mat4 projView;
+}uniformBuffer;
 
 layout(location = 0) out vec3 fragP;
-
+layout(location = 1) out vec4 viewP;
 
 void main() 
 {
-    vec3 p = vec3(x, y, z);
-    gl_Position = vec4(p, 1.0);
-    fragP = p;
+    vertex vertex = vertices[gl_VertexIndex];
+
+    vec4 p = uniformBuffer.projView*uniformBuffer.model*vec4(vertex.x, vertex.y, vertex.z, 1.0f);
+    gl_Position = p;
+
+    fragP = p.xyz;
 }

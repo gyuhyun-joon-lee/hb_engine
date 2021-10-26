@@ -28,6 +28,7 @@ global_variable VFType(vkGetPhysicalDeviceSurfaceFormatsKHR) vkGetPhysicalDevice
 global_variable VFType(vkGetPhysicalDeviceSurfacePresentModesKHR) vkGetPhysicalDeviceSurfacePresentModesKHR;
 global_variable VFType(vkGetPhysicalDeviceSurfaceCapabilitiesKHR) vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
 global_variable VFType(vkGetPhysicalDeviceMemoryProperties) vkGetPhysicalDeviceMemoryProperties;
+global_variable VFType(vkEnumerateDeviceExtensionProperties) vkEnumerateDeviceExtensionProperties;
 
 // NOTE(joon) : Device level functions
 #ifdef VK_USE_PLATFORM_WIN32_KHR
@@ -72,6 +73,14 @@ global_variable VFType(vkResetFences) vkResetFences;
 global_variable VFType(vkDeviceWaitIdle) vkDeviceWaitIdle;
 global_variable VFType(vkCmdSetViewport) vkCmdSetViewport;
 global_variable VFType(vkCmdSetScissor) vkCmdSetScissor;
+global_variable VFType(vkMapMemory) vkMapMemory;
+global_variable VFType(vkCmdBindIndexBuffer) vkCmdBindIndexBuffer;
+global_variable VFType(vkCmdDrawIndexed) vkCmdDrawIndexed;
+global_variable VFType(vkCreateDescriptorSetLayout) vkCreateDescriptorSetLayout;
+global_variable VFType(vkCmdPushDescriptorSetKHR) vkCmdPushDescriptorSetKHR;
+global_variable VFType(vkCreateImage) vkCreateImage;
+global_variable VFType(vkGetImageMemoryRequirements) vkGetImageMemoryRequirements;
+global_variable VFType(vkBindImageMemory) vkBindImageMemory;
 
 #define GetInstanceFunction(instance, name) name = (VFType(name))vkGetInstanceProcAddr(instance, #name); Assert(name)
 #define GetDeviceFunction(device, name) name = (VFType(name))vkGetDeviceProcAddr(device, #name); Assert(name)
@@ -124,6 +133,7 @@ ResolveInstanceLevelFunctions(VkInstance instance)
     GetInstanceFunction(instance, vkCreateDebugUtilsMessengerEXT);
     GetInstanceFunction(instance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
     GetInstanceFunction(instance, vkGetPhysicalDeviceMemoryProperties);
+    GetInstanceFunction(instance, vkEnumerateDeviceExtensionProperties);
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     GetInstanceFunction(instance, vkCreateWin32SurfaceKHR);
@@ -172,8 +182,14 @@ ResolveDeviceLevelFunctions(VkDevice device)
     GetDeviceFunction(device, vkDeviceWaitIdle);
     GetDeviceFunction(device, vkCmdSetViewport);
     GetDeviceFunction(device, vkCmdSetScissor);
-        
-        
+    GetDeviceFunction(device, vkMapMemory);
+    GetDeviceFunction(device, vkCmdBindIndexBuffer);
+    GetDeviceFunction(device, vkCmdDrawIndexed);
+    GetDeviceFunction(device, vkCreateDescriptorSetLayout);
+    GetDeviceFunction(device, vkCmdPushDescriptorSetKHR); // Extension
+    GetDeviceFunction(device, vkCreateImage);
+    GetDeviceFunction(device, vkGetImageMemoryRequirements);
+    GetDeviceFunction(device, vkBindImageMemory);
 }
 
 #endif
