@@ -77,7 +77,6 @@ PLATFORM_FREE_FILE_MEMORY(Win32FreeFileMemory)
     free(memory);
 }
 
-
 #undef internal 
 #define internal static
 #define MAX_CONSOLE_LINES 5000
@@ -272,7 +271,7 @@ WinMain(HINSTANCE instanceHandle,
             platform_memory platformMemory = {};
             platformMemory.size = Gigabytes(1);
             platformMemory.base = VirtualAlloc(
-#if MEKA_DEBUG
+#if 0
                     (void *)(0 + Terabytes(2)), 
 #else
                     0,
@@ -282,12 +281,13 @@ WinMain(HINSTANCE instanceHandle,
                     PAGE_READWRITE);
 
             //load_mesh_file_result mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/cube.gltf", "../textures/cube.bin");
-            load_mesh_file_result mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/BarramundiFish/BarramundiFish.gltf", "../textures/BarramundiFish/BarramundiFish.bin");
-            //OptimizeMeshGH(&mesh);
+            //load_mesh_file_result mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/BarramundiFish/BarramundiFish.gltf", "../textures/BarramundiFish/BarramundiFish.bin");
+            load_mesh_file_result mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/damaged_helmet/DamagedHelmet.gltf", "../textures/damaged_helmet/DamagedHelmet.bin");
+            //OptimizeMeshGH(&mesh, 0.5f);
 
             renderer renderer = {};
             Win32LoadVulkanLibrary("vulkan-1.dll");
-            Win32InitVulkan(&renderer, instanceHandle, windowHandle, windowWidth, windowHeight, &platformApi);
+            Win32InitVulkan(&renderer, instanceHandle, windowHandle, windowWidth, windowHeight, &platformApi, &platformMemory);
 #if 0
 
             // NOTE(joon) : nvidia says we should not have more than 64 vertices & 126 indices
@@ -330,7 +330,7 @@ WinMain(HINSTANCE instanceHandle,
             VkCopyMemoryToHostVisibleCoherentBuffer(&indexBuffer, 0, mesh.indices, indexBuffer.size);
 
             uniform_buffer *uniformBuffers = PushArray(&platformMemory, uniform_buffer, renderer.swapchainImageCount);
-            uniformBuffers[0].model = Scale(10.0f, 10.0f, 10.50f);
+            uniformBuffers[0].model = Scale(100.0f, 100.0f, 100.0f);
             uniformBuffers[1].model = uniformBuffers[0].model;
             uniformBuffers[2].model = uniformBuffers[0].model;
 
@@ -365,8 +365,8 @@ WinMain(HINSTANCE instanceHandle,
                 renderPassBeginInfo.renderPass = renderer.renderPass;
                 renderPassBeginInfo.framebuffer = renderer.framebuffers[swapchainImageIndex];
                 renderPassBeginInfo.renderArea.offset = {0, 0};
-                renderPassBeginInfo.renderArea.extent.width = (u32)renderer.screenExtent.x;
-                renderPassBeginInfo.renderArea.extent.height = (u32)renderer.screenExtent.y;
+                renderPassBeginInfo.renderArea.extent.width = (u32)renderer.surfaceExtent.x;
+                renderPassBeginInfo.renderArea.extent.height = (u32)renderer.surfaceExtent.y;
                 renderPassBeginInfo.clearValueCount = ArrayCount(clearValues);
                 renderPassBeginInfo.pClearValues = clearValues;
                 vkCmdBeginRenderPass(*commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -374,14 +374,14 @@ WinMain(HINSTANCE instanceHandle,
                 vkCmdBindPipeline(*commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer.pipeline);
 
                 VkViewport viewport = {};
-                viewport.width = renderer.screenExtent.x;
-                viewport.height = renderer.screenExtent.y;
+                viewport.width = renderer.surfaceExtent.x;
+                viewport.height = renderer.surfaceExtent.y;
                 viewport.minDepth = 0.0f;
                 viewport.maxDepth = 1.0f;
 
                 VkRect2D scissorRect = {};
-                scissorRect.extent.width = (u32)renderer.screenExtent.x;
-                scissorRect.extent.height = (u32)renderer.screenExtent.y;
+                scissorRect.extent.width = (u32)renderer.surfaceExtent.x;
+                scissorRect.extent.height = (u32)renderer.surfaceExtent.y;
 
                 vkCmdSetViewport(*commandBuffer, 0, 1, &viewport);
                 vkCmdSetScissor(*commandBuffer, 0, 1, &scissorRect);
@@ -493,8 +493,8 @@ WinMain(HINSTANCE instanceHandle,
                     camera.p -= 0.1f*cameraDir;
                 }
 
-
                 // TODO(joon) : Check whether this fence is working correctly! only one fence might be enough?
+#if 0
                 if(vkGetFenceStatus(renderer.device, renderer.imageReadyToRenderFences[currentFrameIndex]) == VK_SUCCESS)
                 {
                     // The image that we are trying to get might not be ready inside GPU, 
@@ -502,12 +502,13 @@ WinMain(HINSTANCE instanceHandle,
                     vkWaitForFences(renderer.device, 1, &renderer.imageReadyToRenderFences[currentFrameIndex], true, UINT64_MAX);
                     vkResetFences(renderer.device, 1, &renderer.imageReadyToRenderFences[currentFrameIndex]); // Set fences to unsignaled state
                 }
+#endif
 
                 u32 imageIndex = UINT_MAX;
                 VkResult acquireNextImageResult = vkAcquireNextImageKHR(renderer.device, renderer.swapchain, 
                                                     UINT64_MAX, // TODO(joon) : Why not just use the next image, instead of waiting this image?
-                                                    renderer.imageReadyToRenderSemaphores[currentFrameIndex], 
-                                                    renderer.imageReadyToRenderFences[currentFrameIndex], // signaled when the application can use the image.
+                                                    renderer.imageReadyToRenderSemaphores[currentFrameIndex], // signaled when the application can use the image.
+                                                    0, // fence that will signaled when the application can use the image. unused for now.
                                                     &imageIndex);
 
                 if(acquireNextImageResult == VK_SUCCESS)
@@ -536,14 +537,19 @@ WinMain(HINSTANCE instanceHandle,
                     queueSubmitInfo.signalSemaphoreCount = 1;
                     queueSubmitInfo.pSignalSemaphores = renderer.imageReadyToPresentSemaphores + currentFrameIndex;
 
-                    CheckVkResult(vkQueueSubmit(renderer.graphicsQueue, 1, &queueSubmitInfo, renderer.imageReadyToPresentFences[currentFrameIndex]));
-
-                    // NOTE(joon) : After we submit to the queue, wait until the fence is ready
-                    if(vkGetFenceStatus(renderer.device, renderer.imageReadyToPresentFences[currentFrameIndex]) != VK_SUCCESS) // waiting for the fence to be signaled
+                    // TODO(joon) : Do we really need to specify fence here?
+                    CheckVkResult(vkQueueSubmit(renderer.graphicsQueue, 1, &queueSubmitInfo, 0));
+#if 0
+                    for(;;)
                     {
-                        vkWaitForFences(renderer.device, 1, &renderer.imageReadyToPresentFences[currentFrameIndex], true, UINT64_MAX);
-                        vkResetFences(renderer.device, 1, &renderer.imageReadyToPresentFences[currentFrameIndex]); // Set fences to unsignaled state
+                        if(vkGetFenceStatus(renderer.device, renderer.imageReadyToPresentFences[currentFrameIndex]) == VK_SUCCESS) // waiting for the fence to be signaled
+                        {
+                            vkWaitForFences(renderer.device, 1, &renderer.imageReadyToPresentFences[currentFrameIndex], true, UINT64_MAX);
+                            vkResetFences(renderer.device, 1, &renderer.imageReadyToPresentFences[currentFrameIndex]); // Set fences to unsignaled state
+                            break;
+                        }
                     }
+#endif
 
                     VkPresentInfoKHR presentInfo = {};
                     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;

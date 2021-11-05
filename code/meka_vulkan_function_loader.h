@@ -29,13 +29,13 @@ global_variable VFType(vkGetPhysicalDeviceSurfacePresentModesKHR) vkGetPhysicalD
 global_variable VFType(vkGetPhysicalDeviceSurfaceCapabilitiesKHR) vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
 global_variable VFType(vkGetPhysicalDeviceMemoryProperties) vkGetPhysicalDeviceMemoryProperties;
 global_variable VFType(vkEnumerateDeviceExtensionProperties) vkEnumerateDeviceExtensionProperties;
+global_variable VFType(vkDestroySurfaceKHR) vkDestroySurfaceKHR;
 
 // NOTE(joon) : Device level functions
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 global_variable VFType(vkCreateWin32SurfaceKHR) vkCreateWin32SurfaceKHR;
 #endif
 global_variable VFType(vkCreateSwapchainKHR) vkCreateSwapchainKHR;
-global_variable VFType(vkDestroySwapchainKHR) vkDestroySwapchainKHR;
 global_variable VFType(vkGetSwapchainImagesKHR) vkGetSwapchainImagesKHR;
 global_variable VFType(vkAcquireNextImageKHR) vkAcquireNextImageKHR;
 global_variable VFType(vkQueuePresentKHR) vkQueuePresentKHR;
@@ -81,6 +81,19 @@ global_variable VFType(vkCmdPushDescriptorSetKHR) vkCmdPushDescriptorSetKHR;
 global_variable VFType(vkCreateImage) vkCreateImage;
 global_variable VFType(vkGetImageMemoryRequirements) vkGetImageMemoryRequirements;
 global_variable VFType(vkBindImageMemory) vkBindImageMemory;
+global_variable VFType(vkDestroyPipelineLayout) vkDestroyPipelineLayout;
+global_variable VFType(vkDestroySemaphore) vkDestroySemaphore;
+global_variable VFType(vkDestroyFence) vkDestroyFence;
+global_variable VFType(vkFreeCommandBuffers) vkFreeCommandBuffers;
+global_variable VFType(vkDestroyCommandPool) vkDestroyCommandPool;
+global_variable VFType(vkDestroyFramebuffer) vkDestroyFramebuffer;
+global_variable VFType(vkFreeMemory) vkFreeMemory;
+global_variable VFType(vkDestroyImageView) vkDestroyImageView;
+global_variable VFType(vkDestroyImage) vkDestroyImage;
+global_variable VFType(vkDestroyPipeline) vkDestroyPipeline;
+global_variable VFType(vkDestroyRenderPass) vkDestroyRenderPass;
+global_variable VFType(vkDestroySwapchainKHR) vkDestroySwapchainKHR;
+global_variable VFType(vkDestroyDevice) vkDestroyDevice;
 
 #define GetInstanceFunction(instance, name) name = (VFType(name))vkGetInstanceProcAddr(instance, #name); Assert(name)
 #define GetDeviceFunction(device, name) name = (VFType(name))vkGetDeviceProcAddr(device, #name); Assert(name)
@@ -134,6 +147,7 @@ ResolveInstanceLevelFunctions(VkInstance instance)
     GetInstanceFunction(instance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
     GetInstanceFunction(instance, vkGetPhysicalDeviceMemoryProperties);
     GetInstanceFunction(instance, vkEnumerateDeviceExtensionProperties);
+    GetInstanceFunction(instance, vkDestroySurfaceKHR);
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     GetInstanceFunction(instance, vkCreateWin32SurfaceKHR);
@@ -190,6 +204,22 @@ ResolveDeviceLevelFunctions(VkDevice device)
     GetDeviceFunction(device, vkCreateImage);
     GetDeviceFunction(device, vkGetImageMemoryRequirements);
     GetDeviceFunction(device, vkBindImageMemory);
+    GetDeviceFunction(device, vkDestroyPipelineLayout);
+    GetDeviceFunction(device, vkDestroySemaphore);
+    GetDeviceFunction(device, vkDestroyFence);
+    GetDeviceFunction(device, vkFreeCommandBuffers);
+    GetDeviceFunction(device, vkDestroyCommandPool);
+    GetDeviceFunction(device, vkDestroyFramebuffer);
+    GetDeviceFunction(device, vkFreeMemory);
+    GetDeviceFunction(device, vkDestroyImageView);
+    GetDeviceFunction(device, vkDestroyImage);
+    GetDeviceFunction(device, vkDestroyPipelineLayout);
+    GetDeviceFunction(device, vkDestroyPipeline);
+    GetDeviceFunction(device, vkDestroyRenderPass);
+    GetDeviceFunction(device, vkDestroySwapchainKHR);
+    GetDeviceFunction(device, vkDestroyDevice);
+   // GetDeviceFunction(device, );
+
 }
 
 #endif

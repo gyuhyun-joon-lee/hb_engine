@@ -39,7 +39,7 @@ struct renderer
     VkDevice device;
 
     VkSurfaceKHR surface;
-    v2 screenExtent;
+    v2 surfaceExtent;
 
     vk_queue_families queueFamilies;
     VkQueue graphicsQueue;
@@ -56,6 +56,10 @@ struct renderer
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
 
+    VkImage depthImage;
+    VkImageView depthImageView;
+    VkDeviceMemory depthImageMemory;
+
     VkFramebuffer *framebuffers;  // count = swap chain image count 
     VkCommandPool graphicsCommandPool;
     VkCommandBuffer *graphicsCommandBuffers; // count = swap chain image count 
@@ -65,8 +69,6 @@ struct renderer
 
     VkFence *imageReadyToRenderFences;// count = swap chain image count 
     VkFence *imageReadyToPresentFences;// count = swap chain image count 
-
-    VkBuffer vertexBuffer;
 };
 
 
@@ -247,7 +249,7 @@ CreateDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, vk_queue_fam
     feature16BitStorage.pNext = &featureMeshShader;
     feature16BitStorage.storageBuffer16BitAccess = true;
     feature16BitStorage.uniformAndStorageBuffer16BitAccess = false;
-    feature16BitStorage.storagePushConstant16 = false;
+    feature16BitStorage.storagePushConstant16 = false; // We can push 16 bit value??
     feature16BitStorage.storageInputOutput16 = false;
     
     VkPhysicalDevice8BitStorageFeatures feature8BitStorage = {};
@@ -361,7 +363,7 @@ VkCopyMemoryToHostVisibleCoherentBuffer(vk_host_visible_coherent_buffer *buffer,
 
 internal void
 Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle, i32 screenWidth, i32 screenHeight,
-                platform_api *platformApi)
+                platform_api *platformApi, platform_memory *platformMemory)
 {
 #if !MEKA_VULKAN
     Assert(0);
@@ -449,42 +451,36 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     instanceCreateInfo.enabledExtensionCount = ArrayCount(instanceLevelExtensions);
     instanceCreateInfo.ppEnabledExtensionNames = instanceLevelExtensions;
 
-    VkInstance instance;
-    CheckVkResult(vkCreateInstance(&instanceCreateInfo, 0, &instance));
+    CheckVkResult(vkCreateInstance(&instanceCreateInfo, 0, &renderer->instance));
 
-    ResolveInstanceLevelFunctions(instance);
+    ResolveInstanceLevelFunctions(renderer->instance);
 
 #if MEKA_DEBUG
-    CreateDebugMessenger(instance);
+    CreateDebugMessenger(renderer->instance);
 #endif
 
-    VkPhysicalDevice physicalDevice = FindPhysicalDevice(instance);
+    renderer->physicalDevice = FindPhysicalDevice(renderer->instance);
 
-
-    VkSurfaceKHR surface;
     VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
     surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
     surfaceCreateInfo.hinstance = instanceHandle;
     surfaceCreateInfo.hwnd = windowHandle;
-    CheckVkResult(vkCreateWin32SurfaceKHR(instance, &surfaceCreateInfo, 0, &surface));
+    CheckVkResult(vkCreateWin32SurfaceKHR(renderer->instance, &surfaceCreateInfo, 0, &renderer->surface));
 
-    vk_queue_families queueFamilies = GetSupportedQueueFamilies(physicalDevice, surface);
-    VkDevice device = CreateDevice(physicalDevice, surface, &queueFamilies);
-    ResolveDeviceLevelFunctions(device);
+    renderer->queueFamilies = GetSupportedQueueFamilies(renderer->physicalDevice, renderer->surface);
+    renderer->device = CreateDevice(renderer->physicalDevice, renderer->surface, &renderer->queueFamilies);
+    ResolveDeviceLevelFunctions(renderer->device);
 
-    VkQueue graphicsQueue;
-    VkQueue transferQueue;
-    VkQueue presentQueue;
-    vkGetDeviceQueue(device, queueFamilies.graphicsQueueFamilyIndex, 0, &graphicsQueue);
-    vkGetDeviceQueue(device, queueFamilies.presentQueueFamilyIndex, 0, &presentQueue);
-    vkGetDeviceQueue(device, queueFamilies.transferQueueFamilyIndex, 0, &transferQueue);
+    vkGetDeviceQueue(renderer->device, renderer->queueFamilies.graphicsQueueFamilyIndex, 0, &renderer->graphicsQueue);
+    vkGetDeviceQueue(renderer->device, renderer->queueFamilies.presentQueueFamilyIndex, 0, &renderer->presentQueue);
+    vkGetDeviceQueue(renderer->device, renderer->queueFamilies.transferQueueFamilyIndex, 0, &renderer->transferQueue);
 
     VkFormat desiredFormats[] = {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_SRGB};
 
     u32 formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, 0);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(renderer->physicalDevice, renderer->surface, &formatCount, 0);
     VkSurfaceFormatKHR formats[16]; // HACK
-    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, formats);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(renderer->physicalDevice, renderer->surface, &formatCount, formats);
     Assert(formats[0].format != VK_FORMAT_UNDEFINED); // Unlike the past, entry value cannot have VK_FORMAT_UNDEFINED format
 
 
@@ -509,9 +505,9 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     }
 
     u32 presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, 0);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(renderer->physicalDevice, renderer->surface, &presentModeCount, 0);
     VkPresentModeKHR presentModes[16];
-    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(renderer->physicalDevice, renderer->surface, &presentModeCount, presentModes);
 
     b32 presentModeAvailable = false;
     for(u32 presentModeIndex = 0;
@@ -529,16 +525,15 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     Assert(formatAvailable && presentModeAvailable);
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities));
+    CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(renderer->physicalDevice, renderer->surface, &surfaceCapabilities));
 
-    v2 screenExtent = {};
-    screenExtent.x = (r32)surfaceCapabilities.currentExtent.width;
-    screenExtent.y = (r32)surfaceCapabilities.currentExtent.height;
+    renderer->surfaceExtent.x = (r32)surfaceCapabilities.currentExtent.width;
+    renderer->surfaceExtent.y = (r32)surfaceCapabilities.currentExtent.height;
 
     VkSwapchainCreateInfoKHR swapchainCreateInfo = {};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     //swapchainCreateInfo.flags; // TODO(joon) : might be worth looking into protected image?
-    swapchainCreateInfo.surface = surface;
+    swapchainCreateInfo.surface = renderer->surface;
     swapchainCreateInfo.minImageCount = surfaceCapabilities.minImageCount + 1;
     if(swapchainCreateInfo.minImageCount > surfaceCapabilities.maxImageCount)
     {
@@ -557,29 +552,27 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapchainCreateInfo.queueFamilyIndexCount = 1;
-    swapchainCreateInfo.pQueueFamilyIndices = &queueFamilies.graphicsQueueFamilyIndex;
+    swapchainCreateInfo.pQueueFamilyIndices = &renderer->queueFamilies.graphicsQueueFamilyIndex;
     swapchainCreateInfo.preTransform = surfaceCapabilities.currentTransform;
     // TODO(joon) : surfaceCapabilities also return supported alpha composite, so we should check that one too
     swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; 
     swapchainCreateInfo.clipped = VK_TRUE;
 
-    VkSwapchainKHR swapchain;
-    vkCreateSwapchainKHR(device, &swapchainCreateInfo, 0, &swapchain);
+    vkCreateSwapchainKHR(renderer->device, &swapchainCreateInfo, 0, &renderer->swapchain);
 
-    u32 swapchainImageCount = 0;
     // NOTE(joon) : You _have to_ query first and then get the images, otherwise vulkan always returns VK_INCOMPLETE
-    CheckVkResult(vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, 0));
-    VkImage *swapchainImages = (VkImage *)malloc(sizeof(VkImage)*swapchainImageCount);
-    CheckVkResult(vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, swapchainImages));
+    CheckVkResult(vkGetSwapchainImagesKHR(renderer->device, renderer->swapchain, &renderer->swapchainImageCount, 0));
+    renderer->swapchainImages = PushArray(platformMemory, VkImage, renderer->swapchainImageCount);
+    CheckVkResult(vkGetSwapchainImagesKHR(renderer->device, renderer->swapchain, &renderer->swapchainImageCount, renderer->swapchainImages));
 
-    VkImageView *swapchainImageViews = (VkImageView *)malloc(sizeof(VkImageView)*swapchainImageCount);
+    renderer->swapchainImageViews = PushArray(platformMemory, VkImageView, renderer->swapchainImageCount);
     for(u32 swapchainImageIndex = 0;
-        swapchainImageIndex < swapchainImageCount;
+        swapchainImageIndex < renderer->swapchainImageCount;
         ++swapchainImageIndex)
     {
         VkImageViewCreateInfo imageViewCreateInfo = {};
         imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        imageViewCreateInfo.image = swapchainImages[swapchainImageIndex];
+        imageViewCreateInfo.image = renderer->swapchainImages[swapchainImageIndex];
         imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         imageViewCreateInfo.format = selectedFormat.format;
         imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -588,7 +581,7 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
         imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
         imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-        CheckVkResult(vkCreateImageView(device, &imageViewCreateInfo, 0, swapchainImageViews + swapchainImageIndex));
+        CheckVkResult(vkCreateImageView(renderer->device, &imageViewCreateInfo, 0, renderer->swapchainImageViews + swapchainImageIndex));
     }
 
     VkAttachmentDescription renderpassAttachments[2] = {};
@@ -650,8 +643,7 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     //renderPassCreateInfo.dependencyCount = 0;
     //renderPassCreateInfo.pDependencies = ;
     
-    VkRenderPass renderPass;
-    CheckVkResult(vkCreateRenderPass(device, &renderPassCreateInfo, 0, &renderPass));
+    CheckVkResult(vkCreateRenderPass(renderer->device, &renderPassCreateInfo, 0, &renderer->renderPass));
 
     platform_read_file_result vertexShaderCode = platformApi->ReadFile("../meka_renderer/code/shader/shader.vert.spv");
     VkShaderModuleCreateInfo vertexShaderModuleCreateInfo = {};
@@ -660,7 +652,7 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     vertexShaderModuleCreateInfo.pCode = (u32 *)vertexShaderCode.memory;
 
     VkShaderModule vertexShaderModule;
-    CheckVkResult(vkCreateShaderModule(device, &vertexShaderModuleCreateInfo, 0, &vertexShaderModule));
+    CheckVkResult(vkCreateShaderModule(renderer->device, &vertexShaderModuleCreateInfo, 0, &vertexShaderModule));
     //platformApi->FreeFileMemory(vertexShaderCode.memory);
 
     platform_read_file_result fragmentShaderCode = platformApi->ReadFile("../meka_renderer/code/shader/shader.frag.spv");
@@ -670,7 +662,7 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     fragmentShaderModuleCreateInfo.pCode = (u32 *)fragmentShaderCode.memory;
 
     VkShaderModule fragmentShaderModule;
-    CheckVkResult(vkCreateShaderModule(device, &fragmentShaderModuleCreateInfo, 0, &fragmentShaderModule));
+    CheckVkResult(vkCreateShaderModule(renderer->device, &fragmentShaderModuleCreateInfo, 0, &fragmentShaderModule));
     //platformApi->FreeFileMemory(fragmentShaderCode.memory);
 
     VkPipelineShaderStageCreateInfo stageCreateInfo[2] = {};
@@ -726,23 +718,23 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
-    VkRect2D scissorRect = {};
-    scissorRect.extent.width = surfaceCapabilities.currentExtent.width;
-    scissorRect.extent.height = surfaceCapabilities.currentExtent.height;
+    VkRect2D scissor = {};
+    scissor.extent.width = surfaceCapabilities.currentExtent.width;
+    scissor.extent.height = surfaceCapabilities.currentExtent.height;
 
     VkPipelineViewportStateCreateInfo viewportState = {};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.viewportCount = 1;
     viewportState.pViewports = &viewport;
     viewportState.scissorCount = 1;
-    viewportState.pScissors = &scissorRect;
+    viewportState.pScissors = &scissor;
 
     VkPipelineRasterizationStateCreateInfo rasterizationState = {};
     rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizationState.depthClampEnable = false;
     rasterizationState.rasterizerDiscardEnable = false; // TODO(joon) :If enabled, the rasterizer will discard some vertices, but don't know what's the policy for that
     rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT; // which triangle should be discarded
+    rasterizationState.cullMode = VK_CULL_MODE_NONE;//VK_CULL_MODE_BACK_BIT; // which triangle should be discarded
     rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizationState.depthBiasEnable = false;
     rasterizationState.lineWidth = 1.0f;
@@ -798,15 +790,21 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     layoutCreateInfo.pBindings = layoutBinding;
 
     VkDescriptorSetLayout setLayout;
-    vkCreateDescriptorSetLayout(device, &layoutCreateInfo, 0, &setLayout);
+    vkCreateDescriptorSetLayout(renderer->device, &layoutCreateInfo, 0, &setLayout);
 #endif
+    VkPushConstantRange pushConstantRange[1] = {};
+    pushConstantRange[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange[0].offset = 0;
+    pushConstantRange[0].size = sizeof(m4);
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutCreateInfo.setLayoutCount = 1;
     pipelineLayoutCreateInfo.pSetLayouts = &setLayout;
-    pipelineLayoutCreateInfo.pushConstantRangeCount = 0;  // TODO(joon) : Look into this more to use push constant
-    pipelineLayoutCreateInfo.pPushConstantRanges = 0;
+    pipelineLayoutCreateInfo.pushConstantRangeCount = ArrayCount(pushConstantRange);  // TODO(joon) : Look into this more to use push constant
+    pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRange;
+
+    CheckVkResult(vkCreatePipelineLayout(renderer->device, &pipelineLayoutCreateInfo, 0, &renderer->pipelineLayout));
 
     VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }; 
     VkPipelineDynamicStateCreateInfo dynamicState = {};
@@ -814,8 +812,6 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     dynamicState.dynamicStateCount = ArrayCount(dynamicStates);
     dynamicState.pDynamicStates = dynamicStates;
 
-    VkPipelineLayout pipelineLayout;
-    CheckVkResult(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, 0, &pipelineLayout));
 
     VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo = {};
     graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -829,15 +825,14 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     graphicsPipelineCreateInfo.pDepthStencilState = &depthStencilState;
     graphicsPipelineCreateInfo.pColorBlendState = &colorBlendState;
     graphicsPipelineCreateInfo.pDynamicState = &dynamicState;
-    graphicsPipelineCreateInfo.layout = pipelineLayout;
-    graphicsPipelineCreateInfo.renderPass = renderPass;
+    graphicsPipelineCreateInfo.layout = renderer->pipelineLayout;
+    graphicsPipelineCreateInfo.renderPass = renderer->renderPass;
     graphicsPipelineCreateInfo.subpass = 0;
 
-    VkPipeline pipeline;
-    CheckVkResult(vkCreateGraphicsPipelines(device, 0, 1, &graphicsPipelineCreateInfo, 0, &pipeline));
+    CheckVkResult(vkCreateGraphicsPipelines(renderer->device, 0, 1, &graphicsPipelineCreateInfo, 0, &renderer->pipeline));
 
-    vkDestroyShaderModule(device, vertexShaderModule, 0);
-    vkDestroyShaderModule(device, fragmentShaderModule, 0);
+    vkDestroyShaderModule(renderer->device, vertexShaderModule, 0);
+    vkDestroyShaderModule(renderer->device, fragmentShaderModule, 0);
 
     VkImageCreateInfo imageCreateInfo = {};
     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -853,15 +848,14 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    VkImage depthImage;
-    CheckVkResult(vkCreateImage(device, &imageCreateInfo, 0, &depthImage));
+    CheckVkResult(vkCreateImage(renderer->device, &imageCreateInfo, 0, &renderer->depthImage));
 
     VkMemoryRequirements memoryRequirements;
-    vkGetImageMemoryRequirements(device, depthImage, &memoryRequirements);
+    vkGetImageMemoryRequirements(renderer->device, renderer->depthImage, &memoryRequirements);
 
     // TODO(joon) : Store this value!
     VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &physicalDeviceMemoryProperties);
+    vkGetPhysicalDeviceMemoryProperties(renderer->physicalDevice, &physicalDeviceMemoryProperties);
 
     u32 memoryTypeBits = memoryRequirements.memoryTypeBits;
     u32 memoryTypeIndex = 0;
@@ -882,47 +876,44 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     }
     Assert(isMemoryTypeSupported);
 
-    VkDeviceMemory depthImageMemory;
-
     VkMemoryAllocateInfo memoryAllocInfo = {};
     memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocInfo.allocationSize = memoryRequirements.size;
     memoryAllocInfo.memoryTypeIndex = memoryTypeIndex;
-    CheckVkResult(vkAllocateMemory(device, &memoryAllocInfo, 0, &depthImageMemory));
+    CheckVkResult(vkAllocateMemory(renderer->device, &memoryAllocInfo, 0, &renderer->depthImageMemory));
 
-    CheckVkResult(vkBindImageMemory(device, depthImage, depthImageMemory, 0));
+    CheckVkResult(vkBindImageMemory(renderer->device, renderer->depthImage, renderer->depthImageMemory, 0));
 
     VkImageViewCreateInfo imageViewCreateInfo = {};
     imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    imageViewCreateInfo.image = depthImage;
+    imageViewCreateInfo.image = renderer->depthImage;
     imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     imageViewCreateInfo.format = VK_FORMAT_D32_SFLOAT;
     imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     imageViewCreateInfo.subresourceRange.levelCount = 1;
     imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-    VkImageView depthImageView;
-    CheckVkResult(vkCreateImageView(device, &imageViewCreateInfo, 0, &depthImageView));
+    CheckVkResult(vkCreateImageView(renderer->device, &imageViewCreateInfo, 0, &renderer->depthImageView));
 
-    VkFramebuffer *framebuffers = (VkFramebuffer *)malloc(sizeof(VkFramebuffer)*swapchainImageCount);
+    renderer->framebuffers = PushArray(platformMemory, VkFramebuffer, renderer->swapchainImageCount);
     for(u32 framebufferIndex = 0;
-        framebufferIndex < swapchainImageCount;
+        framebufferIndex < renderer->swapchainImageCount;
         ++framebufferIndex)
     {
         VkImageView attachments[2] = {};
-        attachments[0] = swapchainImageViews[framebufferIndex];
-        attachments[1] = depthImageView;
+        attachments[0] = renderer->swapchainImageViews[framebufferIndex];
+        attachments[1] = renderer->depthImageView;
 
         VkFramebufferCreateInfo framebufferCreateInfo = {};
         framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferCreateInfo.renderPass = renderPass;
+        framebufferCreateInfo.renderPass = renderer->renderPass;
         framebufferCreateInfo.attachmentCount = ArrayCount(attachments);
         framebufferCreateInfo.pAttachments = attachments;
         framebufferCreateInfo.width = surfaceCapabilities.currentExtent.width;
         framebufferCreateInfo.height = surfaceCapabilities.currentExtent.height;
         framebufferCreateInfo.layers = 1;
 
-        CheckVkResult(vkCreateFramebuffer(device, &framebufferCreateInfo, 0, framebuffers + framebufferIndex));
+        CheckVkResult(vkCreateFramebuffer(renderer->device, &framebufferCreateInfo, 0, renderer->framebuffers + framebufferIndex));
     }
     
     // NOTE(joon) : command buffers inside the pool can only be submitted to the specified queue
@@ -931,87 +922,60 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     VkCommandPoolCreateInfo commandPoolCreateInfo = {};
     commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     //commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    commandPoolCreateInfo.queueFamilyIndex = queueFamilies.graphicsQueueFamilyIndex;
+    commandPoolCreateInfo.queueFamilyIndex = renderer->queueFamilies.graphicsQueueFamilyIndex;
 
-    VkCommandPool graphicsCommandPool;
-    CheckVkResult(vkCreateCommandPool(device, &commandPoolCreateInfo, 0, &graphicsCommandPool));
+    CheckVkResult(vkCreateCommandPool(renderer->device, &commandPoolCreateInfo, 0, &renderer->graphicsCommandPool));
 
-    u32 commandBufferCount = swapchainImageCount;
-    VkCommandBuffer *swapchainGraphicsCommandBuffers = (VkCommandBuffer *)malloc(sizeof(VkCommandBuffer)*swapchainImageCount);
+    u32 commandBufferCount = renderer->swapchainImageCount;
+    renderer->graphicsCommandBuffers = PushArray(platformMemory, VkCommandBuffer, renderer->swapchainImageCount);
 
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.commandPool = graphicsCommandPool;
+    commandBufferAllocateInfo.commandPool = renderer->graphicsCommandPool;
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     commandBufferAllocateInfo.commandBufferCount = commandBufferCount;
 
-    CheckVkResult(vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, swapchainGraphicsCommandBuffers));
+    CheckVkResult(vkAllocateCommandBuffers(renderer->device, &commandBufferAllocateInfo, renderer->graphicsCommandBuffers));
 
     // TODO(joon) : If possible, make this to use transfer queue(and command pool)!
     VkCommandBuffer transferCommandBuffer;
     commandBufferAllocateInfo = {};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.commandPool = graphicsCommandPool;
+    commandBufferAllocateInfo.commandPool = renderer->graphicsCommandPool;
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     commandBufferAllocateInfo.commandBufferCount = 1;
-    CheckVkResult(vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &transferCommandBuffer));
+    CheckVkResult(vkAllocateCommandBuffers(renderer->device, &commandBufferAllocateInfo, &transferCommandBuffer));
     
-    VkSemaphore *imageReadyToRenderSemaphores = (VkSemaphore *)malloc(sizeof(VkSemaphore)*swapchainImageCount*2);// HACK
-    VkSemaphore *imageReadyToPresentSemaphores = imageReadyToRenderSemaphores + swapchainImageCount;
+    renderer->imageReadyToRenderSemaphores = PushArray(platformMemory, VkSemaphore, 2*renderer->swapchainImageCount);
+    renderer->imageReadyToPresentSemaphores = renderer->imageReadyToRenderSemaphores + renderer->swapchainImageCount;
     for(u32 semaphoreIndex = 0;
-        semaphoreIndex < swapchainImageCount;
+        semaphoreIndex < renderer->swapchainImageCount;
         ++semaphoreIndex)
     {
         VkSemaphoreCreateInfo semaphoreCreateInfo = {};
         semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-        CheckVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, 0, imageReadyToRenderSemaphores + semaphoreIndex));
-        CheckVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, 0, imageReadyToPresentSemaphores + semaphoreIndex));
+        CheckVkResult(vkCreateSemaphore(renderer->device, &semaphoreCreateInfo, 0, renderer->imageReadyToRenderSemaphores + semaphoreIndex));
+        CheckVkResult(vkCreateSemaphore(renderer->device, &semaphoreCreateInfo, 0, renderer->imageReadyToPresentSemaphores + semaphoreIndex));
     }
 
-    VkFence *imageReadyToRenderFences = (VkFence *)malloc(sizeof(VkFence)*swapchainImageCount*2);// HACK
-    VkFence *imageReadyToPresentFences = imageReadyToRenderFences + swapchainImageCount;
+    renderer->imageReadyToRenderFences = PushArray(platformMemory, VkFence, 2*renderer->swapchainImageCount);
+    renderer->imageReadyToPresentFences = renderer->imageReadyToRenderFences + renderer->swapchainImageCount;
     for(u32 fenceIndex = 0;
-        fenceIndex < swapchainImageCount;
+        fenceIndex < renderer->swapchainImageCount;
         ++fenceIndex)
     {
         VkFenceCreateInfo  fenceCreateInfo = {};
         fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         
-        CheckVkResult(vkCreateFence(device, &fenceCreateInfo, 0, imageReadyToRenderFences + fenceIndex));
-        CheckVkResult(vkCreateFence(device, &fenceCreateInfo, 0, imageReadyToPresentFences + fenceIndex));
+        CheckVkResult(vkCreateFence(renderer->device, &fenceCreateInfo, 0, renderer->imageReadyToRenderFences + fenceIndex));
+        CheckVkResult(vkCreateFence(renderer->device, &fenceCreateInfo, 0, renderer->imageReadyToPresentFences + fenceIndex));
     }
-
-    vertex vertices[3] = {};
-    vertices[0] = {-0.5f, -0.5f, 0.0f};
-    vertices[1] = {0.0f, 0.5f, 0.0f};
-    vertices[2] = {0.5f, -0.5f, 0.0f};
-
-    VkBufferCreateInfo bufferCreateInfo = {};
-    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.size = sizeof(vertex) * ArrayCount(vertices);
-    bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VkBuffer vertexBuffer;
-    CheckVkResult(vkCreateBuffer(device, &bufferCreateInfo, 0, &vertexBuffer));
-    
-    VkBufferAllocateMemory(physicalDevice, device, vertexBuffer, 
-                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    // vkMapMemory();
-
-    VkCommandBufferBeginInfo commandBufferBeginInfo = {};
-    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    CheckVkResult(vkBeginCommandBuffer(transferCommandBuffer, &commandBufferBeginInfo));
-
-    vkCmdUpdateBuffer(transferCommandBuffer, vertexBuffer, 0, sizeof(vertex)*ArrayCount(vertices), vertices);
 
     // TODO(joon) : Correct this image memory barrier, and also find out what pipeline stage we should be using
 #if 0
     for(u32 swapchainImageIndex = 0;
-        swapchainImageIndex < swapchainImageCount;
+        swapchainImageIndex < renderer->swapchainImageCount;
         ++swapchainImageIndex)
     {
         VkImageMemoryBarrier imageMemoryBarrier = {};
@@ -1042,42 +1006,59 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
 
     }
 #endif
-    vkEndCommandBuffer(transferCommandBuffer);
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &transferCommandBuffer;
-
-    CheckVkResult(vkQueueSubmit(graphicsQueue, 1, &submitInfo, 0));
-    CheckVkResult(vkQueueWaitIdle(graphicsQueue));
-
-
-    // TODO(joon) : Not a fan of these copies, remove the hack and make it as a pointer!
-    renderer->instance = instance;
-    renderer->physicalDevice = physicalDevice;
-    renderer->device = device;
-    renderer->surface = surface;
-    renderer->screenExtent = screenExtent;
-    renderer->queueFamilies = queueFamilies;
-    renderer->graphicsQueue = graphicsQueue;
-    renderer->transferQueue = transferQueue;
-    renderer->presentQueue = presentQueue;
-    renderer->swapchain = swapchain;
-    renderer->swapchainImages = swapchainImages;
-    renderer->swapchainImageViews = swapchainImageViews;
-    renderer->swapchainImageCount = swapchainImageCount;
-    renderer->renderPass = renderPass;
-    renderer->pipeline = pipeline;
-    renderer->pipelineLayout = pipelineLayout;
-    renderer->framebuffers = framebuffers;
-    renderer->graphicsCommandPool = graphicsCommandPool;
-    renderer->graphicsCommandBuffers = swapchainGraphicsCommandBuffers;
-    renderer->imageReadyToRenderSemaphores = imageReadyToRenderSemaphores;
-    renderer->imageReadyToPresentSemaphores = imageReadyToPresentSemaphores;
-    renderer->imageReadyToRenderFences = imageReadyToRenderFences;
-    renderer->imageReadyToPresentFences = imageReadyToPresentFences;
-    renderer->vertexBuffer = vertexBuffer;
 }
+
+internal void
+CleanVulkan(renderer *renderer)
+{
+    vkDeviceWaitIdle(renderer->device);
+    for(u32 swapchainImageIndex = 0;
+        swapchainImageIndex < renderer->swapchainImageCount;
+        ++swapchainImageIndex)
+    {
+        vkDestroySemaphore(renderer->device, renderer->imageReadyToPresentSemaphores[swapchainImageIndex], 0);
+        vkDestroySemaphore(renderer->device, renderer->imageReadyToPresentSemaphores[swapchainImageIndex], 0);
+        vkDestroyFence(renderer->device, renderer->imageReadyToPresentFences[swapchainImageIndex], 0);
+        vkDestroyFence(renderer->device, renderer->imageReadyToPresentFences[swapchainImageIndex], 0);
+    }
+
+    vkFreeCommandBuffers(renderer->device, renderer->graphicsCommandPool, renderer->swapchainImageCount, renderer->graphicsCommandBuffers);
+
+    vkDestroyCommandPool(renderer->device, renderer->graphicsCommandPool, 0);
+
+    for(u32 swapchainImageIndex = 0;
+        swapchainImageIndex < renderer->swapchainImageCount;
+        ++swapchainImageIndex)
+    {
+        vkDestroyFramebuffer(renderer->device, renderer->framebuffers[swapchainImageIndex], 0);
+    }
+
+    vkFreeMemory(renderer->device, renderer->depthImageMemory, 0);
+    vkDestroyImageView(renderer->device, renderer->depthImageView, 0);
+    vkDestroyImage(renderer->device, renderer->depthImage, 0);
+
+    vkDestroyPipelineLayout(renderer->device, renderer->pipelineLayout, 0);
+    vkDestroyPipeline(renderer->device, renderer->pipeline, 0);
+    vkDestroyRenderPass(renderer->device, renderer->renderPass, 0);
+
+    for(u32 swapchainImageIndex = 0;
+        swapchainImageIndex < renderer->swapchainImageCount;
+        ++swapchainImageIndex)
+    {
+        vkDestroyImageView(renderer->device, renderer->swapchainImageViews[swapchainImageIndex], 0);
+    }
+
+    // NOTE(joon) : swap chain images themselves wil be destorye with swapchain
+    vkDestroySwapchainKHR(renderer->device, renderer->swapchain, 0);
+
+    vkDestroySurfaceKHR(renderer->instance, renderer->surface, 0);
+
+    vkDestroyDevice(renderer->device, 0);
+    vkDestroyInstance(renderer->instance, 0);
+
+}
+
+    
 
 
 

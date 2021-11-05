@@ -22,6 +22,17 @@ typedef uint64_t u64;
 
 typedef uintptr_t uintptr;
 
+#define U8_MAX UCHAR_MAX
+#define U16_MAX USHRT_MAX
+#define U32_MAX UINT_MAX
+
+#define I8_MIN SCHAR_MIN
+#define I8_MAX SCHAR_MAX
+#define I16_MIN SHRT_MIN
+#define I16_MAX SHRT_MAX
+#define I32_MIN INT_MIN
+#define I32_MAX INT_MAX
+
 typedef float r32;
 typedef double r64;
 
@@ -813,10 +824,11 @@ struct platform_memory
 #define PushArray(platformMemory, type, count) (type *)PushSize(platformMemory, count * sizeof(type))
 #define PushStruct(platformMemory, type) (type *)PushSize(platformMemory, sizeof(type))
 
+// TODO(joon) : Alignment might be an issue, always take account of that
 internal void *
-PushSize(platform_memory *platformMemory, size_t size)
+PushSize(platform_memory *platformMemory, size_t size, size_t alignment = 0)
 {
-    void *result = (u8 *)platformMemory->base + size;
+    void *result = (u8 *)platformMemory->base + platformMemory->used;
     platformMemory->used += size;
 
     return result;
