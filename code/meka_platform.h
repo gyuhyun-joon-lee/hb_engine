@@ -2,8 +2,8 @@
  * Written by Gyuhyun 'Joon' Lee
  * https://github.com/meka-lopo/
  */
-#ifndef MEKA_PLATFORM_INDEPENDENT_H
-#define MEKA_PLATFORM_INDEPENDENT_H
+#ifndef MEKA_PLATFORM_H
+#define MEKA_PLATFORM_H
 
 #include <stdint.h>
 #include <limits.h>
@@ -40,7 +40,7 @@ typedef double r64;
 #define ArrayCount(Array) (sizeof(Array) / sizeof(Array[0]))
 
 #define global_variable static
-#define local_variable static
+#define local_persist static
 #define internal static
 
 #define Kilobytes(value) value*1024LL
@@ -48,11 +48,122 @@ typedef double r64;
 #define Gigabytes(value) 1024LL*Megabytes(value)
 #define Terabytes(value) 1024LL*Gigabytes(value)
 
+#define maximum(a, b) ((a>b)? a:b) 
+#define minimum(a, b) ((a<b)? a:b) 
+
+#include "math.h"
 struct v2
 {
     r32 x;
     r32 y;
 };
+
+inline v2
+V2(r32 x, r32 y)
+{
+    v2 result = {};
+
+    result.x = x;
+    result.y = y;
+
+    return result;
+}
+
+inline v2
+V2i(i32 x, i32 y)
+{
+    v2 result = {};
+
+    result.x = (r32)x;
+    result.y = (r32)y;
+
+    return result;
+}
+
+inline r32
+LengthSquare(v2 a)
+{
+    return a.x*a.x + a.y*a.y;
+}
+
+inline r32
+Length(v2 a)
+{
+    return sqrtf(a.x*a.x + a.y*a.y);
+}
+
+inline v2&
+operator+=(v2 &v, v2 a)
+{
+    v.x += a.x;
+    v.y += a.y;
+
+    return v;
+}
+
+inline v2&
+operator-=(v2 &v, v2 a)
+{
+    v.x -= a.x;
+    v.y -= a.y;
+
+    return v;
+}
+
+inline v2
+operator-(v2 a)
+{
+    v2 result = {};
+
+    result.x = -a.x;
+    result.y = -a.y;
+
+    return result;
+}
+
+inline v2
+operator+(v2 a, v2 b)
+{
+    v2 result = {};
+
+    result.x = a.x+b.x;
+    result.y = a.y+b.y;
+
+    return result;
+}
+
+inline v2
+operator-(v2 a, v2 b)
+{
+    v2 result = {};
+
+    result.x = a.x-b.x;
+    result.y = a.y-b.y;
+
+    return result;
+}
+inline v2
+operator/(v2 a, r32 value)
+{
+    v2 result = {};
+
+    result.x = a.x/value;
+    result.y = a.y/value;
+
+    return result;
+}
+
+inline v2
+operator*(r32 value, v2 &a)
+{
+    v2 result = {};
+
+    result.x = value*a.x;
+    result.y = value*a.y;
+
+    return result;
+}
+
 
 struct v3
 {
@@ -231,7 +342,6 @@ LengthSquare(v4 a)
     return a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w;
 }
 
-#include "math.h"
 inline r32
 Length(v4 a)
 {
@@ -745,19 +855,6 @@ Swap(u16 *a, u16 *b)
     *b = temp;
 }
 
-#define WRITE_CONSOLE(name) void (name)(void *console, const char *buffer)
-typedef WRITE_CONSOLE(write_console);
-
-struct write_console_info
-{
-    void *console; // console handle
-    write_console *WriteConsole; // function pointer
-};
-
-global_variable write_console_info globalWriteConsoleInfo;
-
-#define Print(buffer)  globalWriteConsoleInfo.WriteConsole(globalWriteConsoleInfo.console, buffer);
-
 struct platform_read_file_result
 {
     u8 *memory;
@@ -820,7 +917,54 @@ struct platform_memory
     void *base;
     size_t size;
     size_t used;
+
+    u32 tempMemoryStartCount;
+    u32 tempMemoryEndCount;
 };
+
+struct temp_memory
+{
+    platform_memory *platformMemory;
+
+    void *base;
+    size_t size;
+    size_t used;
+};
+
+internal temp_memory
+StartTempMemory(platform_memory *platformMemory, size_t size)
+{
+    Assert(platformMemory->tempMemoryStartCount == platformMemory->tempMemoryEndCount || 
+            platformMemory->tempMemoryEndCount == 0);
+
+    temp_memory result = {};
+    result.base = (u8 *)platformMemory->base + platformMemory->used;
+    result.size = size;
+    result.platformMemory = platformMemory;
+
+    platformMemory->used += size;
+    platformMemory->tempMemoryStartCount++;
+
+    return result;
+}
+internal void
+EndTempMemory(temp_memory *tempMemory)
+{
+    platform_memory *platformMemory = tempMemory->platformMemory;
+    // NOTE(joon) : safe guard for using this temp memory after ending it 
+    tempMemory->base = 0;
+    platformMemory->tempMemoryEndCount++;
+    // IMPORTANT(joon) : As the nature of this, all temp memories should be cleared at once
+    platformMemory->used -= tempMemory->size;
+
+    if(platformMemory->tempMemoryStartCount == platformMemory->tempMemoryEndCount)
+    {
+        platformMemory->tempMemoryStartCount = 0;
+        platformMemory->tempMemoryEndCount = 0;
+    }
+}
+
+// NOTE(joon): Works for both platform memory(world arena) & temp memory
 #define PushArray(platformMemory, type, count) (type *)PushSize(platformMemory, count * sizeof(type))
 #define PushStruct(platformMemory, type) (type *)PushSize(platformMemory, sizeof(type))
 
@@ -834,5 +978,50 @@ PushSize(platform_memory *platformMemory, size_t size, size_t alignment = 0)
     return result;
 }
 
+// TODO(joon) : Alignment might be an issue, always take account of that
+internal void *
+PushSize(temp_memory *tempMemory, size_t size, size_t alignment = 0)
+{
+    void *result = (u8 *)tempMemory->base + tempMemory->used;
+    tempMemory->used += size;
+
+    return result;
+}
+
+
+
+
+struct thread_work_queue;
+#define THREAD_WORK_CALLBACK(name) void name(void *data)
+typedef THREAD_WORK_CALLBACK(thread_work_callback);
+
+struct thread_work_item
+{
+    thread_work_callback *callback;
+    void *data;
+
+    b32 written; // indicates whether this item is properly filled or not
+};
+
+#define PLATFORM_FINISH_ALL_THREAD_WORK_QUEUE_ITEMS(name) void name(thread_work_queue *queue)
+typedef PLATFORM_FINISH_ALL_THREAD_WORK_QUEUE_ITEMS(platform_finish_all_thread_work_queue_items);
+
+#define PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(name) void name(thread_work_queue *queue, thread_work_callback *threadWorkCallback, void *data)
+typedef PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(platform_add_thread_work_queue_item);
+
+// IMPORTANT(joon): There is no safeguard for the situation where one work takes too long, and meanwhile the work queue was filled so quickly
+// causing writeItem == readItem
+struct thread_work_queue
+{
+    // NOTE(joon) : volatile forces the compiler not to optimize the value out, and always to the load(as other thread can change it)
+    u32 volatile writeIndex;
+    u32 volatile readIndex;
+
+    thread_work_item items[256];
+
+    // now this can be passed onto other codes, such as seperate game code to be used as rendering 
+    platform_add_thread_work_queue_item *AddThreadWorkQueueItem;
+    platform_finish_all_thread_work_queue_items * FinishAllThreadWorkQueueItems;
+};
 
 #endif

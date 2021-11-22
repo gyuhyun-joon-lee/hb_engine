@@ -2,15 +2,17 @@
  * Written by Gyuhyun 'Joon' Lee
  * https://github.com/meka-lopo/
  */
-#include <windows.h>
-
 #define VK_USE_PLATFORM_WIN32_KHR
-#define VK_USE_MESH_SHADER
+//#define VK_USE_MESH_SHADER
 
-#include "meka_platform_independent.h"
+#include "meka_platform.h"
 #include "meka_vulkan_function_loader.h"
-#include "meka_mesh_loader.cpp"
 #include "meka_vulkan.cpp"
+#include "meka_render.h"
+#include "meka_mesh_loader.cpp"
+
+#define CGLTF_IMPLEMENTATION
+#include "../external_libraries/cgltf.h"
 
 global_variable b32 isEngineRunning;
 global_variable b32 isWDown;
@@ -18,17 +20,28 @@ global_variable b32 isADown;
 global_variable b32 isSDown;
 global_variable b32 isDDown;
 
-internal
-WRITE_CONSOLE(Win32WriteConsole)
-{
-    u32 numberOfCharsToWrite = GetCharCountNullTerminated(buffer);
-    Assert(numberOfCharsToWrite > 0);
-    // TODO(joon) : is it better to just pass the console handle?
-    Assert(console);
-    WriteConsole(console, buffer, numberOfCharsToWrite, 0, 0);
-    char pad[] = "\n\n";
-    WriteConsole(console, pad, ArrayCount(pad), 0, 0);
-}
+#include <windows.h>
+#include <time.h>
+#include <stdlib.h>
+
+#ifndef _FILE_DEFINED
+struct _iobuf {
+        char *_ptr;
+        int   _cnt;
+        char *_base;
+        int   _flag;
+        int   _file;
+        int   _charbuf;
+        int   _bufsiz;
+        char *_tmpfname;
+        };
+typedef struct _iobuf FILE;
+#define _FILE_DEFINED
+#endif
+
+#pragma comment (lib, "user32")
+#pragma comment (lib, "winmm")
+#pragma comment (lib, "gdi32")
 
 internal
 PLATFORM_READ_FILE(Win32ReadFile)
@@ -78,12 +91,17 @@ PLATFORM_FREE_FILE_MEMORY(Win32FreeFileMemory)
 }
 
 #undef internal 
+#include <io.h>
+#include <iostream>
+#include <fstream>
+#include <fcntl.h>
 #define internal static
 #define MAX_CONSOLE_LINES 5000
 internal HANDLE
 Win32CreateConsoleWindow()
 {
     HANDLE consoleHandle = 0;
+    HANDLE originalSTDHandle = GetStdHandle(STD_OUTPUT_HANDLE);
 
     CONSOLE_SCREEN_BUFFER_INFO consoleInfo;
     if(AllocConsole())
@@ -93,8 +111,17 @@ Win32CreateConsoleWindow()
         {
             consoleInfo.dwSize.Y = MAX_CONSOLE_LINES;
             SetConsoleScreenBufferSize(consoleHandle, consoleInfo.dwSize);
-            // TODO(joon) : Best thing to do will be just redirecting the std out
-            // to our console, but that does not work for some reasons. 
+
+            HANDLE lStdHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+
+            long hConHandle = _open_osfhandle((intptr_t)lStdHandle, _O_TEXT);
+
+            FILE *fp = _fdopen( hConHandle, "w" );
+
+            *stdout = *fp;
+            setvbuf( stdout, NULL, _IONBF, 0 );
+
+            std::ios::sync_with_stdio();
         }
     }
     else
@@ -192,35 +219,259 @@ MainWindowProcedure(HWND windowHandle,
 	return result;
 }
 
-struct camera
+internal render_mesh 
+CreateRenderMeshFromLoadedMesh(renderer *renderer, loaded_raw_mesh *loadedMesh)
 {
-    v3 p;
-    union
+    Assert(loadedMesh->positionCount !=0);
+    if(loadedMesh->normals)
     {
-        struct
+        Assert(loadedMesh->positionCount == loadedMesh->normalCount);
+    }
+
+    render_mesh result = {};
+    result.indexCount = loadedMesh->indexCount;
+
+    result.vertexBuffer = VkCreateHostVisibleCoherentBuffer(renderer->physicalDevice, renderer->device, 
+                                                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                    sizeof(vertex)*loadedMesh->positionCount);
+
+    vertex *vertices = (vertex *)malloc(sizeof(vertex)*loadedMesh->positionCount);
+    // re-construct the vertex as we want
+    // TODO(joon) : instead of doing this, use SOA?
+    // NOTE(joon) : Only possible because this is host visible 
+    for(u32 vertexIndex = 0;
+        vertexIndex < loadedMesh->positionCount;
+        ++vertexIndex)
+
+    {
+        vertex *vert = vertices + vertexIndex;
+        vert->p = loadedMesh->positions[vertexIndex];
+        if(loadedMesh->normals)
         {
-            r32 alongX;
-            r32 alongY;
-            r32 alongZ;
-        };
+            vert->normal = loadedMesh->normals[vertexIndex];
+        }
+    }
+    VkCopyMemoryToHostVisibleCoherentBuffer(&result.vertexBuffer, 0, vertices, result.vertexBuffer.size);
 
-        struct
-        {
-            r32 roll; 
-            r32 pitch; 
-            r32 yaw;  
-        };
+    result.indexBuffer = VkCreateHostVisibleCoherentBuffer(renderer->physicalDevice, renderer->device, 
+                                                    VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                    sizeof(u16)*loadedMesh->indexCount);
+    VkCopyMemoryToHostVisibleCoherentBuffer(&result.indexBuffer, 0, loadedMesh->indices, result.indexBuffer.size);
 
-        r32 e[3];
-    };
-};
+    free(vertices);
 
-struct uniform_buffer
+    return result;
+}
+
+internal void
+RenderMesh(renderer *renderer, render_mesh *renderMesh, VkCommandBuffer commandBuffer)
 {
-    // NOTE(joon) : mat4 should be 16 bytes aligned
-    m4 model;
-    m4 projView;
+    VkDescriptorBufferInfo bufferInfo = {};
+    bufferInfo.buffer = renderMesh->vertexBuffer.buffer;
+    bufferInfo.offset = 0;
+    bufferInfo.range = renderMesh->vertexBuffer.size;
+
+    VkWriteDescriptorSet writeDescriptorSet[1] = {};
+    writeDescriptorSet[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet[0].dstSet = 0;
+    writeDescriptorSet[0].dstBinding = 0;
+    writeDescriptorSet[0].descriptorCount = 1;
+    writeDescriptorSet[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSet[0].pBufferInfo = &bufferInfo;
+
+    vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                            renderer->pipelineLayout, 0, ArrayCount(writeDescriptorSet), writeDescriptorSet);
+
+    vkCmdBindIndexBuffer(commandBuffer, renderMesh->indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdDrawIndexed(commandBuffer, renderMesh->indexCount, 1, 0, 0, 0);
+}
+
+global_variable HANDLE globalSemaphore;
+struct win32_thread
+{
+    DWORD ID;
+    // TODO(joon) : This should be platform independent!
+    thread_work_queue *queue;
 };
+
+#include <intrin.h>
+// NOTE(joon) : x64(lfence sfece) ARM(dmb for load and dsb for store)
+#define WriteBarrier /*prevent compilation reordering*/_WriteBarrier(); /*prevent excute order change by the processor, only needed for special types of memories such as write combine memory*///_mm_sfence(); 
+#define ReadBarrier _ReadBarrier();
+
+// NOTE(joon) : use this to add what thread should do
+internal 
+THREAD_WORK_CALLBACK(PrintString)
+{
+    char *stringToPrint = (char *)data;
+    printf("%s\n", stringToPrint);
+}
+
+// IMPORTANT(joon) : This is meant to be used for single producer, so there's no synchronization here
+internal
+PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(Win32AddThreadWorkQueueItem)
+{
+    // TODO(joon) : When we increment the entry count, thread can start working even if we hadn't fill the work
+    thread_work_item *item = queue->items + queue->writeIndex;
+    Assert(item->written == false);
+
+    item->callback = threadWorkCallback;
+    item->data = data;
+    item->written = true;
+
+    WriteBarrier;
+
+    queue->writeIndex++;
+    Assert(queue->writeIndex != queue->readIndex);
+
+    ReleaseSemaphore(globalSemaphore, 1, 0);
+}
+
+
+internal b32
+Win32DoThreadWorkItem(thread_work_queue *queue, u32 threadID)
+{
+    b32 didWork = false;
+
+    if(queue->writeIndex != queue->readIndex)
+    {
+        LONG expectedCurrentValue = queue->readIndex;
+        LONG updatedValue = expectedCurrentValue+1;
+        LONG actualValue = InterlockedExchange((LONG volatile *)&queue->readIndex, updatedValue);
+
+        if(actualValue == expectedCurrentValue)
+        {
+            // NOTE(joon) : The variable pointed to by the Addend parameter must be aligned on a 32-bit boundary
+            // NOTE(joon) : This function is atomic with respect to calls to other interlocked functions, so each thread with this function is guaranteed to get different value
+            u32 itemIndex = actualValue;
+            thread_work_item *item = queue->items + itemIndex;
+            Assert(item->written);
+
+            item->callback(item->data);
+            ReadBarrier;
+            
+            InterlockedExchange((LONG volatile *)&item->written, false);
+            didWork = true;
+        }
+    }
+
+    return didWork;
+}
+
+// if the thread work is time sensitive, we can use this to spinlock the main thread
+// to wait for all thread works to be finished, while also doing the work itself
+// IMPORTANT(joon) : This is meant to be used for single producer, so there's no synchronization here
+internal 
+PLATFORM_FINISH_ALL_THREAD_WORK_QUEUE_ITEMS(Win32FinishAllThreadWorkQueueItem)
+{
+    while(queue->readIndex != queue->writeIndex) 
+    {
+        Win32DoThreadWorkItem(queue, 0);
+    }
+}
+
+internal DWORD 
+ThreadProc(void *data)
+{
+    win32_thread *thread = (win32_thread *)data;
+    thread_work_queue *queue = thread->queue;
+
+    while(1)
+    {
+        if(Win32DoThreadWorkItem(queue, thread->ID))
+        {
+        }
+        else
+        {
+            // NOTE(joon) : Wake up when the semaphore count not 0, and when it wakes up, decrement it by 1
+            WaitForSingleObjectEx(globalSemaphore, INFINITE, 0);
+        }
+    }
+
+    return 0;
+}
+
+// TODO(joon) : maket this to use random table
+internal r32
+random_between_0_1()
+{
+    r32 result = (r32)rand()/(r32)RAND_MAX;
+    return result;
+}
+
+internal r32
+random_between(r32 min, r32 max)
+{
+    return min + (max-min)*random_between_0_1();
+}
+
+internal r32
+random_between_minus_1_1()
+{
+    r32 result = 2.0f*((r32)rand()/(r32)RAND_MAX) - 1.0f;
+    return result;
+}
+
+inline r32
+random_range(r32 value, r32 range)
+{
+    r32 half_range = range/2.0f;
+
+    r32 result = value + half_range*random_between_minus_1_1();
+
+    return result;
+}
+
+inline i32
+round_r32_i32(r32 value)
+{
+    // TODO(joon) : intrinsic?
+    return (i32)roundf(value);
+}
+
+
+internal void
+make_mountain_inside_terrain(loaded_raw_mesh *terrain, 
+                            i32 x_count, i32 z_count,
+                            r32 center_x, r32 center_z, 
+                            i32 stride,
+                            r32 dim, r32 radius, r32 max_height)
+{
+    i32 min_x = maximum(round_r32_i32((center_x - radius)/dim), 0);
+    i32 max_x = minimum(round_r32_i32((center_x + radius)/dim), x_count);
+
+    i32 min_z = maximum(round_r32_i32((center_z - radius)/dim), 0);
+    i32 max_z = minimum(round_r32_i32((center_z + radius)/dim), z_count);
+    
+    i32 center_x_i32 = (i32)((max_x + min_x)/2.0f);
+    i32 center_z_i32 = (i32)((max_z + min_z)/2.0f);
+
+    v3 *row = terrain->positions + min_z*stride + min_x;
+    for(i32 z = min_z;
+            z < max_z;
+            z++)
+    {
+        v3 *p = row;
+
+        r32 y = 0.0f;
+        for(i32 x = min_x;
+            x < max_x;
+            x++)
+        {
+            r32 distance = dim*Length(V2i(center_x_i32, center_z_i32) - V2i(x, z));
+            if(distance <= radius)
+            {
+                r32 height = (1.0f - (distance / radius))*max_height;
+                p->y = random_range(height, 0.45f*height);
+                //p->y = height*random_between_0_1();
+            }
+
+            p++;
+        }
+
+        row += stride;
+    }
+}
 
 int CALLBACK 
 WinMain(HINSTANCE instanceHandle,
@@ -228,7 +479,59 @@ WinMain(HINSTANCE instanceHandle,
 		LPSTR cmd, 
 		int cmdShowMethod)
 {
+    srand((u32)time(NULL));
 
+#if MEKA_DEBUG
+    Win32CreateConsoleWindow();
+#endif
+
+    win32_thread threads[8] = {};
+
+    globalSemaphore = CreateSemaphoreExA(0, 0, ArrayCount(threads), 0, 0, SEMAPHORE_ALL_ACCESS);
+
+    thread_work_queue queue = {};
+
+    for(u32 threadIndex = 0;
+        threadIndex < ArrayCount(threads);
+        ++threadIndex)
+    {
+        win32_thread *thread = threads + threadIndex;
+        thread->ID = threadIndex + 1; // 0th thread is the main thread
+        thread->queue = &queue;
+
+        // TODO(joon) : Any reason to store this value? i.e. debug purpose?
+        DWORD threadID;
+        HANDLE result = CreateThread(0, 0, ThreadProc, (void *)(threads+threadIndex), 0, &threadID); 
+    }
+
+#if 0
+
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A0");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A1");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A2");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A3");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A4");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A5");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A6");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A7");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A8");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String A9");
+
+    Sleep(1000);
+    
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B0");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B1");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B2");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B3");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B4");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B5");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B6");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B7");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B8");
+    Win32AddThreadWorkQueueItem(&queue, PrintString, "String B9");
+
+    Win32FinishAllThreadWorkQueueItem(&queue);
+#endif
 
 	i32 windowWidth = 960;
 	i32 windowHeight = 540;
@@ -259,10 +562,6 @@ WinMain(HINSTANCE instanceHandle,
             i32 screenWidth = GetSystemMetrics(SM_CXFULLSCREEN);
             i32 screenHeight = GetSystemMetrics(SM_CYFULLSCREEN);
 
-            globalWriteConsoleInfo.console = Win32CreateConsoleWindow();
-            globalWriteConsoleInfo.WriteConsole = Win32WriteConsole;
-
-            Assert(globalWriteConsoleInfo.console && globalWriteConsoleInfo.WriteConsole);
 
             platform_api platformApi = {};
             platformApi.ReadFile = Win32ReadFile;
@@ -280,12 +579,188 @@ WinMain(HINSTANCE instanceHandle,
                     MEM_COMMIT|MEM_RESERVE,
                     PAGE_READWRITE);
 
-            //load_mesh_file_result mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/cube.gltf", "../textures/cube.bin");
-            //load_mesh_file_result mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/BarramundiFish/BarramundiFish.gltf", "../textures/BarramundiFish/BarramundiFish.bin");
-            load_mesh_file_result mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/damaged_helmet/DamagedHelmet.gltf", "../textures/damaged_helmet/DamagedHelmet.bin");
+            //loaded_raw_mesh mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/cube.gltf", "../textures/cube.bin");
+            //loaded_raw_mesh mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/BarramundiFish/BarramundiFish.gltf", "../textures/BarramundiFish/BarramundiFish.bin");
+            //loaded_raw_mesh mesh = ReadSingleMeshOnlygltf(&platformApi, "../textures/damaged_helmet/DamagedHelmet.gltf", "../textures/damaged_helmet/DamagedHelmet.bin");
             //OptimizeMeshGH(&mesh, 0.5f);
 
+            loaded_raw_mesh mesh = {};
+
+            platform_read_file_result binFile = Win32ReadFile("../textures/damaged_helmet/DamagedHelmet.bin");
+
+            cgltf_options options = {cgltf_file_type_gltf};
+            cgltf_data* data = NULL;
+            cgltf_result result = cgltf_parse_file(&options, "../textures/damaged_helmet/DamagedHelmet.gltf", &data);
+            if (result == cgltf_result_success)
+            {
+                /* TODO make awesome stuff */
+                for(u32 meshIndex = 0;
+                    meshIndex < data->meshes_count;
+                    ++meshIndex)
+                {
+                    cgltf_mesh *cgMesh = data->meshes + meshIndex;
+                    cgltf_primitive *cgPrimitives = cgMesh->primitives;
+                    size_t indexCount = cgPrimitives->indices->count;
+                    size_t indexOffset = cgPrimitives->indices->buffer_view->offset;
+                    size_t indexSize = cgPrimitives->indices->buffer_view->size;
+
+                    Assert(indexCount < U32_MAX);
+
+                    mesh.indexCount = (u32)indexCount;
+                    mesh.indices = PushArray(&platformMemory, u16, mesh.indexCount);
+                    memcpy(mesh.indices, binFile.memory + indexOffset, indexSize);
+
+                    for(u32 attributeIndex = 0;
+                        attributeIndex < cgPrimitives->attributes_count;
+                        ++attributeIndex)
+                    {
+                        cgltf_attribute *attribute = cgPrimitives->attributes + attributeIndex;
+                        size_t offset = attribute->data->buffer_view->offset;
+                        size_t size = attribute->data->buffer_view->size;
+                        size_t count = attribute->data->count;
+
+                        Assert(count < U32_MAX);
+
+                        switch(attribute->type)
+                        {
+                            case cgltf_attribute_type_position:
+                            {
+                                Assert(attribute->data->type == cgltf_type_vec3 && attribute->data->stride == 12);
+
+                                mesh.positionCount = (u32)count;
+                                mesh.positions = PushArray(&platformMemory, v3, mesh.positionCount);
+                                memcpy(mesh.positions, binFile.memory + offset, size);
+                            }break;
+                            case cgltf_attribute_type_normal:
+                            {
+                                Assert(attribute->data->type == cgltf_type_vec3 && attribute->data->stride == 12);
+
+                                mesh.normalCount = (u32)count;
+                                mesh.normals = PushArray(&platformMemory, v3, mesh.normalCount);
+                                memcpy(mesh.normals, binFile.memory + offset, size);
+                            }break;
+                            //case cgltf_attribute_type_tangent:
+                            //case cgltf_attribute_type_color:
+                        }
+                    }
+                }
+                int a = 1;
+                cgltf_free(data);
+            }
+            Win32FreeFileMemory(binFile.memory);
+
+            // 100 vertices means there will be 99 quads per line
+            u32 zCount = 100;
+            u32 xCount = 100;
+            loaded_raw_mesh terrain = {};
+            terrain.positionCount = (zCount) * (xCount);
+            terrain.positions = PushArray(&platformMemory, v3, terrain.positionCount);
+
+            r32 startingX = 0;
+            r32 startingZ = 0;
+            r32 dim = 5;
+            for(u32 z = 0;
+                z < zCount;
+                ++z)
+            {
+                for(u32 x = 0;
+                    x < xCount;
+                    ++x)
+                {
+                    r32 randomY = random_between_minus_1_1();
+                    r32 yRange = 2.f;
+                    v3 p = V3(startingX + x*dim, yRange*randomY, startingZ + z*dim);
+                    terrain.positions[z*xCount + x] = p;
+                }
+            }
+            
+            for(u32 mountain_index = 0;
+                    mountain_index < 12;
+                    mountain_index++)
+            {
+                r32 x = random_between(0, xCount*dim);
+                r32 z = random_between(0, zCount*dim);
+                
+                r32 height = random_between(20, 100);
+                r32 radius = random_between(10, 100);
+                make_mountain_inside_terrain(&terrain, 
+                        xCount, zCount, 
+                        x, z, xCount,
+                        dim, radius, height);
+            }
+
+            terrain.indexCount = 2*3*(zCount - 1)*(xCount - 1);
+            terrain.indices = PushArray(&platformMemory, u16, terrain.indexCount);
+
+            terrain.normalCount = terrain.positionCount;
+            terrain.normals = PushArray(&platformMemory, v3, terrain.normalCount);
+
+            u32 indexIndex = 0;
+            for(u32 z = 0;
+                z < zCount-1;
+                ++z)
+            {
+                for(u32 x = 0;
+                    x < xCount-1;
+                    ++x)
+                {
+                    u32 startingIndex = z*zCount + x;
+
+
+                    terrain.indices[indexIndex++] = (u16)startingIndex;
+                    terrain.indices[indexIndex++] = (u16)(startingIndex+xCount);
+                    terrain.indices[indexIndex++] = (u16)(startingIndex+xCount+1);
+
+                    terrain.indices[indexIndex++] = (u16)startingIndex;
+                    terrain.indices[indexIndex++] = (u16)(startingIndex+xCount+1);
+                    terrain.indices[indexIndex++] = (u16)(startingIndex+1);
+
+                    Assert(indexIndex <= terrain.indexCount);
+                }
+            }
+            Assert(indexIndex == terrain.indexCount);
+
+            struct vertex_normal_hit
+            {
+                v3 normalSum;
+                u32 hit;
+            };
+
+            temp_memory meshContructionTempMemory = StartTempMemory(&platformMemory, Megabytes(16));
+            vertex_normal_hit *normalHits = PushArray(&meshContructionTempMemory, vertex_normal_hit, terrain.positionCount);
+
+            for(u32 i = 0;
+                    i < terrain.indexCount;
+                    i += 3)
+            {
+                u32 i0 = terrain.indices[i];
+                u32 i1 = terrain.indices[i+1];
+                u32 i2 = terrain.indices[i+2];
+
+                v3 v0 = terrain.positions[i0] - terrain.positions[i1];
+                v3 v1 = terrain.positions[i2] - terrain.positions[i1];
+
+                v3 normal = Normalize(Cross(v1, v0));
+
+                normalHits[i0].normalSum += normal;
+                normalHits[i0].hit++;
+                normalHits[i1].normalSum += normal;
+                normalHits[i1].hit++;
+                normalHits[i2].normalSum += normal;
+                normalHits[i2].hit++;
+            }
+
+            for(u32 normalIndex = 0;
+                    normalIndex < terrain.normalCount;
+                    ++normalIndex)
+            {
+                vertex_normal_hit *normalHit = normalHits + normalIndex;
+                terrain.normals[normalIndex] = normalHit->normalSum/(r32)normalHit->hit;
+            }
+            EndTempMemory(&meshContructionTempMemory);
+
             renderer renderer = {};
+
             Win32LoadVulkanLibrary("vulkan-1.dll");
             Win32InitVulkan(&renderer, instanceHandle, windowHandle, windowWidth, windowHeight, &platformApi, &platformMemory);
 #if 0
@@ -313,35 +788,20 @@ WinMain(HINSTANCE instanceHandle,
                 mesh.indices[indexIndex + 2];
             }
 #endif
-            Print("vulkan initialized");
+            printf("vulkan initialized");
+
+            render_mesh terrainRenderMesh = CreateRenderMeshFromLoadedMesh(&renderer, &terrain);
+            render_mesh helmetRenderMesh = CreateRenderMeshFromLoadedMesh(&renderer, &mesh);
+
             // IMPORTANT(joon): no rotation means camera's orientation is the same as the world coordinate
             // which means the forward vector is 0, 0, -1
             camera camera = {};
             camera.p = {0, 0, 1};
 
-            vk_host_visible_coherent_buffer vertexBuffer = VkCreateHostVisibleCoherentBuffer(renderer.physicalDevice, renderer.device, 
-                                                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                                            sizeof(v3)*mesh.vertexCount);
-            VkCopyMemoryToHostVisibleCoherentBuffer(&vertexBuffer, 0, mesh.vertices, vertexBuffer.size);
-
-            vk_host_visible_coherent_buffer indexBuffer = VkCreateHostVisibleCoherentBuffer(renderer.physicalDevice, renderer.device, 
-                                                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                                            sizeof(u16)*mesh.indexCount);
-            VkCopyMemoryToHostVisibleCoherentBuffer(&indexBuffer, 0, mesh.indices, indexBuffer.size);
-
-            uniform_buffer *uniformBuffers = PushArray(&platformMemory, uniform_buffer, renderer.swapchainImageCount);
-            uniformBuffers[0].model = Scale(100.0f, 100.0f, 100.0f);
-            uniformBuffers[1].model = uniformBuffers[0].model;
-            uniformBuffers[2].model = uniformBuffers[0].model;
-
-            // NOTE(joon) : view matrix is bascially a matrix that transforms certain position when the camera is looking at (0, 0, -1)
-            uniformBuffers[1].projView = uniformBuffers[0].projView;
-            uniformBuffers[2].projView = uniformBuffers[0].projView;
-
+            u64 aligned_uniform_buffer_size = renderer.swapchainImageCount*(sizeof(uniform_buffer)/renderer.uniform_buffer_offset_alignment + 1)*renderer.uniform_buffer_offset_alignment;
             vk_host_visible_coherent_buffer uniformBuffer = VkCreateHostVisibleCoherentBuffer(renderer.physicalDevice, renderer.device, 
                                                             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                                            sizeof(uniform_buffer)*renderer.swapchainImageCount);
-            VkCopyMemoryToHostVisibleCoherentBuffer(&uniformBuffer, 0, uniformBuffers, uniformBuffer.size);
+                                                            aligned_uniform_buffer_size);
 
             // TODO(joon)VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
             for(u32 swapchainImageIndex = 0;
@@ -357,7 +817,7 @@ WinMain(HINSTANCE instanceHandle,
                 CheckVkResult(vkBeginCommandBuffer(*commandBuffer, &commandBufferBeginInfo));
 
                 VkClearValue clearValues[2] = {}; 
-                clearValues[0].color = {1.0f, 0.01f, 0.01f, 1};
+                clearValues[0].color = {0.0001f, 0.0001f, 0.0001f, 1};
                 clearValues[1].depthStencil.depth = 1.0f;
                 //clearValues[1].depthStencil;
                 VkRenderPassBeginInfo renderPassBeginInfo = {};
@@ -386,41 +846,32 @@ WinMain(HINSTANCE instanceHandle,
                 vkCmdSetViewport(*commandBuffer, 0, 1, &viewport);
                 vkCmdSetScissor(*commandBuffer, 0, 1, &scissorRect);
 
-                VkDescriptorBufferInfo bufferInfo = {};
-                bufferInfo.buffer = vertexBuffer.buffer;
-                bufferInfo.offset = 0;
-                bufferInfo.range = vertexBuffer.size;
-
-                VkWriteDescriptorSet writeDescriptorSet[2] = {};
-                writeDescriptorSet[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                writeDescriptorSet[0].dstSet = 0;
-                writeDescriptorSet[0].dstBinding = 0;
-                writeDescriptorSet[0].descriptorCount = 1;
-                writeDescriptorSet[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                writeDescriptorSet[0].pBufferInfo = &bufferInfo;
+                VkWriteDescriptorSet writeDescriptorSet[1] = {};
 
                 VkDescriptorBufferInfo uniformBufferInfo = {};
                 uniformBufferInfo.buffer = uniformBuffer.buffer;
-                uniformBufferInfo.offset = swapchainImageIndex*sizeof(uniform_buffer);
+
+                u64 aligned_uniform_buffer_offset = swapchainImageIndex*(sizeof(uniform_buffer)/renderer.uniform_buffer_offset_alignment)*renderer.uniform_buffer_offset_alignment;
+                uniformBufferInfo.offset = aligned_uniform_buffer_offset;
                 uniformBufferInfo.range = sizeof(uniform_buffer);
 
-                writeDescriptorSet[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                writeDescriptorSet[1].dstSet = 0;
-                writeDescriptorSet[1].dstBinding = 1;
-                writeDescriptorSet[1].descriptorCount = 1;
-                writeDescriptorSet[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                writeDescriptorSet[1].pBufferInfo = &uniformBufferInfo;
+                writeDescriptorSet[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                writeDescriptorSet[0].dstSet = 0;
+                writeDescriptorSet[0].dstBinding = 1;
+                writeDescriptorSet[0].descriptorCount = 1;
+                writeDescriptorSet[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                writeDescriptorSet[0].pBufferInfo = &uniformBufferInfo;
 
                 vkCmdPushDescriptorSetKHR(*commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
                                         renderer.pipelineLayout, 0, ArrayCount(writeDescriptorSet), writeDescriptorSet);
 
-                //VkDeviceSize offset = 0; 
-                //vkCmdBindVertexBuffers(*commandBuffer, 0, 1, &vertexBuffer.buffer, &offset);
-                vkCmdBindIndexBuffer(*commandBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
-                vkCmdDrawIndexed(*commandBuffer, mesh.indexCount, 1, 0, 0, 0);
+                RenderMesh(&renderer, &helmetRenderMesh, *commandBuffer);
+
+                RenderMesh(&renderer, &terrainRenderMesh, *commandBuffer);
 
                 vkCmdEndRenderPass(*commandBuffer);
                 CheckVkResult(vkEndCommandBuffer(*commandBuffer));
+
             }
             
             isEngineRunning = true;
@@ -448,33 +899,56 @@ WinMain(HINSTANCE instanceHandle,
 
                 // NOTE(joon) : Based on top left corner
                 RECT windowRect = {};
-                if(GetWindowRect(windowHandle, &windowRect))
-                {
-                }
+                GetClientRect(windowHandle, &windowRect);
 
-                POINT currentMouseP = {};
-                if(GetCursorPos(&currentMouseP))
-                {
-                    mouseDx = 0;
-                    mouseDy = 0;
+                POINT windowPos = {};
+                ClientToScreen(windowHandle, &windowPos);
+                windowRect.left += windowPos.x;
+                windowRect.right += windowPos.x;
+                windowRect.top += windowPos.y;
+                windowRect.bottom += windowPos.y;
 
-                    if(currentMouseP.x >= windowRect.left && currentMouseP.y >= windowRect.top &&
-                       currentMouseP.x < windowRect.right && currentMouseP.y < windowRect.bottom)
+                HWND activeWindow = GetFocus();
+                if(activeWindow == windowHandle)
+                {
+                    ClipCursor(&windowRect);
+
+                    POINT currentMouseP = {};
+                    if(GetCursorPos(&currentMouseP))
                     {
                         mouseDx = (i32)currentMouseP.x-mousex;
                         mouseDy = (i32)currentMouseP.y-mousey;
+
+                        if(currentMouseP.x == windowRect.left)
+                        {
+                            mouseDx = -8;
+                        }
+                        else if(currentMouseP.x == windowRect.right - 1)
+                        {
+                            mouseDx = 8;
+                        }
+
+                        if(currentMouseP.y == windowRect.top)
+                        {
+                            mouseDy = -8;
+                        }
+                        else if(currentMouseP.y == windowRect.bottom - 1)
+                        {
+                            mouseDy = 8;
+                        }
+                        //printf("ClientRect %i, %i", windowRect.left, windowRect.right);
+                        //printf("ClientRect %i, %i\n", windowRect.top, windowRect.bottom);
+                        //printf("%i, %i\n", currentMouseP.x, currentMouseP.y);
+
+                        mousex = (i32)currentMouseP.x;
+                        mousey = (i32)currentMouseP.y;
                     }
-
-                    //printf("%i, %i\n", currentMouseP.x, currentMouseP.y);
-
-                    mousex = (i32)currentMouseP.x;
-                    mousey = (i32)currentMouseP.y;
                 }
                 
                 camera.alongY += -4.0f*(mouseDx/(r32)windowWidth);
                 camera.alongX += -4.0f*(mouseDy/(r32)windowHeight);
 
-                v3 aasdf = QuarternionRotationV100(1.5f, V3(0, 0, -1));
+                r32 camera_speed = 1.0f;
 
                 v3 cameraDir = Normalize(QuarternionRotationV001(camera.alongZ, 
                                         QuarternionRotationV010(camera.alongY, 
@@ -485,12 +959,12 @@ WinMain(HINSTANCE instanceHandle,
                 // it should be ordered in x*y*z!
                 if(isWDown)
                 {
-                    camera.p += 0.1f*cameraDir;
+                    camera.p += camera_speed*cameraDir;
                 }
                 
                 if(isSDown)
                 {
-                    camera.p -= 0.1f*cameraDir;
+                    camera.p -= camera_speed*cameraDir;
                 }
 
                 // TODO(joon) : Check whether this fence is working correctly! only one fence might be enough?
@@ -515,15 +989,31 @@ WinMain(HINSTANCE instanceHandle,
                 {
                     VkCommandBuffer *commandBuffer = renderer.graphicsCommandBuffers + imageIndex;
 
-                    uniformBuffers[currentFrameIndex].model = Scale(1.0f, 1.0f, 1.0f);
-                    m4 proj = SymmetricProjection(0.5f*windowWidthOverHeight, 0.5f, 1.0f, 100.0f);
-                    uniformBuffers[currentFrameIndex].projView = proj*
-                                                                QuarternionRotationM4(V3(1, 0, 0), -camera.alongX)*
-                                                                QuarternionRotationM4(V3(0, 1, 0), -camera.alongY)*
-                                                                QuarternionRotationM4(V3(0, 0, 1), -camera.alongZ)*
-                                                                Translate(-camera.p.x, -camera.p.y, -camera.p.z);
+                    uniform_buffer ubo = {};
+                    ubo.model = Scale(1.0f, 1.0f, 1.0f);
+                    // TODO(joon) : The coordinates that feeded into this matrix is in view space, but in world unit
+                    // so to be more specific, we need some kind of unit that defines the size of the camera frustum, and use that as r(ight) & t(top) value
+                    // NOTE(joon) : glm::perspective has value of 1 for both x and y value
 
-                    VkCopyMemoryToHostVisibleCoherentBuffer(&uniformBuffer, sizeof(uniformBuffer)*currentFrameIndex, uniformBuffers, uniformBuffer.size);
+                    r32 c = 10.0f;
+                    m4 proj = SymmetricProjection(windowWidthOverHeight, 1, 0.1f, 100.0f);
+                    ubo.projView = 
+                        proj *
+                        QuarternionRotationM4(V3(1, 0, 0), -camera.alongX)*
+                        QuarternionRotationM4(V3(0, 1, 0), -camera.alongY)*
+                        QuarternionRotationM4(V3(0, 0, 1), -camera.alongZ)*
+                        Translate(-camera.p.x, -camera.p.y, -camera.p.z);
+
+                    local_persist r32 angle = 0.0f;
+                    r32 radius = xCount*dim/2.0f;;
+                    v3 lightP = V3(radius*cosf(angle), 100.0f, radius*sinf(angle));
+                    lightP.x += xCount*dim/2.0f;
+                    lightP.z += zCount*dim/2.0f;
+                    angle += 0.0125f;
+                    ubo.lightP = lightP;
+
+                    u64 aligned_uniform_buffer_offset = currentFrameIndex*(sizeof(uniform_buffer)/renderer.uniform_buffer_offset_alignment)*renderer.uniform_buffer_offset_alignment;
+                    VkCopyMemoryToHostVisibleCoherentBuffer(&uniformBuffer, aligned_uniform_buffer_offset, &ubo, sizeof(ubo));
 
                     // TODO(joon) : Check this value!
                     VkPipelineStageFlags waitFlags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
@@ -586,6 +1076,8 @@ WinMain(HINSTANCE instanceHandle,
 
                 currentFrameIndex = (currentFrameIndex + 1)%renderer.swapchainImageCount;
             }
+
+            CleanVulkan(&renderer);
         }
     }
 

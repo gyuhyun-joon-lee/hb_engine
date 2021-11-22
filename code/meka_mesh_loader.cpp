@@ -4,27 +4,7 @@
  */
 
 #define Invalid_R32 10000.0f
-struct loaded_vertex
-{
-    v3 p;
-    v3 normal;
-    v2 textureCoord;
-};
 
-struct load_mesh_file_result
-{
-    v3 *vertices;
-    u32 vertexCount;
-
-    v3 *normals;
-    u32 normalCount;
-
-    v2 *textureCoords;
-    u32 textureCoordCount;
-
-    u16 *indices;
-    u32 indexCount;
-};
 
 // NOTE : This function has no bound checking
 internal u32
@@ -56,6 +36,7 @@ FindClosestConsecutiveUInt32(char *c)
     return number;
 }
 
+#if 0
 /*
     TODO(joon)
     - Cannot load more than u32 amount of points
@@ -65,13 +46,13 @@ FindClosestConsecutiveUInt32(char *c)
     - Doesnt check how many buffers are specified inside the file
  */
 // NOTE(joon) : Loads single mesh only gltf file, in a _very_ slow way.
-internal load_mesh_file_result
+internal loaded_raw_mesh
 ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binFileName)
 {
     platform_read_file_result gltf = platformApi->ReadFile(gltfFileName);
     platform_read_file_result bin = platformApi->ReadFile(binFileName);
 
-    load_mesh_file_result result = {};
+    loaded_raw_mesh result = {};
 
     if(gltf.memory && bin.memory)
     {
@@ -215,17 +196,17 @@ ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binF
             // TODO(joon) : We don't care about buffer index, as there is just one buffer
             Assert(byteLengths[positionBufferViewIndex]%(sizeof(v3)) == 0);
 
-            result.vertexCount = (byteLengths[positionBufferViewIndex]/(sizeof(v3)));
-            result.vertices = (v3 *)malloc(sizeof(v3)*result.vertexCount);
+            result.positionCount = (byteLengths[positionBufferViewIndex]/(sizeof(v3)));
+            result.positions = (v3 *)malloc(sizeof(v3)*result.positionCount);
 
             r32 *memory = (r32 *)((u8 *)bin.memory + byteOffsets[positionBufferViewIndex]);
             for(u32 pIndex = 0;
-                pIndex < result.vertexCount;
+                pIndex < result.positionCount;
                 pIndex++)
             {
-                result.vertices[pIndex].x = (r32)*memory;
-                result.vertices[pIndex].y = (r32)*(memory + 1);
-                result.vertices[pIndex].z = (r32)*(memory + 2);
+                result.positions[pIndex].x = (r32)*memory;
+                result.positions[pIndex].y = (r32)*(memory + 1);
+                result.positions[pIndex].z = (r32)*(memory + 2);
 
                 memory += 3;
             }
@@ -318,6 +299,7 @@ ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binF
 
     return result;
 }
+#endif
 
 #define decimalPointP1 0.1f
 #define decimalPointP2 0.01f
@@ -563,7 +545,7 @@ IsPairValid(pair *pair)
 }
 
 internal void 
-UpdateQuadricMetricErrorCost(load_mesh_file_result *loadedMesh, r32 *QPerEachVertex, pair *pair)
+UpdateQuadricMetricErrorCost(loaded_raw_mesh *loadedMesh, r32 *QPerEachVertex, pair *pair)
 {
     Assert(IsPairValid(pair));
     Assert(pair->index0 != pair->index1);
@@ -585,7 +567,7 @@ UpdateQuadricMetricErrorCost(load_mesh_file_result *loadedMesh, r32 *QPerEachVer
     r32 QSum9 = Qa[9] + Qa[9];
 
     // TODO(joon) : Properly choose new v! For now, we are just using the center of the vector v0v1
-    v3 newV = (loadedMesh->vertices[pair->index0] + loadedMesh->vertices[pair->index1])/2.0f;
+    v3 newV = (loadedMesh->positions[pair->index0] + loadedMesh->positions[pair->index1])/2.0f;
     pair->newV = newV;
 
     // newVTranspose*(Q0+Q1)*newV
@@ -660,7 +642,7 @@ FloatEpsilonCompare(r32 a, r32 b)
     - This assumes that the mesh you are providing is counter-clockwise(needed to calculate the plane equation for Q)
 */
 internal void
-OptimizeMeshGH(load_mesh_file_result *loadedMesh, 
+OptimizeMeshGH(loaded_raw_mesh *loadedMesh, 
                 r32 optimizeRatio) // newFaceCount = mesh->faceCount * optimizeRatio
 {
     Assert(optimizeRatio > 0.0f && optimizeRatio < 1.0f)
@@ -678,7 +660,7 @@ OptimizeMeshGH(load_mesh_file_result *loadedMesh,
         Q33// d*d
     */   
     // TODO(joon) : this might be bigger than u32_max
-    u32 totalQCount = 10*loadedMesh->vertexCount;
+    u32 totalQCount = 10*loadedMesh->positionCount;
     r32 *QPerEachVertex = (r32 *)malloc(sizeof(r32)*totalQCount);
     memset (QPerEachVertex, 0, sizeof(r32)*totalQCount);
     u32 QStride = 10; // Because each Q will be containing 10 floats
@@ -696,9 +678,9 @@ OptimizeMeshGH(load_mesh_file_result *loadedMesh,
         u16 ib = loadedMesh->indices[indexIndex+1];
         u16 ic = loadedMesh->indices[indexIndex+2];
 
-        v3 va = loadedMesh->vertices[ia];
-        v3 vb = loadedMesh->vertices[ib];
-        v3 vc = loadedMesh->vertices[ic];
+        v3 va = loadedMesh->positions[ia];
+        v3 vb = loadedMesh->positions[ib];
+        v3 vc = loadedMesh->positions[ic];
 
         v3 cross = Normalize(Cross(va-vb, vc-vb));
         // d for plane equation
@@ -795,7 +777,7 @@ OptimizeMeshGH(load_mesh_file_result *loadedMesh,
             testVertexIndex++)
         {
             // test distance
-            r32 lengthSquare = LengthSquare(loadedMesh->vertices[startingVertexIndex] - loadedMesh->vertices[testVertexIndex]);
+            r32 lengthSquare = LengthSquare(loadedMesh->positions[startingVertexIndex] - loadedMesh->positions[testVertexIndex]);
             if(lengthSquare <= distanceThresholdSquare)
             {
                 Assert(pairCount < maxPairCount);
@@ -854,7 +836,7 @@ OptimizeMeshGH(load_mesh_file_result *loadedMesh,
     u32 faceToContractCount = (u32)((loadedMesh->indexCount/3)*(1.0f - optimizeRatio));
     u32 contractedFaceCount = 0; 
 
-    u32 newVertexCount = loadedMesh->vertexCount; // Start from the original vertex count, and decrement by 1 for each contraction
+    u32 newVertexCount = loadedMesh->positionCount; // Start from the original vertex count, and decrement by 1 for each contraction
     // Contract the pairs,
     while(contractedFaceCount < faceToContractCount)
     {
@@ -881,12 +863,12 @@ OptimizeMeshGH(load_mesh_file_result *loadedMesh,
             2. update the costs of the pairs that were using the contracted vertex
             3. Re-sort
         */
-        //loadedMesh->vertices[minCostPair->index0] = minCostPair->newV;
+        //loadedMesh->positions[minCostPair->index0] = minCostPair->newV;
 
         // invalidate the vertex
-        loadedMesh->vertices[minCostPair->index1].x = Invalid_R32;
-        loadedMesh->vertices[minCostPair->index1].y = Invalid_R32;
-        loadedMesh->vertices[minCostPair->index1].z = Invalid_R32;
+        loadedMesh->positions[minCostPair->index1].x = Invalid_R32;
+        loadedMesh->positions[minCostPair->index1].y = Invalid_R32;
+        loadedMesh->positions[minCostPair->index1].z = Invalid_R32;
 
         newVertexCount--;
 
@@ -999,10 +981,10 @@ OptimizeMeshGH(load_mesh_file_result *loadedMesh,
     v3 *newVertices = (v3 *)malloc(sizeof(v3)*newVertexCount);
     u32 newVertexIndex = 0;
     for(u32 vertexIndex = 0;
-        vertexIndex < loadedMesh->vertexCount;
+        vertexIndex < loadedMesh->positionCount;
         ++vertexIndex)
     {
-        v3 *vertex = loadedMesh->vertices + vertexIndex;
+        v3 *vertex = loadedMesh->positions + vertexIndex;
 
         if(!(FloatEpsilonCompare(vertex->x, Invalid_R32) && FloatEpsilonCompare(vertex->y, Invalid_R32) && 
             FloatEpsilonCompare(vertex->z, Invalid_R32)))
@@ -1026,11 +1008,11 @@ OptimizeMeshGH(load_mesh_file_result *loadedMesh,
     }
 
     free(pairs);
-    free(loadedMesh->vertices);
+    free(loadedMesh->positions);
     free(loadedMesh->indices);
 
-    loadedMesh->vertices = newVertices;
-    loadedMesh->vertexCount = newVertexCount;
+    loadedMesh->positions = newVertices;
+    loadedMesh->positionCount = newVertexCount;
     loadedMesh->indices = newIndices;
     loadedMesh->indexCount = newIndexCount;
 }

@@ -2,22 +2,16 @@
  * Written by Gyuhyun 'Joon' Lee
  * https://github.com/meka-lopo/
  */
+#include <stdio.h>
 #define CheckVkResult(expression)                                             \
 {                                                                             \
     VkResult vkResult = (expression);                                           \
     if(vkResult != VK_SUCCESS)                                                  \
     {                                                                           \
-        Print("CheckVkResult Failed\n");                               \
+        printf("CheckVkResult Failed with vkResult : %i\n", vkResult);                               \
         Assert(0);                                                              \
     }                                                                           \
-}
-
-struct vertex
-{
-    r32 x;
-    r32 y;
-    r32 z;
-};
+}                                                                               \
 
 struct vk_queue_families
 {
@@ -29,7 +23,7 @@ struct vk_queue_families
     u32 transferQueueCount;
 };
 
-// TODO(joon) : Make this graphics api independent
+// TODO(joon) : Make this cross-graphics api
 struct renderer
 {
     // TODO(joon) : Make my own allocator so that we don't need to store the things that are not 
@@ -46,7 +40,6 @@ struct renderer
     VkQueue transferQueue;
     VkQueue presentQueue;
 
-    // TODO(joon) : don't individually allocate memeories
     VkSwapchainKHR swapchain;
     VkImage *swapchainImages;
     u32 swapchainImageCount;
@@ -69,9 +62,9 @@ struct renderer
 
     VkFence *imageReadyToRenderFences;// count = swap chain image count 
     VkFence *imageReadyToPresentFences;// count = swap chain image count 
+
+    u64 uniform_buffer_offset_alignment;
 };
-
-
 
 internal VkPhysicalDevice
 FindPhysicalDevice(VkInstance instance)
@@ -109,7 +102,7 @@ DebugMessengerCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                         const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
                         void* userData)
 {
-    Print(callbackData->pMessage);
+    printf(callbackData->pMessage);
 
     return true;
 }
@@ -358,7 +351,7 @@ VkCopyMemoryToHostVisibleCoherentBuffer(vk_host_visible_coherent_buffer *buffer,
 {
     // TODO(joon) : maybe copying one by one is a bad idea, put it inside the queue and flush it at once?
     // In that case, the memory doesnt need to be host_visible or host_coherent
-    memcpy(buffer->memory, source, sourceSize);
+    memcpy((u8 *)buffer->memory+offset, source, sourceSize);
 }
 
 internal void
@@ -402,12 +395,13 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
 
         if(!found)
         {
-            Print(instanceLayerNames[desiredLayerIndex]);
-            Print("not found\n");
+            printf(instanceLayerNames[desiredLayerIndex]);
+            printf("not found\n");
         }
         Assert(found);
     }
     
+
     u32 extensionCount;
     vkEnumerateInstanceExtensionProperties(0, &extensionCount, 0);
     VkExtensionProperties extensions[64];
@@ -460,6 +454,9 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
 #endif
 
     renderer->physicalDevice = FindPhysicalDevice(renderer->instance);
+    VkPhysicalDeviceProperties property;
+    vkGetPhysicalDeviceProperties(renderer->physicalDevice, &property);
+    renderer->uniform_buffer_offset_alignment = property.limits.minUniformBufferOffsetAlignment;
 
     VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
     surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
@@ -734,7 +731,7 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     rasterizationState.depthClampEnable = false;
     rasterizationState.rasterizerDiscardEnable = false; // TODO(joon) :If enabled, the rasterizer will discard some vertices, but don't know what's the policy for that
     rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationState.cullMode = VK_CULL_MODE_NONE;//VK_CULL_MODE_BACK_BIT; // which triangle should be discarded
+    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT; // which triangle should be discarded
     rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizationState.depthBiasEnable = false;
     rasterizationState.lineWidth = 1.0f;
@@ -749,7 +746,6 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     depthStencilState.depthWriteEnable = true;
     depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
     depthStencilState.depthBoundsTestEnable = false;
-
     VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
     colorBlendAttachment.blendEnable = false;
     colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
@@ -780,7 +776,7 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     layoutBinding[1].binding = 1;
     layoutBinding[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     layoutBinding[1].descriptorCount = 1;
-    layoutBinding[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    layoutBinding[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
 
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {};
