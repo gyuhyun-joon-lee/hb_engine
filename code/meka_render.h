@@ -5,7 +5,7 @@
 // NOTE(joon) : This forces us to copy these datas again to the actual 'usable' vertex buffer,
 // but even with more than 100000 vertices, the size of it isn't too big 
 // TODO(joon) : loaded_raw_mesh is independent from any graphics api, put this in other places? or maybe not...
-struct loaded_raw_mesh
+struct raw_mesh
 {
     v3 *positions;
     u32 position_count;

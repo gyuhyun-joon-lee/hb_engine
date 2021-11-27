@@ -130,7 +130,7 @@ display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_t
 }
 
 internal render_mesh
-metal_create_render_mesh_from_loaded_raw_mesh(id<MTLDevice> device, loaded_raw_mesh *raw_mesh, platform_memory *platform_memory)
+metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh, platform_memory *platform_memory)
 {
     assert(raw_mesh->position_count == raw_mesh->normal_count);
     // TODO(joon) : not super important, but what should be the size of this
@@ -416,117 +416,8 @@ main(void)
         CVDisplayLinkStart(display_link);
     }
 
-    // 100 vertices means there will be 99 quads per line
-    u32 zCount = 100;
-    u32 xCount = 100;
-    loaded_raw_mesh terrain = {};
-    terrain.position_count = (zCount) * (xCount);
-    terrain.positions = push_array(&platform_memory, v3, terrain.position_count);
-
-    r32 startingX = 0;
-    r32 startingZ = 0;
-    r32 dim = 5;
-    for(u32 z = 0;
-            z < zCount;
-            ++z)
-    {
-        for(u32 x = 0;
-                x < xCount;
-                ++x)
-        {
-            r32 randomY = random_between_minus_1_1();
-            r32 yRange = 2.f;
-            v3 p = V3(startingX + x*dim, yRange*randomY, startingZ + z*dim);
-            terrain.positions[z*xCount + x] = p;
-        }
-    }
-
-    for(u32 mountain_index = 0;
-            mountain_index < 12;
-            mountain_index++)
-    {
-        r32 x = random_between(0, xCount*dim);
-        r32 z = random_between(0, zCount*dim);
-
-        r32 height = random_between(20, 100);
-        r32 radius = random_between(10, 100);
-        make_mountain_inside_terrain(&terrain, 
-                xCount, zCount, 
-                x, z, xCount,
-                dim, radius, height);
-    }
-
-    terrain.index_count = 2*3*(zCount - 1)*(xCount - 1);
-    terrain.indices = push_array(&platform_memory, u32, terrain.index_count);
-
-    terrain.normal_count = terrain.position_count;
-    terrain.normals = push_array(&platform_memory, v3, terrain.normal_count);
-
-    u32 indexIndex = 0;
-    for(u32 z = 0;
-            z < zCount-1;
-            ++z)
-    {
-        for(u32 x = 0;
-                x < xCount-1;
-                ++x)
-        {
-            u32 startingIndex = z*zCount + x;
-
-
-            terrain.indices[indexIndex++] = (u16)startingIndex;
-            terrain.indices[indexIndex++] = (u16)(startingIndex+xCount);
-            terrain.indices[indexIndex++] = (u16)(startingIndex+xCount+1);
-
-            terrain.indices[indexIndex++] = (u16)startingIndex;
-            terrain.indices[indexIndex++] = (u16)(startingIndex+xCount+1);
-            terrain.indices[indexIndex++] = (u16)(startingIndex+1);
-
-            assert(indexIndex <= terrain.index_count);
-        }
-    }
-    assert(indexIndex == terrain.index_count);
-
-    struct vertex_normal_hit
-    {
-        v3 normalSum;
-        u32 hit;
-    };
-
-    temp_memory meshContructionTempMemory = start_temp_memory(&platform_memory, megabytes(16));
-    vertex_normal_hit *normalHits = push_array(&meshContructionTempMemory, vertex_normal_hit, terrain.position_count);
-
-    for(u32 i = 0;
-            i < terrain.index_count;
-            i += 3)
-    {
-        u32 i0 = terrain.indices[i];
-        u32 i1 = terrain.indices[i+1];
-        u32 i2 = terrain.indices[i+2];
-
-        v3 v0 = terrain.positions[i0] - terrain.positions[i1];
-        v3 v1 = terrain.positions[i2] - terrain.positions[i1];
-
-        v3 normal = normalize(Cross(v1, v0));
-
-        normalHits[i0].normalSum += normal;
-        normalHits[i0].hit++;
-        normalHits[i1].normalSum += normal;
-        normalHits[i1].hit++;
-        normalHits[i2].normalSum += normal;
-        normalHits[i2].hit++;
-    }
-
-    for(u32 normalIndex = 0;
-            normalIndex < terrain.normal_count;
-            ++normalIndex)
-    {
-        vertex_normal_hit *normalHit = normalHits + normalIndex;
-        terrain.normals[normalIndex] = normalHit->normalSum/(r32)normalHit->hit;
-    }
-    end_temp_memory(&meshContructionTempMemory);
-
-    render_mesh terrain_mesh = metal_create_render_mesh_from_loaded_raw_mesh(device, &terrain, &platform_memory);
+    raw_mesh terrain = make_simple_terrain(&platform_memory, 100, 100);
+    render_mesh terrain_mesh = metal_create_render_mesh_from_raw_mesh(device, &terrain, &platform_memory);
 
     camera camera = {};
     r32 focal_length = 1.0f;
@@ -653,8 +544,6 @@ main(void)
                 per_frame_data.model = convert_m4_to_r32_4x4(Scale(1, 1, 1));
                 per_frame_data.proj_view = convert_m4_to_r32_4x4(proj_view);
                 v3 light_p = V3(light_radius*cosf(light_angle), 100.0f, light_radius*sinf(light_angle));
-                light_p.x += xCount*dim/2.0f;
-                light_p.z += zCount*dim/2.0f;
                 per_frame_data.light_p = convert_to_r32_3(light_p);
 
                 [render_encoder setVertexBytes: &per_frame_data
