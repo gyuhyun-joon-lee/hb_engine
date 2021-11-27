@@ -5,7 +5,6 @@
 #ifndef MEKA_PLATFORM_H
 #define MEKA_PLATFORM_H
 
-#include <stdint.h>
 #include <limits.h>
 #include <float.h>
 
@@ -36,17 +35,17 @@ typedef uintptr_t uintptr;
 typedef float r32;
 typedef double r64;
 
-#define Assert(Expression) if(!(Expression)) {int *a = 0; *a = 0;}
-#define ArrayCount(Array) (sizeof(Array) / sizeof(Array[0]))
+#define assert(Expression) if(!(Expression)) {int *a = 0; *a = 0;}
+#define array_count(Array) (sizeof(Array) / sizeof(Array[0]))
 
 #define global_variable static
 #define local_persist static
 #define internal static
 
-#define Kilobytes(value) value*1024LL
-#define Megabytes(value) 1024LL*Kilobytes(value)
-#define Gigabytes(value) 1024LL*Megabytes(value)
-#define Terabytes(value) 1024LL*Gigabytes(value)
+#define kilobytes(value) value*1024LL
+#define megabytes(value) 1024LL*kilobytes(value)
+#define gigabytes(value) 1024LL*megabytes(value)
+#define terabytes(value) 1024LL*gigabytes(value)
 
 #define maximum(a, b) ((a>b)? a:b) 
 #define minimum(a, b) ((a<b)? a:b) 
@@ -164,7 +163,6 @@ operator*(r32 value, v2 &a)
     return result;
 }
 
-
 struct v3
 {
     r32 x;
@@ -251,8 +249,9 @@ operator/(v3 a, r32 value)
     return result;
 }
 
+
 inline v3
-operator*(r32 value, v3 &a)
+operator*(r32 value, v3 a)
 {
     v3 result = {};
 
@@ -290,10 +289,11 @@ Length(v3 a)
 }
 
 inline v3
-Normalize(v3 a)
+normalize(v3 a)
 {
     return a/Length(a);
 }
+
 
 
 struct v4
@@ -317,7 +317,7 @@ struct v4
         struct 
         {
             v3 rgb; 
-            r32 ignored;
+            r32 ignored1;
         };
 
         r32 e[4];
@@ -362,7 +362,7 @@ operator/(v4 a, r32 value)
 }
 
 inline v4
-Normalize(v4 a)
+normalize(v4 a)
 {
     return a/Length(a);
 }
@@ -433,6 +433,33 @@ M4()
     return result;
 }
 
+inline r32_4
+convert_v4_to_r32_4(v4 value)
+{
+    r32_4 result = {};
+
+    result.x = value.x;
+    result.y = value.y;
+    result.z = value.z;
+    result.w = value.w;
+
+    return result;
+}
+
+// TODO(joon): Any way to speed this up?
+inline r32_4x4
+convert_m4_to_r32_4x4(m4 value)
+{
+    r32_4x4 result = {};
+
+    result.column[0] = convert_v4_to_r32_4(value.column[0]);
+    result.column[1] = convert_v4_to_r32_4(value.column[1]);
+    result.column[2] = convert_v4_to_r32_4(value.column[2]);
+    result.column[3] = convert_v4_to_r32_4(value.column[3]);
+
+    return result;
+}
+
 inline m4
 M4(r32 e00, r32 e01, r32 e02, r32 e03,
     r32 e10, r32 e11, r32 e12, r32 e13,
@@ -491,7 +518,7 @@ operator-(m4 &a, m4 &b)
 }
 
 inline m4
-operator*(m4 &a, m4 &b)
+operator*(m4 a, m4 b)
 {
     m4 result = {};
 
@@ -635,17 +662,17 @@ View(v3 p, v3 lookatDir, v3 up)
 {
 
     // TODO(joon) : No assert, but normalize here?
-    lookatDir = -1.0f*Normalize(lookatDir);
+    lookatDir = -1.0f*normalize(lookatDir);
 
-    v3 right = Normalize(Cross(up, lookatDir));
+    v3 right = normalize(Cross(up, lookatDir));
 
     v3 newUp = Cross(lookatDir, right);
 
     m4 rotation = {};
-    rotation.column[0] = {right.x, up.x, lookatDir.x, 0};
-    rotation.column[1] = {right.y, up.y, lookatDir.y, 0};
-    rotation.column[2] = {right.z, up.z, lookatDir.z, 0};
-    rotation.column[3] = {0, 0, 0, 1};
+    rotation.column[0] = V4(right.x, up.x, lookatDir.x, 0);
+    rotation.column[1] = V4(right.y, up.y, lookatDir.y, 0);
+    rotation.column[2] = V4(right.z, up.z, lookatDir.z, 0);
+    rotation.column[3] = V4(0, 0, 0, 1);
 
     m4 translation = Translate(-p.x, -p.y, -p.z);
 
@@ -708,10 +735,10 @@ QuarternionRotationM4(v3 axisVector, r32 rad)
     r32 m21 = 2*q2*q3 + 2*q0*q1;
     r32 m22 = 1 - 2*q1*q1 - 2*q2*q2;
 
-    result.column[0] = {m00, m10, m20, 0};
-    result.column[1] = {m01, m11, m21, 0};
-    result.column[2] = {m02, m12, m22, 0};
-    result.column[3] = {0, 0, 0, 1};
+    result.column[0] = V4(m00, m10, m20, 0);
+    result.column[1] = V4(m01, m11, m21, 0);
+    result.column[2] = V4(m02, m12, m22, 0);
+    result.column[3] = V4(0, 0, 0, 1);
 
     return result;
 }
@@ -774,24 +801,84 @@ QuarternionRotationV001(r32 rad, v3 vectorToRotate)
     return result;
 }
 
+inline b32
+clip_space_top_is_one(void)
+{
+    b32 result = false;
+#if MEKA_METAL || MEKA_OPENGL
+    result = true;
+#elif MEKA_VULKAN
+    result = false;
+#endif
+
+    return result;
+}
+
+// NOTE/Joon : This assumes that the window width is always 1m
+inline m4
+projection(r32 focal_length, r32 aspect_ratio_width_over_height, r32 near, r32 far)
+{
+    m4 result = {};
+
+    r32 c = clip_space_top_is_one() ? 1.f : 0.f; 
+
+    result.column[0] = V4(focal_length, 0, 0, 0);
+    result.column[1] = V4(0, focal_length*aspect_ratio_width_over_height, 0, 0);
+    result.column[2] = V4(0, 0, c*(near+far)/(near-far), -1);
+    result.column[3] = V4(0, 0, (2.0f*far*near)/(near-far), 0);
+
+    return result;
+}
+
+
+
 // r = frustumHalfWidth
 // t = frustumHalfHeight
 // n = near plane z value
 // f = far plane z value
 inline m4
-SymmetricProjection(r32 r, r32 t, r32 n, r32 f)
+symmetric_projection(r32 r, r32 t, r32 n, r32 f)
 {
     m4 result = {};
+
+    r32 c = clip_space_top_is_one() ? 1.f : 0.f; 
 
     // IMPORTANT : In opengl, t corresponds to 1 -> column[1][1] = n/t
     // while in vulkan, t corresponds to -1 -> columm[1][1] = -n/t
     result.column[0] = V4(n/r, 0, 0, 0);
-    result.column[1] = V4(0, -(n/t), 0, 0);
-    result.column[2] = V4(0, 0, (n+f)/(n-f), -1);
+    result.column[1] = V4(0, (n/t), 0, 0);
+    result.column[2] = V4(0, 0, c*(n+f)/(n-f), -1);
     result.column[3] = V4(0, 0, (2.0f*f*n)/(n-f), 0);
 
     return result;
 }
+
+#if MEKA_LLVM
+inline r32_3
+convert_to_r32_3(v3 a)
+{
+    r32_3 result = {};
+
+    result.x = a.x;
+    result.y = a.y;
+    result.z = a.z;
+
+    return result;
+}
+
+inline r32_4
+convert_to_r32_4(v4 a)
+{
+    r32_4 result = {};
+
+    result.x = a.x;
+    result.y = a.y;
+    result.z = a.z;
+    result.w = a.w;
+
+    return result;
+}
+#endif
 
 inline r32 
 Clamp(r32 min, r32 value, r32 max)
@@ -868,8 +955,8 @@ typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
 
 struct platform_api
 {
-    platform_read_file *ReadFile;
-    platform_free_file_memory *FreeFileMemory;
+    platform_read_file *read_file;
+    platform_free_file_memory *free_file_memory;
 };
 
 internal u32
@@ -892,7 +979,7 @@ GetCharCountNullTerminated(const char *buffer)
 internal b32
 StringCompare(char *src, char *test)
 {
-    Assert(src && test);
+    assert(src && test);
 
     b32 result = true;
     u32 testCount = GetCharCountNullTerminated(test);
@@ -932,9 +1019,9 @@ struct temp_memory
 };
 
 internal temp_memory
-StartTempMemory(platform_memory *platformMemory, size_t size)
+start_temp_memory(platform_memory *platformMemory, size_t size)
 {
-    Assert(platformMemory->tempMemoryStartCount == platformMemory->tempMemoryEndCount || 
+    assert(platformMemory->tempMemoryStartCount == platformMemory->tempMemoryEndCount || 
             platformMemory->tempMemoryEndCount == 0);
 
     temp_memory result = {};
@@ -948,7 +1035,7 @@ StartTempMemory(platform_memory *platformMemory, size_t size)
     return result;
 }
 internal void
-EndTempMemory(temp_memory *tempMemory)
+end_temp_memory(temp_memory *tempMemory)
 {
     platform_memory *platformMemory = tempMemory->platformMemory;
     // NOTE(joon) : safe guard for using this temp memory after ending it 
@@ -965,12 +1052,12 @@ EndTempMemory(temp_memory *tempMemory)
 }
 
 // NOTE(joon): Works for both platform memory(world arena) & temp memory
-#define PushArray(platformMemory, type, count) (type *)PushSize(platformMemory, count * sizeof(type))
-#define PushStruct(platformMemory, type) (type *)PushSize(platformMemory, sizeof(type))
+#define push_array(memory, type, count) (type *)push_size(memory, count * sizeof(type))
+#define push_struct(memory, type) (type *)push_size(memory, sizeof(type))
 
 // TODO(joon) : Alignment might be an issue, always take account of that
 internal void *
-PushSize(platform_memory *platformMemory, size_t size, size_t alignment = 0)
+push_size(platform_memory *platformMemory, size_t size, size_t alignment = 0)
 {
     void *result = (u8 *)platformMemory->base + platformMemory->used;
     platformMemory->used += size;
@@ -980,16 +1067,13 @@ PushSize(platform_memory *platformMemory, size_t size, size_t alignment = 0)
 
 // TODO(joon) : Alignment might be an issue, always take account of that
 internal void *
-PushSize(temp_memory *tempMemory, size_t size, size_t alignment = 0)
+push_size(temp_memory *tempMemory, size_t size, size_t alignment = 0)
 {
     void *result = (u8 *)tempMemory->base + tempMemory->used;
     tempMemory->used += size;
 
     return result;
 }
-
-
-
 
 struct thread_work_queue;
 #define THREAD_WORK_CALLBACK(name) void name(void *data)

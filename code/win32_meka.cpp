@@ -15,10 +15,10 @@
 #include "../external_libraries/cgltf.h"
 
 global_variable b32 isEngineRunning;
-global_variable b32 isWDown;
-global_variable b32 isADown;
-global_variable b32 isSDown;
-global_variable b32 isDDown;
+global_variable b32 is_w_down;
+global_variable b32 is_a_down;
+global_variable b32 is_s_down;
+global_variable b32 is_d_down;
 
 #include <windows.h>
 #include <time.h>
@@ -220,7 +220,7 @@ MainWindowProcedure(HWND windowHandle,
 }
 
 internal render_mesh 
-CreateRenderMeshFromLoadedMesh(renderer *renderer, loaded_raw_mesh *loadedMesh)
+CreateVulkanRenderMeshFromLoadedMesh(renderer *renderer, loaded_raw_mesh *loadedMesh)
 {
     Assert(loadedMesh->positionCount !=0);
     if(loadedMesh->normals)
@@ -871,7 +871,6 @@ WinMain(HINSTANCE instanceHandle,
 
                 vkCmdEndRenderPass(*commandBuffer);
                 CheckVkResult(vkEndCommandBuffer(*commandBuffer));
-
             }
             
             isEngineRunning = true;
@@ -957,6 +956,7 @@ WinMain(HINSTANCE instanceHandle,
                 // which means the matrices should be ordered in z*y*x*vector
                 // However, for the view matrix, because the rotation should be inversed,
                 // it should be ordered in x*y*z!
+                
                 if(isWDown)
                 {
                     camera.p += camera_speed*cameraDir;
@@ -966,6 +966,7 @@ WinMain(HINSTANCE instanceHandle,
                 {
                     camera.p -= camera_speed*cameraDir;
                 }
+
 
                 // TODO(joon) : Check whether this fence is working correctly! only one fence might be enough?
 #if 0
@@ -984,7 +985,7 @@ WinMain(HINSTANCE instanceHandle,
                                                     renderer.imageReadyToRenderSemaphores[currentFrameIndex], // signaled when the application can use the image.
                                                     0, // fence that will signaled when the application can use the image. unused for now.
                                                     &imageIndex);
-
+                                                    
                 if(acquireNextImageResult == VK_SUCCESS)
                 {
                     VkCommandBuffer *commandBuffer = renderer.graphicsCommandBuffers + imageIndex;

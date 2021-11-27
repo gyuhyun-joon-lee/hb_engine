@@ -27,12 +27,12 @@ Thumbs.db
 *.exe
 *.war
 
-
-#external libraries
-external_libraries/
-
-*.bat
 *.pdb
 *.map
 *.rdbg
 *.swn
+
+# metal generated files
+*.air
+*.metallib
+*.metallibsym

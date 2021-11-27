@@ -1,39 +1,38 @@
 #ifndef MEKA_RENDER_H
 #define MEKA_RENDER_H
 
-// TODO(joon) : Any need to have mulitiple types of vertices,
-// i.e if the vertex is very small, does it increae the vertex cache hit chance?
-struct vertex
-{
-    v3 p;
-    v3 normal;
-    //v3 faceNormal;
-};
-    // TODO(joon) : Texturecoord?
-
+#if 1
 // NOTE(joon) : This forces us to copy these datas again to the actual 'usable' vertex buffer,
 // but even with more than 100000 vertices, the size of it isn't too big 
+// TODO(joon) : loaded_raw_mesh is independent from any graphics api, put this in other places? or maybe not...
 struct loaded_raw_mesh
 {
     v3 *positions;
-    u32 positionCount;
+    u32 position_count;
 
     v3 *normals;
-    u32 normalCount;
+    u32 normal_count;
 
     v2 *textureCoords;
-    u32 textureCoordCount;
+    u32 texture_coord_count;
 
-    u16 *indices;
-    u32 indexCount;
+    u32 *indices;
+    u32 index_count;
 };
 
-// mesh that will be consumed by the renderer
+// mesh that is ready in a form thatto be consumed by the renderer
 struct render_mesh
 {
+#if MEKA_VULKAN
     vk_host_visible_coherent_buffer vertexBuffer;
     vk_host_visible_coherent_buffer indexBuffer;
-    u32 indexCount;
+#elif MEKA_METAL
+    // NOTE(joon): These are only accessible by the GPU
+    id<MTLBuffer> vertex_buffer;
+    id<MTLBuffer> index_buffer;
+#endif
+
+    unsigned index_count;
 };
 
 struct camera
@@ -59,6 +58,7 @@ struct camera
     };
 };
 
+#if  0
 struct uniform_buffer
 {
     // NOTE(joon) : mat4 should be 16 bytes aligned
@@ -66,5 +66,7 @@ struct uniform_buffer
     alignas(16) m4 projView;
     alignas(16) v3 lightP;
 };
+#endif
+#endif
 
 #endif
