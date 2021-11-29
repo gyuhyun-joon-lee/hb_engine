@@ -15,6 +15,8 @@
 
 #include "meka_render.h"
 #include "meka_terrain.cpp"
+#include "meka_mesh_loader.cpp"
+#include "meka_render.cpp"
 PLATFORM_READ_FILE(debug_macos_read_file)
 {
     platform_read_file_result Result = {};
@@ -29,9 +31,7 @@ PLATFORM_READ_FILE(debug_macos_read_file)
 
         if(fileSize > 0)
         {
-            // TODO : NO MORE OS LEVEL ALLOCATION!
-            // Pass this function a memory that it can use so that the function can only
-            // read from it.
+            // TODO/Joon : NO MORE OS LEVEL ALLOCATION!
             Result.size = fileSize;
             Result.memory = (u8 *)malloc(Result.size);
             if(read(File, Result.memory, fileSize) == -1)
@@ -98,6 +98,17 @@ app_delegate : NSObject<NSApplicationDelegate>
     [NSApp postEvent: event atStart: YES];
     [pool drain];
 }
+
+- (void)windowDidBecomeKey:(NSNotification *)notification
+{
+    int a = 1;
+}
+
+- (void)windowDidBecomeMain:(NSNotification *)notification
+{
+    int a = 1;
+}
+
 @end
 
 #define check_ns_error(error)\
@@ -130,11 +141,13 @@ display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_t
 }
 
 internal render_mesh
-metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh, platform_memory *platform_memory)
+metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh, memory_arena *memory_arena)
 {
+    assert(raw_mesh->normals);
     assert(raw_mesh->position_count == raw_mesh->normal_count);
+
     // TODO(joon) : not super important, but what should be the size of this
-    temp_memory mesh_temp_memory = start_temp_memory(platform_memory, megabytes(16));
+    temp_memory mesh_temp_memory = start_temp_memory(memory_arena, megabytes(16));
 
     render_mesh result = {};
     temp_vertex *vertices = push_array(&mesh_temp_memory, temp_vertex, raw_mesh->position_count);
@@ -144,28 +157,37 @@ metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh,
 
     {
         temp_vertex *vertex = vertices + vertex_index;
+
         // TODO(joon): does vf3 = v3 work just fine?
         vertex->p.x = raw_mesh->positions[vertex_index].x;
         vertex->p.y = raw_mesh->positions[vertex_index].y;
         vertex->p.z = raw_mesh->positions[vertex_index].z;
-        if(raw_mesh->normals)
-        {
-            vertex->normal.x = raw_mesh->normals[vertex_index].x;
-            vertex->normal.y = raw_mesh->normals[vertex_index].y;
-            vertex->normal.z = raw_mesh->normals[vertex_index].z;
-        }
+
+        v3 src_normal = raw_mesh->normals[vertex_index];
+        assert(src_normal.x <=1.0f &&src_normal.y <=1.0f&&src_normal.z <=1.0f);
+
+        vertex->normal.x = raw_mesh->normals[vertex_index].x;
+        vertex->normal.y = raw_mesh->normals[vertex_index].y;
+        vertex->normal.z = raw_mesh->normals[vertex_index].z;
     }
 
+    // NOTE/joon : MTLResourceStorageModeManaged requires the memory to be explictly synchronized
+    u32 vertex_buffer_size = sizeof(temp_vertex)*raw_mesh->position_count;
     result.vertex_buffer = [device newBufferWithBytes: vertices
-                                        length: sizeof(temp_vertex)*raw_mesh->position_count
-                                        options: MTLResourceStorageModeShared];
+                                        length: vertex_buffer_size 
+                                        options: MTLResourceStorageModeManaged];
+    [result.vertex_buffer didModifyRange:NSMakeRange(0, vertex_buffer_size)];
 
+    u32 index_buffer_size = sizeof(raw_mesh->indices[0])*raw_mesh->index_count;
     result.index_buffer = [device newBufferWithBytes: raw_mesh->indices
-                                        length: sizeof(raw_mesh->indices[0])*raw_mesh->index_count
-                                        options: MTLResourceStorageModeShared];
+                                        length: index_buffer_size
+                                        options: MTLResourceStorageModeManaged];
+    [result.index_buffer didModifyRange:NSMakeRange(0, index_buffer_size)];
+
     result.index_count = raw_mesh->index_count;
 
     end_temp_memory(&mesh_temp_memory);
+
     return result;
 }
 
@@ -233,8 +255,7 @@ macos_handle_event(NSApplication *app, NSWindow *window)
     last_mouse_p.x = mouse_location.x;
     last_mouse_p.y = mouse_location.y;
 
-    printf("%f, %f\n", mouse_diff.x, mouse_diff.y);
-    //printf("%d, %d\n", (i32)last_mouse_p.x, (i32)last_mouse_p.y);
+    //printf("%f, %f\n", mouse_diff.x, mouse_diff.y);
 
     // TODO : Check if this loop has memory leak.
     while(1)
@@ -307,6 +328,7 @@ main(void)
 {
     srand((u32)time(NULL));
 
+
 	i32 window_width = 1920;
 	i32 window_height = 1080;
     r32 window_width_over_height = (r32)window_width/(r32)window_height;
@@ -317,11 +339,31 @@ main(void)
     platform_api.free_file_memory = debug_macos_free_file_memory;
 
     platform_memory platform_memory = {};
-    platform_memory.size = gigabytes(1);
+
+    platform_memory.permanent_memory_size = gigabytes(1);
+    platform_memory.transient_memory_size = gigabytes(3);
+    u64 total_size = platform_memory.permanent_memory_size + platform_memory.transient_memory_size;
     vm_allocate(mach_task_self(), 
-                (vm_address_t *)&platform_memory.base,
-                platform_memory.size, 
+                (vm_address_t *)&platform_memory.permanent_memory,
+                total_size, 
                 VM_FLAGS_ANYWHERE);
+
+    platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
+
+    // TODO/joon: clean this memory managing stuffs...
+    memory_arena mesh_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(16), &platform_memory.permanent_memory_used);
+    memory_arena transient_memory_arena = start_memory_arena(platform_memory.transient_memory, gigabytes(1), &platform_memory.transient_memory_used);
+
+    platform_read_file_result cow_obj_file = platform_api.read_file("/Volumes/meka/meka_renderer/data/cow.obj");
+    raw_mesh raw_cow_mesh = parse_obj_slow(&mesh_memory_arena, &transient_memory_arena, cow_obj_file.memory, cow_obj_file.size);
+    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &raw_cow_mesh);
+    platform_api.free_file_memory(cow_obj_file.memory);
+
+#if 1
+    platform_read_file_result suzanne_obj_file = platform_api.read_file("/Volumes/meka/meka_renderer/data/suzanne.obj");
+    raw_mesh raw_suzanne_mesh = parse_obj_slow(&mesh_memory_arena, &transient_memory_arena, suzanne_obj_file.memory, suzanne_obj_file.size);
+    platform_api.free_file_memory(suzanne_obj_file.memory);
+#endif
 
     NSApplication *app = [NSApplication sharedApplication];
     [app setActivationPolicy :NSApplicationActivationPolicyRegular];
@@ -348,9 +390,12 @@ main(void)
                                         backing : NSBackingStoreBuffered
                                         defer : NO];
 
+
     NSString *app_name = [[NSProcessInfo processInfo] processName];
     [window setTitle:app_name];
     [window makeKeyAndOrderFront:0];
+    [window makeKeyWindow];
+    [window makeMainWindow];
 
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
 
@@ -416,15 +461,21 @@ main(void)
         CVDisplayLinkStart(display_link);
     }
 
-    raw_mesh terrain = make_simple_terrain(&platform_memory, 100, 100);
-    render_mesh terrain_mesh = metal_create_render_mesh_from_raw_mesh(device, &terrain, &platform_memory);
+    memory_arena terrain_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(16), &platform_memory.permanent_memory_used);
+    raw_mesh terrain = generate_simple_terrain(&terrain_memory_arena, 100, 100);
+    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &terrain);
+    render_mesh terrain_mesh = metal_create_render_mesh_from_raw_mesh(device, &terrain, &transient_memory_arena);
+    render_mesh cow_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_cow_mesh, &transient_memory_arena);
+#if 1
+    render_mesh suzanne_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_suzanne_mesh, &transient_memory_arena);
+#endif
 
     camera camera = {};
     r32 focal_length = 1.0f;
     camera.p = V3(0, 0, 0);
     
     r32 light_angle = 0.f;
-    r32 light_radius = 100.0f;
+    r32 light_radius = 300.0f;
 
     [app activateIgnoringOtherApps:YES];
     [app run];
@@ -434,28 +485,34 @@ main(void)
     {
         macos_handle_event(app, window);
 
-        // TODO(joon) : more rigorous rotation speed
-        camera.alongY += -4.0f*(mouse_diff.x/(r32)window_width);
-        camera.alongX += -4.0f*(mouse_diff.y/(r32)window_height);
+        // TODO/joon: check if the focued window is working properly
+        b32 is_window_focused = [app keyWindow] && [app mainWindow];
 
-        r32 camera_speed = 0.05f;
-        v3 cameraDir = normalize(QuarternionRotationV001(camera.alongZ, 
+        if(is_window_focused)
+        {
+            // TODO(joon) : more rigorous rotation speed
+            camera.alongY += -4.0f*(mouse_diff.x/(r32)window_width);
+            camera.alongX += -4.0f*(mouse_diff.y/(r32)window_height);
+
+            r32 camera_speed = 0.05f;
+            v3 cameraDir = normalize(QuarternionRotationV001(camera.alongZ, 
                         QuarternionRotationV010(camera.alongY, 
-                        QuarternionRotationV100(camera.alongX, V3(0, 0, -1)))));
+                            QuarternionRotationV100(camera.alongX, V3(0, 0, -1)))));
 
-        // NOTE(joon) : For a rotation matrix, order is x->y->z 
-        // which means the matrices should be ordered in z*y*x*vector
-        // However, for the view matrix, because the rotation should be inversed,
-        // it should be ordered in x*y*z!
+            // NOTE(joon) : For a rotation matrix, order is x->y->z 
+            // which means the matrices should be ordered in z*y*x*vector
+            // However, for the view matrix, because the rotation should be inversed,
+            // it should be ordered in x*y*z!
 
-        if(is_w_down)
-        {
-            camera.p += camera_speed*cameraDir;
-        }
+            if(is_w_down)
+            {
+                camera.p += camera_speed*cameraDir;
+            }
 
-        if(is_s_down)
-        {
-            camera.p -= camera_speed*cameraDir;
+            if(is_s_down)
+            {
+                camera.p -= camera_speed*cameraDir;
+            }
         }
         /*
             TODO(joon) : For more precisely timed rendering, the operations should be done in this order
@@ -504,28 +561,6 @@ main(void)
                 [render_encoder setCullMode: MTLCullModeBack];
                 [render_encoder setDepthStencilState: metal_depth_state];
 
-                temp_vertex vertices[] =
-                {
-                    {{100, 0, 0}, {0, 0, 0}},
-                    {{0, 100, 0}, {0, 0, 0}},
-                    {{0, 0, 0}, {0, 0, 0 }},
-                }; 
-
-
-                // NOTE(joon) : This is equivalent to creating a MTLBuffer and binding to the vertex buffer using setVertexBuffer:offset:atIndex: call.
-                //NOTE(joon) : This is an index to the parameter of the function that is declared inside the .metal file
-#if 1
-                [render_encoder setVertexBuffer: terrain_mesh.vertex_buffer
-                                offset: 0
-                                atIndex:0]; 
-#else
-                [render_encoder setVertexBytes: vertices
-                                length: sizeof(vertices)
-                                atIndex: 0]; 
-#endif
-                /*
-                   NOTE(joon): METAL's screen coordinate is bottom up, with (0, 0)being the center of the screen
-                */
                 vector_float2 shader_viewport = {(r32)window_width, (r32)window_height};
                 shader_viewport.x = (r32)window_width;
                 shader_viewport.y = (r32)window_height;
@@ -539,23 +574,59 @@ main(void)
                                 QuarternionRotationM4(V3(0, 0, 1), -camera.alongZ)*
                                 Translate(-camera.p.x, -camera.p.y, -camera.p.z);
                 m4 proj_view = proj_matrix*view_matrix;
-
-                frame_data per_frame_data = {};
-                per_frame_data.model = convert_m4_to_r32_4x4(Scale(1, 1, 1));
+                per_frame_data per_frame_data = {};
                 per_frame_data.proj_view = convert_m4_to_r32_4x4(proj_view);
-                v3 light_p = V3(light_radius*cosf(light_angle), 100.0f, light_radius*sinf(light_angle));
+                v3 light_p = V3(light_radius*cosf(light_angle), 10.0f, light_radius*sinf(light_angle));
                 per_frame_data.light_p = convert_to_r32_3(light_p);
-
                 [render_encoder setVertexBytes: &per_frame_data
                                 length: sizeof(per_frame_data)
                                 atIndex: 2]; 
-            
+
+                // NOTE/joon : make sure you update the non-vertex information first
+                per_object_data per_object_data = {};
+                per_object_data.model = convert_m4_to_r32_4x4(Scale(1, 1, 1));
+                [render_encoder setVertexBytes: &per_object_data
+                                length: sizeof(per_object_data)
+                                atIndex: 3]; 
+                [render_encoder setVertexBuffer: terrain_mesh.vertex_buffer
+                                offset: 0
+                                atIndex:0]; 
                 [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
                                 indexCount: terrain_mesh.index_count 
                                 indexType: MTLIndexTypeUInt32
                                 indexBuffer: terrain_mesh.index_buffer 
                                 indexBufferOffset: 0 
                                 instanceCount: 1]; 
+
+                per_object_data.model = convert_m4_to_r32_4x4(Scale(20, 20, 20));
+                [render_encoder setVertexBytes: &per_object_data
+                                length: sizeof(per_object_data)
+                                atIndex: 3]; 
+                [render_encoder setVertexBuffer: cow_mesh.vertex_buffer
+                                offset: 0
+                                atIndex:0]; 
+                [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
+                                indexCount: cow_mesh.index_count 
+                                indexType: MTLIndexTypeUInt32
+                                indexBuffer: cow_mesh.index_buffer 
+                                indexBufferOffset: 0 
+                                instanceCount: 1]; 
+#if 1
+                per_object_data.model = convert_m4_to_r32_4x4(Scale(20, 20, 20));
+                [render_encoder setVertexBytes: &per_object_data
+                                length: sizeof(per_object_data)
+                                atIndex: 3]; 
+                [render_encoder setVertexBuffer: suzanne_mesh.vertex_buffer
+                                offset: 0
+                                atIndex:0]; 
+                [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
+                                indexCount: suzanne_mesh.index_count 
+                                indexType: MTLIndexTypeUInt32
+                                indexBuffer: suzanne_mesh.index_buffer 
+                                indexBufferOffset: 0 
+                                instanceCount: 1]; 
+#endif
+
 
                 [render_encoder endEncoding];
 
@@ -573,7 +644,7 @@ main(void)
             [command_buffer commit];
         }
 
-        light_angle += 0.0001f;
+        light_angle += 0.00002f;
     }
     return 0;
 }

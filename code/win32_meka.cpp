@@ -15,10 +15,10 @@
 #include "../external_libraries/cgltf.h"
 
 global_variable b32 isEngineRunning;
-global_variable b32 is_w_down;
-global_variable b32 is_a_down;
-global_variable b32 is_s_down;
-global_variable b32 is_d_down;
+global_variable b32 isWDown;
+global_variable b32 isADown;
+global_variable b32 isSDown;
+global_variable b32 isDDown;
 
 #include <windows.h>
 #include <time.h>
@@ -473,6 +473,14 @@ make_mountain_inside_terrain(loaded_raw_mesh *terrain,
     }
 }
 
+obj_lexicon
+{
+    u32 start; // where the special character starts
+    // TODO/joon : Is it possible to not have any carriage return? what if the file is in one straight line?
+    u32 end; // where the carriage return happens
+    u32 index; // index for each property(vertex, vertex_normal, texture_coord...etc). With this, we can easily multi-thread the code
+}
+
 int CALLBACK 
 WinMain(HINSTANCE instanceHandle,
 		HINSTANCE prevInstanceHandle, 
@@ -887,6 +895,7 @@ WinMain(HINSTANCE instanceHandle,
             int mouseDx = 0;
             int mouseDy = 0;
 
+            mousex = (i32)mouseP.x;
             while(isEngineRunning)
             {
                 MSG message;
@@ -966,7 +975,6 @@ WinMain(HINSTANCE instanceHandle,
                 {
                     camera.p -= camera_speed*cameraDir;
                 }
-
 
                 // TODO(joon) : Check whether this fence is working correctly! only one fence might be enough?
 #if 0

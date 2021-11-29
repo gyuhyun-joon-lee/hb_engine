@@ -5,35 +5,41 @@
 
 #define Invalid_R32 10000.0f
 
+struct find_closest_u32_result
+{
+    u32 number;
+    u8 *advanced;
+};
 
 // NOTE : This function has no bound checking
-internal u32
-FindClosestConsecutiveUInt32(char *c)
+internal find_closest_u32_result
+find_closest_u32(u8 *c)
 {
-    b32 foundFirstNumber = false;
+    find_closest_u32_result result = {};
 
-    u32 number = 0;
-    while(!foundFirstNumber ||
-        ((*c >= '0' && *c <= '9')))
+    b32 found_number = false;
+    while(1)
     {
         if(*c >= '0' && *c <= '9' )
         {
-            u32 numericChar = *c-48;
-            number *= 10;
-            number += numericChar;
+            found_number = true;
 
-            foundFirstNumber = true;
+            result.number *= 10;
+            result.number += *c-'0';
         }
-        else if(*c == '.')
+        else
         {
-            // This function only expectes unsigned integer value
-            Assert(0)
+            if(found_number)
+            {
+                result.advanced = c;
+                break;
+            }
         }
 
         c++;
     }
-
-    return number;
+    
+    return result;
 }
 
 #if 0
@@ -46,13 +52,13 @@ FindClosestConsecutiveUInt32(char *c)
     - Doesnt check how many buffers are specified inside the file
  */
 // NOTE(joon) : Loads single mesh only gltf file, in a _very_ slow way.
-internal loaded_raw_mesh
+internal raw_mesh
 ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binFileName)
 {
     platform_read_file_result gltf = platformApi->ReadFile(gltfFileName);
     platform_read_file_result bin = platformApi->ReadFile(binFileName);
 
-    loaded_raw_mesh result = {};
+    raw_mesh result = {};
 
     if(gltf.memory && bin.memory)
     {
@@ -83,7 +89,7 @@ ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binF
             c++;
         }
 
-        Assert(meshesCharPtr && bufferViewCharPtr);
+        assert(meshesCharPtr && bufferViewCharPtr);
 
         u32 positionBufferViewIndex = UINT_MAX;
         u32 normalBufferViewIndex = UINT_MAX;
@@ -176,13 +182,13 @@ ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binF
             else if(*c == '}')
             {
                 curlBracketCount--;
-                Assert(curlBracketCount == 0);
+                assert(curlBracketCount == 0);
 
                 // Some gltf files does not include the bytesOffset variable 
                 // for the first member of bufferView to save memory
                 if(byteOffsetCount != bufferIndexCount)
                 {
-                    Assert(byteOffsetCount < bufferIndexCount);
+                    assert(byteOffsetCount < bufferIndexCount);
                     byteOffsets[byteOffsetCount] = 0;
                     byteOffsetCount = bufferIndexCount;
                 }
@@ -194,14 +200,14 @@ ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binF
         if(positionBufferViewIndex != UINT_MAX)
         {
             // TODO(joon) : We don't care about buffer index, as there is just one buffer
-            Assert(byteLengths[positionBufferViewIndex]%(sizeof(v3)) == 0);
+            assert(byteLengths[positionBufferViewIndex]%(sizeof(v3)) == 0);
 
-            result.positionCount = (byteLengths[positionBufferViewIndex]/(sizeof(v3)));
-            result.positions = (v3 *)malloc(sizeof(v3)*result.positionCount);
+            result.position_count = (byteLengths[positionBufferViewIndex]/(sizeof(v3)));
+            result.positions = (v3 *)malloc(sizeof(v3)*result.position_count);
 
             r32 *memory = (r32 *)((u8 *)bin.memory + byteOffsets[positionBufferViewIndex]);
             for(u32 pIndex = 0;
-                pIndex < result.positionCount;
+                pIndex < result.position_count;
                 pIndex++)
             {
                 result.positions[pIndex].x = (r32)*memory;
@@ -214,12 +220,12 @@ ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binF
         else
         {
             // TODO(joon) : vertex position is mandatory!
-            Assert(0);
+            assert(0);
         }
 
         if(normalBufferViewIndex != UINT_MAX)
         {
-            Assert(byteLengths[normalBufferViewIndex]%(sizeof(r32)*3) == 0);
+            assert(byteLengths[normalBufferViewIndex]%(sizeof(r32)*3) == 0);
 
             result.normalCount = (byteLengths[positionBufferViewIndex]/(sizeof(r32)*3));
             result.normals = (v3 *)malloc(sizeof(v3)*result.normalCount);
@@ -239,12 +245,12 @@ ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binF
         else
         {
             // TODO(joon) : Generate normal vectors ourselves, if there are no normal information
-            //Assert(0);
+            //assert(0);
         }
 
         if(textureCoordBufferViewIndex != UINT_MAX)
         {
-            Assert(byteLengths[textureCoordBufferViewIndex]%(sizeof(r32)*2) == 0);
+            assert(byteLengths[textureCoordBufferViewIndex]%(sizeof(r32)*2) == 0);
 
             result.textureCoordCount = (byteLengths[textureCoordBufferViewIndex]/(sizeof(r32)*2));
             result.textureCoords = (v2 *)malloc(sizeof(v2)*result.textureCoordCount);
@@ -263,22 +269,22 @@ ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binF
         else
         {
             // TODO(joon) : Again, texture coord is not mandatory, so we should not assert here.
-            //Assert(0);
+            //assert(0);
         }
 
         if(indexBufferViewIndex != UINT_MAX)
         {
             // TODO(joon) : Is all the indices inside gltf 16 bit or should we manually check that
             // by getting the total count from gltf?
-            Assert(byteLengths[indexBufferViewIndex]%(sizeof(u16)) == 0);
+            assert(byteLengths[indexBufferViewIndex]%(sizeof(u16)) == 0);
 
-            result.indexCount = byteLengths[indexBufferViewIndex]/sizeof(u16);
-            Assert(result.indexCount%3 == 0); // no faces should be open
-            result.indices = (u16 *)malloc(sizeof(u16)*result.indexCount);
+            result.index_count = byteLengths[indexBufferViewIndex]/sizeof(u16);
+            assert(result.index_count%3 == 0); // no faces should be open
+            result.indices = (u16 *)malloc(sizeof(u16)*result.index_count);
 
             u16 *memory = (u16 *)((u8 *)bin.memory + byteOffsets[indexBufferViewIndex]);
             for(u32 indexIndex = 0;
-                indexIndex < result.indexCount;
+                indexIndex < result.index_count;
                 indexIndex++)
             {
                 result.indices[indexIndex] = *memory;
@@ -288,13 +294,13 @@ ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binF
         }
         else
         {
-            Assert(0);
+            assert(0);
         }
     }
     else
     {
         // TODO(joon) : this gltf file cannot be loaded!
-        Assert(0);
+        assert(0);
     }
 
     return result;
@@ -378,7 +384,7 @@ ParseCharIntoR32(char *buffer, u32 start, u32 end, u32 decimalPointP, b32 isNega
             default:
             {
                 // TODO(joon): doesn't support more than 6 deicmal points, as it's out of floating point precision
-                Assert(0);
+                assert(0);
             }break;
         }
 
@@ -403,108 +409,91 @@ AdvancePointerUntil_v_(char *c)
     return c;
 }
 
-// NOTE(joon) : Really slow method, no multithreading, no SIMD
-void
-ReadOBJFileLineByLine(platform_api *platformApi, char* fileName)
+/*
+
+static void ParseLines(example_terminal *Terminal, source_buffer_range Range, cursor_state *Cursor)
 {
-    platform_read_file_result file = platformApi->ReadFile(fileName);
+     TODO(casey): Currently, if the commit of line data _straddles_ a control code boundary
+       this code does not properly _stop_ the processing cursor.  This can cause an edge case
+       where a VT code that splits a line _doesn't_ split the line as it should.  To fix this
+       the ending code just needs to check to see if the reason it couldn't parse an escape
+       code in "AtEscape" was that it ran out of characters, and if so, don't advance the parser
+       past that point.
 
-    if(file.memory)
+    // load 8bit character into the simd storage, which means there will be 16 characters per __m128i
+    __m128i Carriage = _mm_set1_epi8('\n');
+    __m128i Escape = _mm_set1_epi8('\x1b');
+    __m128i Complex = _mm_set1_epi8(0x80);
+
+    size_t SplitLineAtCount = 4096;
+    size_t LastP = Range.AbsoluteP;
+    while(Range.Count)
     {
-        char *vStartChar = AdvancePointerUntil_v_((char *)file.memory);
-
-        char *c = vStartChar;
-        u32 vertexPCharCount = 0;
-        while(1)
+        __m128i ContainsComplex = _mm_setzero_si128();
+        size_t Count = Range.Count;
+        if(Count > SplitLineAtCount) Count = SplitLineAtCount;
+        char *Data = Range.Data;
+        while(Count >= 16)
         {
-            if((*c == 'v' && *(c+1) == 'n') ||
-                (*c == 'v' && *(c+1) == 't') ||
-                (*c == 'f'))
+            // load 16 characters
+            __m128i Batch = _mm_loadu_si128((__m128i *)Data);
+
+            // test if the character has certain patterns.
+            __m128i TestC = _mm_cmpeq_epi8(Batch, Carriage);
+            __m128i TestE = _mm_cmpeq_epi8(Batch, Escape);
+            __m128i TestX = _mm_and_si128(Batch, Complex);
+            __m128i Test = _mm_or_si128(TestC, TestE);
+            int Check = _mm_movemask_epi8(Test);
+            if(Check)
             {
+                int Advance = _tzcnt_u32(Check);
+                __m128i MaskX = _mm_loadu_si128((__m128i *)(OverhangMask + 16 - Advance));
+                TestX = _mm_and_si128(MaskX, TestX);
+                ContainsComplex = _mm_or_si128(ContainsComplex, TestX);
+                Count -= Advance;
+                Data += Advance;
                 break;
             }
 
-            ++vertexPCharCount;
-            ++c;
+            ContainsComplex = _mm_or_si128(ContainsComplex, TestX);
+            Count -= 16;
+            Data += 16;
         }
 
+        Range = ConsumeCount(Range, Data - Range.Data);
 
-        // TODO(joon) : complete hack!
-        r32 *pXYZs = (r32 *)malloc(sizeof(r32)*5000*3);
-        u32 pXYZIndex = 0;
+        Terminal->Lines[Terminal->CurrentLineIndex].ContainsComplexChars |=
+            _mm_movemask_epi8(ContainsComplex);
 
-        char *startingNumberChar = 0;
-        u32 decimalPointP = 0;
-        u32 numberStartIndex = 0;
-        b32 numberInputStarted = false;
-        b32 isNegativeValue = false;
-        for(u32 charIndex = 0;
-            charIndex < vertexPCharCount;
-            ++charIndex)
+        if(AtEscape(&Range))
         {
-            char *character = vStartChar + charIndex;
-            if(*character == '0' ||
-                *character == '1' ||
-                *character == '2' ||
-                *character == '3' ||
-                *character == '4' ||
-                *character == '5' ||
-                *character == '6' ||
-                *character == '8' ||
-                *character == '8' ||
-                *character == '9' ||
-                *character == '9')
+            size_t FeedAt = Range.AbsoluteP;
+            if(ParseEscape(Terminal, &Range, Cursor))
             {
-                if(!numberInputStarted)
-                {
-                    numberStartIndex = charIndex;
-                    numberInputStarted = true;
-                }
+                LineFeed(Terminal, FeedAt, FeedAt, Cursor->Props);
             }
-            else if(*character == ' ' || 
-                    *character == '\r' ||
-                    *character == '\n')
+        }
+        else
+        {
+            char Token = GetToken(&Range);
+            if(Token == '\n')
             {
-                if(numberInputStarted)
-                {
-                    pXYZs[pXYZIndex++] = ParseCharIntoR32(vStartChar,
-                                                        numberStartIndex,
-                                                        charIndex, 
-                                                        decimalPointP, isNegativeValue);
-
-                    isNegativeValue = false;
-                    numberInputStarted = false;
-                }
+                LineFeed(Terminal, Range.AbsoluteP, Range.AbsoluteP, Cursor->Props);
             }
-            else if(*character == '.')
+            else if(Token < 0) // TODO(casey): Not sure what is a "combining char" here, really, but this is a rough test
             {
-                decimalPointP = charIndex;
-            }
-            else if(*character == '-')
-            {
-                isNegativeValue = true;
+                Terminal->Lines[Terminal->CurrentLineIndex].ContainsComplexChars = 1;
             }
         }
 
-        int a = 1;
-#if 0
-        else if(line == "vn ")
+        UpdateLineEnd(Terminal, Range.AbsoluteP);
+        if(GetLineLength(&Terminal->Lines[Terminal->CurrentLineIndex]) > SplitLineAtCount)
         {
+            LineFeed(Terminal, Range.AbsoluteP, Range.AbsoluteP, Cursor->Props);
         }
-        else if(line == "vt ")
-        {
-        }
-#endif
-    }
-    else
-    {
-        // NOTE(joon) : obj file not loadable
-        Assert(0);
     }
 }
-
-
-
+*/
 
 internal b32
 Is4x4MatrixInversable(r32 a11, r32 a12, r32 a13, r32 a14,
@@ -545,10 +534,10 @@ IsPairValid(pair *pair)
 }
 
 internal void 
-UpdateQuadricMetricErrorCost(loaded_raw_mesh *loadedMesh, r32 *QPerEachVertex, pair *pair)
+UpdateQuadricMetricErrorCost(raw_mesh *loadedMesh, r32 *QPerEachVertex, pair *pair)
 {
-    Assert(IsPairValid(pair));
-    Assert(pair->index0 != pair->index1);
+    assert(IsPairValid(pair));
+    assert(pair->index0 != pair->index1);
 
     u32 QStride = 10;
 
@@ -642,10 +631,10 @@ FloatEpsilonCompare(r32 a, r32 b)
     - This assumes that the mesh you are providing is counter-clockwise(needed to calculate the plane equation for Q)
 */
 internal void
-OptimizeMeshGH(loaded_raw_mesh *loadedMesh, 
+OptimizeMeshGH(raw_mesh *loadedMesh, 
                 r32 optimizeRatio) // newFaceCount = mesh->faceCount * optimizeRatio
 {
-    Assert(optimizeRatio > 0.0f && optimizeRatio < 1.0f)
+    assert(optimizeRatio > 0.0f && optimizeRatio < 1.0f)
     /*
         NOTE(joon): Each Q will contain these values, in this order
         Q00// a*a
@@ -660,18 +649,18 @@ OptimizeMeshGH(loaded_raw_mesh *loadedMesh,
         Q33// d*d
     */   
     // TODO(joon) : this might be bigger than u32_max
-    u32 totalQCount = 10*loadedMesh->positionCount;
+    u32 totalQCount = 10*loadedMesh->position_count;
     r32 *QPerEachVertex = (r32 *)malloc(sizeof(r32)*totalQCount);
     memset (QPerEachVertex, 0, sizeof(r32)*totalQCount);
     u32 QStride = 10; // Because each Q will be containing 10 floats
 
     // TODO(joon) : What is the maximum number of pairs, in worst case scenario?
-    u32 maxPairCount = 15*loadedMesh->indexCount;
+    u32 maxPairCount = 15*loadedMesh->index_count;
     pair *pairs = (pair *)malloc(sizeof(pair)*maxPairCount);
     u32 pairCount = 0;
 
     for(u32 indexIndex = 0;
-        indexIndex < loadedMesh->indexCount;
+        indexIndex < loadedMesh->index_count;
         indexIndex += 3)
     {
         u16 ia = loadedMesh->indices[indexIndex+0];
@@ -682,7 +671,7 @@ OptimizeMeshGH(loaded_raw_mesh *loadedMesh,
         v3 vb = loadedMesh->positions[ib];
         v3 vc = loadedMesh->positions[ic];
 
-        v3 cross = Normalize(Cross(va-vb, vc-vb));
+        v3 cross = normalize(Cross(va-vb, vc-vb));
         // d for plane equation
         r32 d = cross.x*va.x + cross.y*va.y + cross.z*va.z;
 
@@ -780,7 +769,7 @@ OptimizeMeshGH(loaded_raw_mesh *loadedMesh,
             r32 lengthSquare = LengthSquare(loadedMesh->positions[startingVertexIndex] - loadedMesh->positions[testVertexIndex]);
             if(lengthSquare <= distanceThresholdSquare)
             {
-                Assert(pairCount < maxPairCount);
+                assert(pairCount < maxPairCount);
                 pair *pair = pairs + pairCount++;
                 pair->index0 = (u16)startingVertexIndex;
                 pair->index1 = (u16)testVertexIndex; 
@@ -833,10 +822,10 @@ OptimizeMeshGH(loaded_raw_mesh *loadedMesh,
 
     SortPairByCost(pairs, pairCount);
 
-    u32 faceToContractCount = (u32)((loadedMesh->indexCount/3)*(1.0f - optimizeRatio));
+    u32 faceToContractCount = (u32)((loadedMesh->index_count/3)*(1.0f - optimizeRatio));
     u32 contractedFaceCount = 0; 
 
-    u32 newVertexCount = loadedMesh->positionCount; // Start from the original vertex count, and decrement by 1 for each contraction
+    u32 newVertexCount = loadedMesh->position_count; // Start from the original vertex count, and decrement by 1 for each contraction
     // Contract the pairs,
     while(contractedFaceCount < faceToContractCount)
     {
@@ -856,7 +845,7 @@ OptimizeMeshGH(loaded_raw_mesh *loadedMesh,
                 }
             }
         }
-        Assert(minCostPair);
+        assert(minCostPair);
         
         /*
             1. Get rid of the least cost pair
@@ -874,12 +863,12 @@ OptimizeMeshGH(loaded_raw_mesh *loadedMesh,
 
         // update the faces that were using the index that was contracted
         for(u32 indexIndex = 0;
-            indexIndex < loadedMesh->indexCount;
+            indexIndex < loadedMesh->index_count;
             indexIndex += 3)
         {
-            u16 *i0 = loadedMesh->indices + indexIndex;
-            u16 *i1 = loadedMesh->indices + indexIndex + 1;
-            u16 *i2 = loadedMesh->indices + indexIndex + 2;
+            u32 *i0 = loadedMesh->indices + indexIndex;
+            u32 *i1 = loadedMesh->indices + indexIndex + 1;
+            u32 *i2 = loadedMesh->indices + indexIndex + 2;
 
             if(*i0 == minCostPair->index1)
             {
@@ -955,11 +944,11 @@ OptimizeMeshGH(loaded_raw_mesh *loadedMesh,
 
     }
     
-    u32 newIndexCount = loadedMesh->indexCount - faceToContractCount*3;
-    u16 *newIndices = (u16 *)malloc(sizeof(u16)*newIndexCount);
+    u32 newIndexCount = loadedMesh->index_count - faceToContractCount*3;
+    u32 *newIndices = (u32 *)malloc(sizeof(u32)*newIndexCount);
     u32 newIndexIndex = 0;
     for(u32 indexIndex = 0;
-        indexIndex < loadedMesh->indexCount;
+        indexIndex < loadedMesh->index_count;
         indexIndex += 3)
     {
         u16 i0 = loadedMesh->indices[indexIndex+0];
@@ -981,7 +970,7 @@ OptimizeMeshGH(loaded_raw_mesh *loadedMesh,
     v3 *newVertices = (v3 *)malloc(sizeof(v3)*newVertexCount);
     u32 newVertexIndex = 0;
     for(u32 vertexIndex = 0;
-        vertexIndex < loadedMesh->positionCount;
+        vertexIndex < loadedMesh->position_count;
         ++vertexIndex)
     {
         v3 *vertex = loadedMesh->positions + vertexIndex;
@@ -1012,12 +1001,416 @@ OptimizeMeshGH(loaded_raw_mesh *loadedMesh,
     free(loadedMesh->indices);
 
     loadedMesh->positions = newVertices;
-    loadedMesh->positionCount = newVertexCount;
+    loadedMesh->position_count = newVertexCount;
     loadedMesh->indices = newIndices;
-    loadedMesh->indexCount = newIndexCount;
+    loadedMesh->index_count = newIndexCount;
 }
 
+#if MEKA_ARM
+#include <arm_neon.h>
+#elif MEKA_X86_64
+#include <immintrin.h>
+#endif
 
+// TODO/joon : we can make this faster by multi threading the parsing
+internal void
+parse_obj_into_lexicon(u8 *file, size_t file_size)
+{
+    assert(file);
+
+    // NOTE/joon: adding 15 to round up, as each char chunk is 16bytes
+    u32 char_chunk_count = (file_size + 15)/16;
+
+    uint8x16_t v_128 = vdupq_n_u8('v');
+    uint8x16_t t_128 = vdupq_n_u8('t');
+    uint8x16_t f_128 = vdupq_n_u8('f');
+    uint8x16_t n_128 = vdupq_n_u8('n');
+
+    while(file_size > 0)
+    {
+        if(file_size >= 16)
+        {
+            uint8x16_t c_128 = vld1q_u8(file);
+            uint8x16_t v_compare_result = vceqq_u8(c_128, v_128);
+            uint8x16_t t_compare_result = vceqq_u8(c_128, t_128);
+            uint8x16_t f_compare_result = vceqq_u8(c_128, f_128);
+            uint8x16_t n_compare_result = vceqq_u8(c_128, n_128);
+
+            file_size -= 16;
+        }
+        else
+        {
+        }
+    }
+}
+
+enum obj_lexicon_type
+{
+    obj_lexicon_type_v,
+    obj_lexicon_type_vn,
+    obj_lexicon_type_vt,
+    obj_lexicon_type_f,
+};
+
+struct obj_lexicon
+{
+    // TODO/Joon: Is it smarter to store the indices?
+    obj_lexicon_type type;
+    u8 *start;
+    u8 *end;
+
+    u32 index; // NOTE/joon : for each property(vertex, vertex normal...), what index it is
+};
+
+internal u8 *
+get_closest_carriage_return(u8 *start)
+{
+    u8 *result = start;
+    while(1)
+    {
+        if(*result == '\n')
+        {
+            break;
+        }
+
+        result++;
+    }
+
+    return result;
+}
+
+internal v3
+parse_obj_line_with_v_or_vn(u8 *start, u8 *end)
+{
+    v3 result = {};
+    u8 *c = start;
+
+    r32 p[3] = {};
+    u32 p_index = 0;
+    while(c < end)
+    {
+        // TODO/joon: for now, we will just assume that all numbers start with a number, not just .
+        if((*c >= '0' && *c <= '9') ||
+            *c == '-')
+        {
+            r32 sign = 1.0f;
+            if(*c == '-')
+            {
+                sign = -1.0f;
+                c++;
+            }
+            
+            // NOTE/joon : for example, if the number was 12.9442, decimal_point_p is 4
+            b32 decimal_point_appeared = false;
+            u32 decimal_point_p = 0;
+            u32 number = 0;
+            while(*c != ' ' && c < end)
+            {
+                if(decimal_point_appeared)
+                {
+                    decimal_point_p++;
+                }
+
+                if(*c >= '0' && *c <= '9')
+                {
+                    number *= 10;
+                    number += *c - '0';
+                }
+                else if(*c == '.')
+                {
+                    decimal_point_appeared = true;
+                }
+                else
+                {
+                    // TODO/joon: file is corrupted!
+                    assert(0);
+                }
+
+                c++;
+            }
+
+            if(p_index < array_count(p))
+            {
+                if(decimal_point_appeared && decimal_point_p == 0)
+                {
+                    // TODO/joon: file is corrupted!
+                    assert(0);
+                }
+
+                // TODO/joon : just use a macro instead of this method which has an issue with floating point precision?
+                r32 decimal_adjustment = 1.0f;
+                for(u32 decimal_point_index = 0;
+                        decimal_point_index < decimal_point_p;
+                        ++decimal_point_index)
+                {
+                    decimal_adjustment *= 0.1f;
+                }
+
+                p[p_index++] = sign*number*decimal_adjustment;
+            }
+        }
+
+        c++;
+    }
+
+    result.x = p[0];
+    result.y = p[1];
+    result.z = p[2];
+
+    return result;
+}
+
+// TODO/Joon : not super important, but measure the time just for fun
+// Naive method, which is stepping character by character(1 byte)
+internal raw_mesh
+parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_memory_arena, u8 *file, size_t file_size)
+{
+    assert(file && file_size != 0);
+
+    //TODO/Joon: considering that each lexicon represents each significant line, we can make this number to be equal to \n counts
+    // TODO/Joon: This is just a arbitrary number
+    u32 lexicon_max_count = 0x00000fffff;
+    temp_memory lexicon_temp_memory = start_temp_memory(transient_memory_arena, sizeof(obj_lexicon)*lexicon_max_count);
+
+    u32 v_line_count = 0;
+    u32 vn_line_count = 0;
+    u32 vt_line_count = 0;
+    u32 f_line_count = 0;
+
+    u32 lexicon_count = 0;
+    obj_lexicon *obj_lexicons = (obj_lexicon *)lexicon_temp_memory.base;
+
+    u8 *c = file;
+    u8 *file_end = file+file_size;
+    while(c < file_end)
+    {
+        switch(*c)
+        {
+            case 'v':
+            {
+                obj_lexicon *lexicon = obj_lexicons + lexicon_count++;
+
+                if(*(c+1) == 't')
+                {
+                    // vt
+                    lexicon->type = obj_lexicon_type_vt;
+                    lexicon->index = vt_line_count++;
+                }
+                else if(*(c+1) == 'n')
+                {
+                    // vn
+                    lexicon->type = obj_lexicon_type_vn;
+                    lexicon->index = vn_line_count++;
+                }
+                else
+                {
+                    // v
+                    lexicon->type = obj_lexicon_type_v;
+                    lexicon->index = v_line_count++;
+                }
+
+                u8 *lexicon_end = get_closest_carriage_return(c);
+                lexicon->start = c;
+                lexicon->end = lexicon_end;
+                c = lexicon_end;
+            }break;
+            case 'f':
+            {
+                u8 *lexicon_end = get_closest_carriage_return(c);
+
+                obj_lexicon *lexicon = obj_lexicons + lexicon_count++;
+                lexicon->type = obj_lexicon_type_f;
+                lexicon->start = c;
+                lexicon->end = lexicon_end;
+                lexicon->index = f_line_count++;
+
+                c = lexicon_end;
+            }break;
+
+            case '#':
+            {
+                // NOTE/joon : skip the comments
+                c = get_closest_carriage_return(c);
+            }break;
+        }
+
+        assert(lexicon_count < lexicon_max_count);
+        c++;
+    }
+
+    u32 stride = (v_line_count != 0? 1:0) + (vn_line_count != 0? 1:0) + (vt_line_count != 0? 1:0);
+
+    // NOTE/joon:obj files do allow the normal count and the position count to be different,
+    // but we are not going to, as very few models actually has that kind of format(maybe some very simple models such as quad and cube)
+    assert(vn_line_count == 0 || (vn_line_count == v_line_count));
+
+    u32 index_count = 0;
+    // NOTE/joon: One huge problem with the obj file is that we dont' know how many faces there are in advance,
+    // so we cannot pre-allocate the memory for the indices->which forces us to pre-step into the lexicons and find out how many 
+    // indices are there in total
+    for(u32 lexicon_index = 0;
+            lexicon_index < lexicon_count;
+            ++lexicon_index)
+    {
+        obj_lexicon *lexicon = obj_lexicons + lexicon_index;
+        
+        u32 number_count = 0;
+        if(lexicon->type == obj_lexicon_type_f)
+        {
+            b32 did_number_appeared = false;
+
+            u8 *c = lexicon->start;
+            while(c <= lexicon->end)
+            {
+                if(*c >= '0' && *c <= '9')
+                {
+                    did_number_appeared = true;
+                }
+                else
+                {
+                    if(did_number_appeared)
+                    {
+                        did_number_appeared = false;
+                        number_count++;
+                    }
+                }
+
+                c++;
+            }
+
+            if(stride)
+            {
+                assert(number_count % stride == 0);
+
+                number_count /= stride;
+            }
+
+            index_count += 3*((number_count) - 2);
+        }
+    }
+
+    raw_mesh mesh = {};
+    mesh.index_count = index_count;
+    mesh.indices = push_array(permanent_memory_arena, u32, sizeof(u32)*index_count);
+
+    mesh.vn_index_count = index_count;
+    mesh.vn_indices = push_array(permanent_memory_arena, u32, sizeof(u32)*index_count);
+
+    mesh.vt_index_count = index_count;
+    mesh.vt_indices = push_array(permanent_memory_arena, u32, sizeof(u32)*index_count);
+
+    mesh.positions = push_array(permanent_memory_arena, v3, sizeof(v3)*v_line_count);
+    if(vn_line_count)
+    {
+        mesh.normals = push_array(permanent_memory_arena, v3, sizeof(v3)*vn_line_count);
+    }
+
+    u32 mesh_index_count = 0;
+    u32 mesh_vn_index_count = 0;
+    u32 mesh_vt_index_count = 0;
+    for(u32 lexicon_index = 0;
+            lexicon_index < lexicon_count;
+            ++lexicon_index)
+    {
+        obj_lexicon *lexicon = obj_lexicons + lexicon_index;
+        switch(lexicon->type)
+        {
+            case obj_lexicon_type_v:
+            {
+                mesh.positions[mesh.position_count++] = parse_obj_line_with_v_or_vn(lexicon->start, lexicon->end);
+            }break;
+            case obj_lexicon_type_vn:
+            {
+                mesh.normals[mesh.normal_count++] = parse_obj_line_with_v_or_vn(lexicon->start, lexicon->end);
+            }break;
+            case obj_lexicon_type_vt:
+            {
+            }break;
+            case obj_lexicon_type_f:
+            {
+                // NOTE/joon : obj file represents face in the order of v/vt/vn 
+                u32 numbers[100] = {};
+                u32 number_count = 0;
+
+                u8 *c = lexicon->start;
+
+                while(c < lexicon->end)
+                {
+                    find_closest_u32_result closest_u32 = find_closest_u32(c);
+
+                    numbers[number_count++] = closest_u32.number;
+                    c = closest_u32.advanced;
+                }
+
+                // add first, self, and self+1 to the index
+                // for exampe if the indices were  A B C D E, we should add ABC, ACD, ADE to the index buffer
+                // note that this loop is per v/vt/vn
+                for(u32 i = stride;
+                        i+stride < number_count;
+                        i += stride)
+                {
+                    mesh.indices[mesh_index_count++] = numbers[0]-1;
+                    mesh.indices[mesh_index_count++] = numbers[i]-1;
+                    mesh.indices[mesh_index_count++] = numbers[i + stride]-1;
+                }
+
+                if(vn_line_count != 0 && vt_line_count == 0)
+                {
+                    u32 offset = 1;
+                    for(u32 i = stride;
+                            i+stride < number_count;
+                            i += stride)
+                    {
+                        mesh.vn_indices[mesh_vn_index_count++] = numbers[0+offset]-1;
+                        mesh.vn_indices[mesh_vn_index_count++] = numbers[i+offset]-1;
+                        mesh.vn_indices[mesh_vn_index_count++] = numbers[i+stride+offset]-1;
+                    }
+                }
+                else if(vn_line_count == 0 && vt_line_count != 0)
+                {
+                    u32 offset = 1;
+                    for(u32 i = stride;
+                            i+stride < number_count;
+                            i += stride)
+                    {
+                        mesh.vt_indices[mesh_vt_index_count++] = numbers[0+offset]-1;
+                        mesh.vt_indices[mesh_vt_index_count++] = numbers[i+offset]-1;
+                        mesh.vt_indices[mesh_vt_index_count++] = numbers[i+stride+offset]-1;
+                    }
+                }
+                else
+                {
+                    u32 offset = 1;
+                    for(u32 i = stride;
+                            i+stride < number_count;
+                            i += stride)
+                    {
+                        mesh.vt_indices[mesh_vt_index_count++] = numbers[0+offset]-1;
+                        mesh.vt_indices[mesh_vt_index_count++] = numbers[i+offset]-1;
+                        mesh.vt_indices[mesh_vt_index_count++] = numbers[i+stride+offset]-1;
+                    }
+
+                    offset = 2;
+                    for(u32 i = stride;
+                            i+stride < number_count;
+                            i += stride)
+                    {
+                        mesh.vn_indices[mesh_vn_index_count++] = numbers[0+offset]-1;
+                        mesh.vn_indices[mesh_vn_index_count++] = numbers[i+offset]-1;
+                        mesh.vn_indices[mesh_vn_index_count++] = numbers[i+stride+offset]-1;
+                    }
+                }
+            }break;
+        }
+    }
+
+    assert(mesh_index_count == mesh.index_count);
+
+
+    end_temp_memory(&lexicon_temp_memory);
+
+    return mesh;
+}
 
 
 

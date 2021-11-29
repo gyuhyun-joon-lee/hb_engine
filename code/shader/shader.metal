@@ -24,7 +24,8 @@ vertex vertex_output
 vertex_function(uint vertexID [[vertex_id]],
              constant temp_vertex *vertices [[buffer(0)]],
              constant r32_2 *viewportSizePointer [[buffer(1)]],
-             constant frame_data *per_frame_data [[buffer(2)]])
+             constant per_frame_data *per_frame_data [[buffer(2)]],
+             constant per_object_data *per_object_data [[buffer(3)]])
 {
     vertex_output output;
 
@@ -32,11 +33,11 @@ vertex_function(uint vertexID [[vertex_id]],
     r32_3 normal = vertices[vertexID].normal;
 
     // TODO/joon : This is so werid...
-    r32_3 world_p = convert_to_r32_3(per_frame_data->model*convert_to_r32_4(model_p, 1.0f));
+    r32_3 world_p = convert_to_r32_3(per_object_data->model*convert_to_r32_4(model_p, 1.0f));
 
     output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
     output.p = world_p;
-    output.normal = convert_to_r32_3(per_frame_data->model * convert_to_r32_4(normal, 0.0f));
+    output.normal = normalize(convert_to_r32_3(per_object_data->model * convert_to_r32_4(normal, 0.0f)));
     output.light_p = per_frame_data->light_p;
 
     return output;

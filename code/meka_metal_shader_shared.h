@@ -13,8 +13,8 @@ typedef float r32_16 __attribute__((ext_vector_type(16)));
 // i.e if the vertex is very small, does it increae the vertex cache hit chance?
 typedef struct
 {
-    r32_3 p;
-    r32_3 normal;
+    alignas(16) r32_3 p;
+    alignas(16) r32_3 normal;
 }temp_vertex;
 
 typedef struct
@@ -24,12 +24,15 @@ typedef struct
 
 typedef struct
 {
-    // TODO(joon): this should be inside object_data
-    alignas(16) r32_4x4 model;
-
     alignas(16) r32_4x4 proj_view;
     alignas(16) r32_3 light_p;
-}frame_data;
+}per_frame_data;
+
+typedef struct
+{
+    alignas(16) r32_4x4 model;
+}per_object_data;
+
 
 inline r32_4
 convert_to_r32_4(r32_3 v, float w)

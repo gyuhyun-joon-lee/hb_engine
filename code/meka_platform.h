@@ -945,7 +945,7 @@ Swap(u16 *a, u16 *b)
 struct platform_read_file_result
 {
     u8 *memory;
-    u32 size;
+    u64 size; // TOOD/joon : make this to be at least 64bit
 };
 #define PLATFORM_READ_FILE(name) platform_read_file_result (name)(char *filename)
 typedef PLATFORM_READ_FILE(platform_read_file);
@@ -999,56 +999,66 @@ StringCompare(char *src, char *test)
     return result;
 }
 
+// TODO/Joon: intrinsic zero memory?
+inline void
+zero_memory(void *memory, u64 size)
+{
+    // TODO/joon: What if there's no neon support
+    u8 *byte = (u8 *)memory;
+    uint8x16_t zero_128 = vdupq_n_u8(0);
+
+    while(size > 16)
+    {
+        vst1q_u8(byte, zero_128);
+
+        byte += 16;
+        size -= 16;
+    }
+
+    if(size > 0)
+    {
+        while(size--)
+        {
+            *byte++ = 0;
+        }
+    }
+}
+
 struct platform_memory
 {
-    void *base;
-    size_t size;
-    size_t used;
+    void *permanent_memory;
+    u64 permanent_memory_size;
+    u64 permanent_memory_used;
 
-    u32 tempMemoryStartCount;
-    u32 tempMemoryEndCount;
+    void *transient_memory;
+    u64 transient_memory_size;
+    u64 transient_memory_used;
 };
 
-struct temp_memory
+struct memory_arena
 {
-    platform_memory *platformMemory;
-
     void *base;
-    size_t size;
+    size_t total_size;
     size_t used;
+
+    u32 temp_memory_count;
 };
 
-internal temp_memory
-start_temp_memory(platform_memory *platformMemory, size_t size)
+
+internal memory_arena
+start_memory_arena(void *base, size_t size, u64 *used)
 {
-    assert(platformMemory->tempMemoryStartCount == platformMemory->tempMemoryEndCount || 
-            platformMemory->tempMemoryEndCount == 0);
+    memory_arena result = {};
 
-    temp_memory result = {};
-    result.base = (u8 *)platformMemory->base + platformMemory->used;
-    result.size = size;
-    result.platformMemory = platformMemory;
+    result.base = (u8 *)base + *used;
+    result.total_size = size;
 
-    platformMemory->used += size;
-    platformMemory->tempMemoryStartCount++;
+    *used += result.total_size;
+
+    // TODO/joon :zeroing memory every time might not be a best idea
+    zero_memory(result.base, result.total_size);
 
     return result;
-}
-internal void
-end_temp_memory(temp_memory *tempMemory)
-{
-    platform_memory *platformMemory = tempMemory->platformMemory;
-    // NOTE(joon) : safe guard for using this temp memory after ending it 
-    tempMemory->base = 0;
-    platformMemory->tempMemoryEndCount++;
-    // IMPORTANT(joon) : As the nature of this, all temp memories should be cleared at once
-    platformMemory->used -= tempMemory->size;
-
-    if(platformMemory->tempMemoryStartCount == platformMemory->tempMemoryEndCount)
-    {
-        platformMemory->tempMemoryStartCount = 0;
-        platformMemory->tempMemoryEndCount = 0;
-    }
 }
 
 // NOTE(joon): Works for both platform memory(world arena) & temp memory
@@ -1057,22 +1067,68 @@ end_temp_memory(temp_memory *tempMemory)
 
 // TODO(joon) : Alignment might be an issue, always take account of that
 internal void *
-push_size(platform_memory *platformMemory, size_t size, size_t alignment = 0)
+push_size(memory_arena *memory_arena, size_t size, size_t alignment = 0)
 {
-    void *result = (u8 *)platformMemory->base + platformMemory->used;
-    platformMemory->used += size;
+    assert(memory_arena->temp_memory_count == 0);
+    assert(memory_arena->used < memory_arena->total_size);
+
+    void *result = (u8 *)memory_arena->base + memory_arena->used;
+    memory_arena->used += size;
 
     return result;
 }
 
+
+struct temp_memory
+{
+    memory_arena *memory_arena;
+
+    // TODO/Joon: temp memory is for arrays only, so dont need to keep track of 'used'?
+    void *base;
+    size_t total_size;
+    size_t used;
+};
+
 // TODO(joon) : Alignment might be an issue, always take account of that
 internal void *
-push_size(temp_memory *tempMemory, size_t size, size_t alignment = 0)
+push_size(temp_memory *temp_memory, size_t size, size_t alignment = 0)
 {
-    void *result = (u8 *)tempMemory->base + tempMemory->used;
-    tempMemory->used += size;
+    void *result = (u8 *)temp_memory->base + temp_memory->used;
+    temp_memory->used += size;
+
+    assert(temp_memory->used < temp_memory->total_size);
 
     return result;
+}
+
+internal temp_memory
+start_temp_memory(memory_arena *memory_arena, size_t size)
+{
+    temp_memory result = {};
+    result.base = (u8 *)memory_arena->base + memory_arena->used;
+    result.total_size = size;
+    result.memory_arena = memory_arena;
+
+    push_size(memory_arena, size);
+
+    memory_arena->temp_memory_count++;
+
+    // TODO/joon :zeroing memory every time might not be a best idea
+    zero_memory(result.base, result.total_size);
+
+    return result;
+}
+
+internal void
+end_temp_memory(temp_memory *temp_memory)
+{
+    memory_arena *memory_arena = temp_memory->memory_arena;
+    // NOTE(joon) : safe guard for using this temp memory after ending it 
+    temp_memory->base = 0;
+
+    memory_arena->temp_memory_count--;
+    // IMPORTANT(joon) : As the nature of this, all temp memories should be cleared at once
+    memory_arena->used -= temp_memory->total_size;
 }
 
 struct thread_work_queue;

@@ -18,6 +18,12 @@ struct raw_mesh
 
     u32 *indices;
     u32 index_count;
+
+    u32 *vn_indices;
+    u32 vn_index_count;
+
+    u32 *vt_indices;
+    u32 vt_index_count;
 };
 
 // mesh that is ready in a form thatto be consumed by the renderer
