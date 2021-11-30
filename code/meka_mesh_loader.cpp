@@ -5,38 +5,81 @@
 
 #define Invalid_R32 10000.0f
 
-struct find_closest_u32_result
+internal u8 *
+get_closest_carriage_return(u8 *start)
 {
-    u32 number;
-    u8 *advanced;
+    u8 *result = start;
+    while(1)
+    {
+        if(*result == '\n')
+        {
+            break;
+        }
+
+        result++;
+    }
+
+    return result;
+}
+
+struct parse_numeric_result
+{
+    b32 isFloat;
+    union
+    {
+        i32 value_i32;
+        r32 value_r32;
+    };
+
+    u32 advance;
 };
 
-// NOTE : This function has no bound checking
-internal find_closest_u32_result
-find_closest_u32(u8 *c)
+internal parse_numeric_result
+parse_numeric(u8 *start)
 {
-    find_closest_u32_result result = {};
+    parse_numeric_result result = {};
 
+    r32 decimal_point_adjustment = 10.0f;
     b32 found_number = false;
+    i32 number = 0;
+    u8 *c = start;
     while(1)
     {
         if(*c >= '0' && *c <= '9' )
         {
             found_number = true;
 
-            result.number *= 10;
-            result.number += *c-'0';
+            number *= 10;
+            number += *c-'0';
+        }
+        else if(*c == '.')
+        {
+            result.isFloat = true;
         }
         else
         {
             if(found_number)
             {
-                result.advanced = c;
+                result.advance = c - start;
                 break;
             }
         }
 
+        if(result.isFloat)
+        {
+            decimal_point_adjustment *= 0.1f;
+        }
+
         c++;
+    }
+
+    if(result.isFloat)
+    {
+        result.value_r32 = number*decimal_point_adjustment;
+    }
+    else
+    {
+        result.value_i32 = number;
     }
     
     return result;
@@ -408,92 +451,6 @@ AdvancePointerUntil_v_(char *c)
 
     return c;
 }
-
-/*
-
-static void ParseLines(example_terminal *Terminal, source_buffer_range Range, cursor_state *Cursor)
-{
-     TODO(casey): Currently, if the commit of line data _straddles_ a control code boundary
-       this code does not properly _stop_ the processing cursor.  This can cause an edge case
-       where a VT code that splits a line _doesn't_ split the line as it should.  To fix this
-       the ending code just needs to check to see if the reason it couldn't parse an escape
-       code in "AtEscape" was that it ran out of characters, and if so, don't advance the parser
-       past that point.
-
-    // load 8bit character into the simd storage, which means there will be 16 characters per __m128i
-    __m128i Carriage = _mm_set1_epi8('\n');
-    __m128i Escape = _mm_set1_epi8('\x1b');
-    __m128i Complex = _mm_set1_epi8(0x80);
-
-    size_t SplitLineAtCount = 4096;
-    size_t LastP = Range.AbsoluteP;
-    while(Range.Count)
-    {
-        __m128i ContainsComplex = _mm_setzero_si128();
-        size_t Count = Range.Count;
-        if(Count > SplitLineAtCount) Count = SplitLineAtCount;
-        char *Data = Range.Data;
-        while(Count >= 16)
-        {
-            // load 16 characters
-            __m128i Batch = _mm_loadu_si128((__m128i *)Data);
-
-            // test if the character has certain patterns.
-            __m128i TestC = _mm_cmpeq_epi8(Batch, Carriage);
-            __m128i TestE = _mm_cmpeq_epi8(Batch, Escape);
-            __m128i TestX = _mm_and_si128(Batch, Complex);
-            __m128i Test = _mm_or_si128(TestC, TestE);
-            int Check = _mm_movemask_epi8(Test);
-            if(Check)
-            {
-                int Advance = _tzcnt_u32(Check);
-                __m128i MaskX = _mm_loadu_si128((__m128i *)(OverhangMask + 16 - Advance));
-                TestX = _mm_and_si128(MaskX, TestX);
-                ContainsComplex = _mm_or_si128(ContainsComplex, TestX);
-                Count -= Advance;
-                Data += Advance;
-                break;
-            }
-
-            ContainsComplex = _mm_or_si128(ContainsComplex, TestX);
-            Count -= 16;
-            Data += 16;
-        }
-
-        Range = ConsumeCount(Range, Data - Range.Data);
-
-        Terminal->Lines[Terminal->CurrentLineIndex].ContainsComplexChars |=
-            _mm_movemask_epi8(ContainsComplex);
-
-        if(AtEscape(&Range))
-        {
-            size_t FeedAt = Range.AbsoluteP;
-            if(ParseEscape(Terminal, &Range, Cursor))
-            {
-                LineFeed(Terminal, FeedAt, FeedAt, Cursor->Props);
-            }
-        }
-        else
-        {
-            char Token = GetToken(&Range);
-            if(Token == '\n')
-            {
-                LineFeed(Terminal, Range.AbsoluteP, Range.AbsoluteP, Cursor->Props);
-            }
-            else if(Token < 0) // TODO(casey): Not sure what is a "combining char" here, really, but this is a rough test
-            {
-                Terminal->Lines[Terminal->CurrentLineIndex].ContainsComplexChars = 1;
-            }
-        }
-
-        UpdateLineEnd(Terminal, Range.AbsoluteP);
-        if(GetLineLength(&Terminal->Lines[Terminal->CurrentLineIndex]) > SplitLineAtCount)
-        {
-            LineFeed(Terminal, Range.AbsoluteP, Range.AbsoluteP, Cursor->Props);
-        }
-    }
-}
-*/
 
 internal b32
 Is4x4MatrixInversable(r32 a11, r32 a12, r32 a13, r32 a14,
@@ -1006,6 +963,319 @@ OptimizeMeshGH(raw_mesh *loadedMesh,
     loadedMesh->index_count = newIndexCount;
 }
 
+enum obj_token_type
+{
+    obj_token_type_v,
+    obj_token_type_vn,
+    obj_token_type_vt,
+    obj_token_type_f,
+    obj_token_type_i32,
+    obj_token_type_r32,
+    obj_token_type_slash,
+    obj_token_type_hyphen,
+    obj_token_type_eof,
+};
+
+struct obj_token
+{
+    obj_token_type type;
+
+    union
+    {
+        i32 value_i32;
+        r32 value_r32;
+    };
+};
+
+struct obj_tokenizer
+{
+    u8 *at;
+    u8 *end;
+};
+
+internal void
+eat_all_white_spaces(obj_tokenizer *tokenizer)
+{
+    while((*tokenizer->at == '\n' ||
+          *tokenizer->at == '\r' || 
+          *tokenizer->at == ' '||
+          *tokenizer->at == '#' ) &&
+          tokenizer->at <= tokenizer->end)
+    {
+        if(*tokenizer->at == '#')
+        {
+            while(*tokenizer->at != '\n')
+            {
+                tokenizer->at++;
+            }
+        }
+        else
+        {
+            tokenizer->at++;
+        }
+    }
+}
+
+internal b32
+find_string(obj_tokenizer *tokenizer, char *string_to_find, u32 string_size)
+{
+    b32 result = true;
+
+    eat_all_white_spaces(tokenizer);
+
+    u8 *c = tokenizer->at;
+    if(c + string_size <= tokenizer->end)
+    {
+        while(string_size--)
+        {
+            if(*c++ != *string_to_find++)
+            {
+                result = false;
+                break;
+            }
+        }
+    }
+    else
+    {
+        result = false;
+    }
+    
+
+    return result;
+}
+
+// NOTE/Joon: This function is more like a general purpose token getter, with minimum erro checking.
+// the error checking itself will happen inside the parsing loop, not here.
+internal obj_token
+peek_token(obj_tokenizer *tokenizer, b32 should_advance)
+{
+    obj_token result = {};
+
+    eat_all_white_spaces(tokenizer);
+    
+    u32 advance = 0;
+    if(tokenizer->at != tokenizer->end)
+    {
+        switch(*tokenizer->at)
+        {
+            case 'v':
+            {
+                if(*(tokenizer->at+1) == 't')
+                {
+                    result.type = obj_token_type_vt;
+                    advance = 2;
+                }
+                else if(*(tokenizer->at+1) == 'n')
+                {
+                    result.type = obj_token_type_vn;
+                    advance = 2;
+                }
+                else
+                {
+                    result.type = obj_token_type_v;
+                    advance = 1;
+                }
+            }break;
+
+            case 'f':
+            {
+                result.type = obj_token_type_f;
+                advance = 1;
+            }break;
+
+            case '-':
+            {
+                result.type = obj_token_type_hyphen;
+                advance = 1;
+            }break;
+
+            case '/':
+            {
+                result.type = obj_token_type_slash;
+                advance = 1;
+            }break;
+
+            case '0':
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7':
+            case '8':
+            case '9':
+            {
+                parse_numeric_result parse_result = parse_numeric(tokenizer->at);
+
+                if(parse_result.isFloat)
+                {
+                    result.type = obj_token_type_r32;
+                    result.value_r32 = parse_result.value_r32;
+                }
+                else
+                {
+                    result.type = obj_token_type_i32;
+                    result.value_i32 = parse_result.value_i32;
+                }
+
+                advance = parse_result.advance;
+            }break;
+
+            case '#':
+            {
+                tokenizer->at = get_closest_carriage_return(tokenizer->at);
+            }break;
+
+            default:
+            {
+                assert(0);
+            }break;
+        }
+    }
+    else
+    {
+        result.type = obj_token_type_eof;
+    }
+
+    if(should_advance)
+    {
+        tokenizer->at += advance;
+    }
+
+    return result;
+}
+
+internal void
+parse_obj_tokens(u8 *file, size_t file_size)
+{
+    assert(file && file_size > 0);
+
+    obj_tokenizer tokenizer = {};
+    tokenizer.at = file;
+    tokenizer.end = file+file_size;
+
+    b32 is_parsing = true;
+
+    u32 v_line_count = 0;
+    u32 vn_line_count = 0;
+    u32 vt_line_count = 0;
+    u32 f_line_count = 0;
+    // pre parse the amount of things(vertex, vertex normal, indices..) that we need?
+    while(is_parsing)
+    {
+        obj_token token = peek_token(&tokenizer, true);
+
+        switch(token.type)
+        {
+            case obj_token_type_v:
+            {
+                v_line_count++;
+            }break;
+            case obj_token_type_vn:
+            {
+                vn_line_count++;
+            }break;
+            case obj_token_type_vt:
+            {
+                vt_line_count++;
+            }break;
+            case obj_token_type_f:
+            {
+                u32 face_number_count = 0;
+                while(1)
+                {
+                    obj_token peek = peek_token(&tokenizer, false);
+
+                    if(peek.type == obj_token_type_i32)
+                    {
+                        face_number_count++;
+                        // TODO/Joon : Because we cannot advance the tokenizer if it was not numeric,
+                        // we peek first and then actually advance it. Can we do better here?
+                        peek_token(&tokenizer, true);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                int a = 1;
+            }break;
+            case obj_token_type_eof:
+            {
+                is_parsing = false;
+            }break;
+        }
+    }
+
+    is_parsing = true;
+    while(is_parsing)
+    {
+        obj_token token = peek_token(&tokenizer, true);
+
+        switch(token.type)
+        {
+            case obj_token_type_v:
+            {
+                // feed up to three numeric tokens(including minus)
+                u32 numeric_token_count = 0;
+                float numbers[3] = {};
+
+                b32 is_minus = false;
+                while(numeric_token_count < 3)
+                {
+                    obj_token t = peek_token(&tokenizer, true);
+
+                    switch(t.type)
+                    {
+                        case obj_token_type_r32: 
+                        {
+                            numbers[numeric_token_count++] = (is_minus?-1:1)*t.value_r32;
+                        }break;
+                        case obj_token_type_i32: 
+                        {
+                            numbers[numeric_token_count++] = (is_minus?-1:1)*t.value_r32;
+                        }break;
+                        case obj_token_type_hyphen: 
+                        {
+                            if(is_minus)
+                            {
+                                assert(0);
+                            }
+                            else
+                            {
+                                is_minus = true;
+                            }
+                        }break;
+
+                        default:{assert(0);}break; // not allowed!
+                    }
+
+                    assert(numeric_token_count);
+
+                }
+            }break;
+            case obj_token_type_vn:
+            {
+                // feed up to three numeric tokens(including minus)
+            }break;
+            case obj_token_type_vt:
+            {
+                // feed up to two numeric tokens(not including minus)
+            }break;
+            case obj_token_type_f:
+            {
+                // ???
+            }break;
+            case obj_token_type_eof:
+            {
+                is_parsing = false;
+            }break;
+        }
+    }
+}
+ 
 #if MEKA_ARM
 #include <arm_neon.h>
 #elif MEKA_X86_64
@@ -1014,9 +1284,15 @@ OptimizeMeshGH(raw_mesh *loadedMesh,
 
 // TODO/joon : we can make this faster by multi threading the parsing
 internal void
-parse_obj_into_lexicon(u8 *file, size_t file_size)
+parse_obj_fast(u8 *file, size_t file_size)
 {
     assert(file);
+
+    struct mach_timebase_info mach_time_info;
+    mach_timebase_info(&mach_time_info);
+    r32 nano_sec_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
+
+    u64 begin_time = mach_absolute_time();
 
     // NOTE/joon: adding 15 to round up, as each char chunk is 16bytes
     u32 char_chunk_count = (file_size + 15)/16;
@@ -1025,23 +1301,33 @@ parse_obj_into_lexicon(u8 *file, size_t file_size)
     uint8x16_t t_128 = vdupq_n_u8('t');
     uint8x16_t f_128 = vdupq_n_u8('f');
     uint8x16_t n_128 = vdupq_n_u8('n');
+    uint8x16_t carriage_128 = vdupq_n_u8('\n');
 
-    while(file_size > 0)
+    while(file_size > 15)
     {
-        if(file_size >= 16)
-        {
-            uint8x16_t c_128 = vld1q_u8(file);
-            uint8x16_t v_compare_result = vceqq_u8(c_128, v_128);
-            uint8x16_t t_compare_result = vceqq_u8(c_128, t_128);
-            uint8x16_t f_compare_result = vceqq_u8(c_128, f_128);
-            uint8x16_t n_compare_result = vceqq_u8(c_128, n_128);
+        //uint8x16_t c_128 = vld1q_u8(file);
+        uint8x16_t c_128 = vdupq_n_u8(0xff);
+        uint8x16_t v_compare_result = vceqq_u8(c_128, v_128);
+        uint8x16_t t_compare_result = vceqq_u8(c_128, t_128);
+        uint8x16_t f_compare_result = vceqq_u8(c_128, f_128);
+        uint8x16_t n_compare_result = vceqq_u8(c_128, n_128);
 
-            file_size -= 16;
-        }
-        else
-        {
-        }
+        uint8x16_t result_0 = vshrq_n_u8(c_128, 7);
+        uint16x8_t result_1 = vreinterpretq_u16_u8(result_0);
+        uint32x4_t result_2 = vsraq_n_u16(result_1, result_1, 7);
+        uint64x2_t result_3 = vreinterpretq_u64_u32(vsraq_n_u32(result_2, result_2, 14));
+        uint8x16_t paired64 = vreinterpretq_u8_u64(vsraq_n_u64(result_3, result_3, 28));
+
+        u8 low = vgetq_lane_u8(paired64, 0);
+        u8 high = vgetq_lane_u8(paired64, 8);
+
+        file_size -= 16;
     }
+
+    u64 end_time = mach_absolute_time();
+    u64 TimeDifferenceInNanoSecond = (end_time-begin_time)*nano_sec_per_tick;
+
+    int a = 1;
 }
 
 enum obj_lexicon_type
@@ -1061,24 +1347,6 @@ struct obj_lexicon
 
     u32 index; // NOTE/joon : for each property(vertex, vertex normal...), what index it is
 };
-
-internal u8 *
-get_closest_carriage_return(u8 *start)
-{
-    u8 *result = start;
-    while(1)
-    {
-        if(*result == '\n')
-        {
-            break;
-        }
-
-        result++;
-    }
-
-    return result;
-}
-
 internal v3
 parse_obj_line_with_v_or_vn(u8 *start, u8 *end)
 {
@@ -1160,12 +1428,15 @@ parse_obj_line_with_v_or_vn(u8 *start, u8 *end)
     return result;
 }
 
+
 // TODO/Joon : not super important, but measure the time just for fun
 // Naive method, which is stepping character by character(1 byte)
 internal raw_mesh
 parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_memory_arena, u8 *file, size_t file_size)
 {
     assert(file && file_size != 0);
+
+    parse_obj_fast(file, file_size);
 
     //TODO/Joon: considering that each lexicon represents each significant line, we can make this number to be equal to \n counts
     // TODO/Joon: This is just a arbitrary number
@@ -1336,10 +1607,10 @@ parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_mem
 
                 while(c < lexicon->end)
                 {
-                    find_closest_u32_result closest_u32 = find_closest_u32(c);
+                    parse_numeric_result closest_number = parse_numeric(c);
 
-                    numbers[number_count++] = closest_u32.number;
-                    c = closest_u32.advanced;
+                    numbers[number_count++] = closest_number.value_i32;
+                    c += closest_number.advance;
                 }
 
                 // add first, self, and self+1 to the index

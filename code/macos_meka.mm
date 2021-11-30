@@ -328,7 +328,6 @@ main(void)
 {
     srand((u32)time(NULL));
 
-
 	i32 window_width = 1920;
 	i32 window_height = 1080;
     r32 window_width_over_height = (r32)window_width/(r32)window_height;
@@ -355,6 +354,7 @@ main(void)
     memory_arena transient_memory_arena = start_memory_arena(platform_memory.transient_memory, gigabytes(1), &platform_memory.transient_memory_used);
 
     platform_read_file_result cow_obj_file = platform_api.read_file("/Volumes/meka/meka_renderer/data/cow.obj");
+    parse_obj_tokens(cow_obj_file.memory, cow_obj_file.size);
     raw_mesh raw_cow_mesh = parse_obj_slow(&mesh_memory_arena, &transient_memory_arena, cow_obj_file.memory, cow_obj_file.size);
     generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &raw_cow_mesh);
     platform_api.free_file_memory(cow_obj_file.memory);
@@ -408,8 +408,7 @@ main(void)
     view.depthStencilPixelFormat = MTLPixelFormatDepth32Float;
 
     /*
-       @NOTE/joon : 
-       
+       NOTE/Joon : 
        METAL combines depth and stencil together.
        To enable depth test inside metal, you need to :
        1. create a metal depth descriptor
