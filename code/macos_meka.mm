@@ -17,6 +17,12 @@
 #include "meka_terrain.cpp"
 #include "meka_mesh_loader.cpp"
 #include "meka_render.cpp"
+
+internal u64 
+mach_time_diff_in_nano_seconds(u64 begin, u64 end, r32 nano_seconds_per_tick)
+{
+    return (u64)(((end - begin)*nano_seconds_per_tick));
+}
 PLATFORM_READ_FILE(debug_macos_read_file)
 {
     platform_read_file_result Result = {};
@@ -197,6 +203,10 @@ global_variable b32 is_w_down;
 global_variable b32 is_a_down;
 global_variable b32 is_s_down;
 global_variable b32 is_d_down;
+global_variable b32 is_arrow_up_down;
+global_variable b32 is_arrow_down_down;
+global_variable b32 is_arrow_left_down;
+global_variable b32 is_arrow_right_down;
 
 global_variable v2 last_mouse_p;
 global_variable v2 mouse_diff;
@@ -298,6 +308,22 @@ macos_handle_event(NSApplication *app, NSWindow *window)
                         {
                             is_d_down = is_down;
                         }
+                        else if(key_code == kVK_LeftArrow)
+                        {
+                            is_arrow_left_down = is_down;
+                        }
+                        else if(key_code == kVK_RightArrow)
+                        {
+                            is_arrow_right_down = is_down;
+                        }
+                        else if(key_code == kVK_UpArrow)
+                        {
+                            is_arrow_up_down = is_down;
+                        }
+                        else if(key_code == kVK_DownArrow)
+                        {
+                            is_arrow_down_down = is_down;
+                        }
                         else if(key_code == kVK_Return)
                         {
                             if(is_down)
@@ -347,6 +373,15 @@ main(void)
                 total_size, 
                 VM_FLAGS_ANYWHERE);
 
+#define sec_to_nano_sec 1.0e+9f
+    struct mach_timebase_info mach_time_info;
+    mach_timebase_info(&mach_time_info);
+    r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
+
+    u32 target_frames_per_second = 120;
+    r32 target_seconds_per_frame = 1.0f/(r32)target_frames_per_second;
+    u32 target_nano_seconds_per_frame = (u32)(target_seconds_per_frame*sec_to_nano_sec);
+
     platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
 
     // TODO/joon: clean this memory managing stuffs...
@@ -354,14 +389,14 @@ main(void)
     memory_arena transient_memory_arena = start_memory_arena(platform_memory.transient_memory, gigabytes(1), &platform_memory.transient_memory_used);
 
     platform_read_file_result cow_obj_file = platform_api.read_file("/Volumes/meka/meka_renderer/data/cow.obj");
-    parse_obj_tokens(cow_obj_file.memory, cow_obj_file.size);
-    raw_mesh raw_cow_mesh = parse_obj_slow(&mesh_memory_arena, &transient_memory_arena, cow_obj_file.memory, cow_obj_file.size);
+    raw_mesh raw_cow_mesh = parse_obj_tokens(&mesh_memory_arena, cow_obj_file.memory, cow_obj_file.size);
     generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &raw_cow_mesh);
     platform_api.free_file_memory(cow_obj_file.memory);
 
 #if 1
     platform_read_file_result suzanne_obj_file = platform_api.read_file("/Volumes/meka/meka_renderer/data/suzanne.obj");
-    raw_mesh raw_suzanne_mesh = parse_obj_slow(&mesh_memory_arena, &transient_memory_arena, suzanne_obj_file.memory, suzanne_obj_file.size);
+    raw_mesh raw_suzanne_mesh = parse_obj_tokens(&mesh_memory_arena, suzanne_obj_file.memory, suzanne_obj_file.size);
+
     platform_api.free_file_memory(suzanne_obj_file.memory);
 #endif
 
@@ -428,8 +463,7 @@ main(void)
     NSString *file_path = @"/Volumes/meka/meka_renderer/code/shader/shader.metallib";
     // TODO(joon) : maybe just use newDefaultLibrary? If so, figure out where should we put the .metal files
     id<MTLLibrary> shader_library = [device newLibraryWithFile:(NSString *)file_path 
-                               error: &error];
-
+                                                         error: &error];
     check_ns_error(error);
 
     id<MTLFunction> vertex_function = [shader_library newFunctionWithName:@"vertex_function"];
@@ -460,10 +494,86 @@ main(void)
         CVDisplayLinkStart(display_link);
     }
 
-    memory_arena terrain_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(16), &platform_memory.permanent_memory_used);
-    raw_mesh terrain = generate_simple_terrain(&terrain_memory_arena, 100, 100);
-    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &terrain);
-    render_mesh terrain_mesh = metal_create_render_mesh_from_raw_mesh(device, &terrain, &transient_memory_arena);
+    memory_arena terrain_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(32), &platform_memory.permanent_memory_used);
+
+    raw_mesh sphere_raw_mesh = generate_sphere_mesh(100, 100);
+    render_mesh sphere_mesh = metal_create_render_mesh_from_raw_mesh(device, &sphere_raw_mesh, &transient_memory_arena);
+
+    m4 bottom_rotation = QuarternionRotationM4(V3(0, 1, 0), pi_32);
+    m4 right_rotation = QuarternionRotationM4(V3(1, 0, 0), half_pi_32);
+    m4 left_rotation = QuarternionRotationM4(V3(1, 0, 0), -half_pi_32);
+    m4 front_rotation = QuarternionRotationM4(V3(0, 1, 0), half_pi_32);
+    m4 back_rotation = QuarternionRotationM4(V3(0, 1, 0), -half_pi_32);
+
+    raw_mesh terrains[6] = {};
+    render_mesh terrain_meshes[6] = {};
+    // top
+    terrains[0] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); 
+    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 0);
+    terrain_meshes[0] = metal_create_render_mesh_from_raw_mesh(device, terrains + 0, &transient_memory_arena);
+
+    // bottom
+    terrains[1] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); 
+    for(u32 vertex_index = 0;
+            vertex_index < terrains[1].position_count;
+            ++vertex_index)
+    {
+        v3 *position = terrains[1].positions + vertex_index;
+        *position = (bottom_rotation*V4(*position, 1.0f)).xyz;
+    }
+    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 1);
+    terrain_meshes[1] = metal_create_render_mesh_from_raw_mesh(device, terrains + 1, &transient_memory_arena);
+
+    // left
+    terrains[2] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); // left
+    for(u32 vertex_index = 0;
+            vertex_index < terrains[2].position_count;
+            ++vertex_index)
+    {
+        v3 *position = terrains[2].positions + vertex_index;
+        *position = (left_rotation*V4(*position, 1.0f)).xyz;
+
+        int a = 1;
+    }
+    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 2);
+    terrain_meshes[2] = metal_create_render_mesh_from_raw_mesh(device, terrains + 2, &transient_memory_arena);
+
+    // right
+    terrains[3] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); // right
+    for(u32 vertex_index = 0;
+            vertex_index < terrains[1].position_count;
+            ++vertex_index)
+    {
+        v3 *position = terrains[3].positions + vertex_index;
+        *position = (right_rotation*V4(*position, 1.0f)).xyz;
+    }
+    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 3);
+    terrain_meshes[3] = metal_create_render_mesh_from_raw_mesh(device, terrains + 3, &transient_memory_arena);
+
+    // front
+    terrains[4] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); // front
+    for(u32 vertex_index = 0;
+            vertex_index < terrains[1].position_count;
+            ++vertex_index)
+    {
+        v3 *position = terrains[4].positions + vertex_index;
+        *position = (front_rotation*V4(*position, 1.0f)).xyz;
+    }
+    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 4);
+    terrain_meshes[4] = metal_create_render_mesh_from_raw_mesh(device, terrains + 4, &transient_memory_arena);
+
+    // back
+    terrains[5] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); // back
+    for(u32 vertex_index = 0;
+            vertex_index < terrains[1].position_count;
+            ++vertex_index)
+    {
+        v3 *position = terrains[5].positions + vertex_index;
+        *position = (back_rotation*V4(*position, 1.0f)).xyz;
+    }
+    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 5);
+    terrain_meshes[5] = metal_create_render_mesh_from_raw_mesh(device, terrains + 5, &transient_memory_arena);
+
     render_mesh cow_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_cow_mesh, &transient_memory_arena);
 #if 1
     render_mesh suzanne_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_suzanne_mesh, &transient_memory_arena);
@@ -471,14 +581,15 @@ main(void)
 
     camera camera = {};
     r32 focal_length = 1.0f;
-    camera.p = V3(0, 0, 0);
+    camera.p = V3(-10, 0, 0);
     
     r32 light_angle = 0.f;
-    r32 light_radius = 300.0f;
+    r32 light_radius = 1000.0f;
 
     [app activateIgnoringOtherApps:YES];
     [app run];
 
+    u64 last_time = mach_absolute_time();
     is_game_running = true;
     while(is_game_running)
     {
@@ -490,18 +601,30 @@ main(void)
         if(is_window_focused)
         {
             // TODO(joon) : more rigorous rotation speed
-            camera.alongY += -4.0f*(mouse_diff.x/(r32)window_width);
-            camera.alongX += -4.0f*(mouse_diff.y/(r32)window_height);
+            // NOTE/Joon: We always make the the screen coordinates are bottom up, so when the mouse goes up, the screen coordinate will also go up
+            //camera.along_z -= 4.0f*(mouse_diff.x/(r32)window_width);
+            //camera.along_y -= 4.0f*(mouse_diff.y/(r32)window_height);
 
-            r32 camera_speed = 0.05f;
-            v3 cameraDir = normalize(QuarternionRotationV001(camera.alongZ, 
-                        QuarternionRotationV010(camera.alongY, 
-                            QuarternionRotationV100(camera.alongX, V3(0, 0, -1)))));
+            v3 a= QuarternionRotationV001(camera.along_z, QuarternionRotationV010(camera.along_y, V3(1, 0, 0)));
+            v3 b= QuarternionRotationV010(camera.along_y, QuarternionRotationV001(camera.along_z, V3(1, 0, 0)));
 
-            // NOTE(joon) : For a rotation matrix, order is x->y->z 
-            // which means the matrices should be ordered in z*y*x*vector
-            // However, for the view matrix, because the rotation should be inversed,
-            // it should be ordered in x*y*z!
+            m4 view_matrix = world_to_camera(camera.p, camera.along_x, camera.along_y, camera.along_z);
+            v4 p1 = V4(0, 10, 0, 1);
+            v4 p2 = V4(0, -10, 0,1);
+            v4 p3 = V4(10, 0, 0,1);
+            v4 p4 = V4(-10, 0, 0,1);
+
+            p1 = view_matrix*p1;
+            p2 = view_matrix*p2;
+            p3 = view_matrix*p3;
+            p4 = view_matrix*p4;
+
+            v4 v = V4(10.f, 0, 0, 1);
+            v4 r = view_matrix*v;
+            v4 result2 = camera_rhs_to_lhs()*r;
+
+            r32 camera_speed = 1.0f;
+            v3 cameraDir = camera_to_world_v100(camera.along_x, camera.along_y ,camera.along_z);
 
             if(is_w_down)
             {
@@ -511,6 +634,24 @@ main(void)
             if(is_s_down)
             {
                 camera.p -= camera_speed*cameraDir;
+            }
+
+            r32 arrow_key_camera_rotation_speed = 0.02f;
+            if(is_arrow_up_down)
+            {
+                camera.along_y -= arrow_key_camera_rotation_speed;
+            }
+            if(is_arrow_down_down)
+            {
+                camera.along_y += arrow_key_camera_rotation_speed;
+            }
+            if(is_arrow_left_down)
+            {
+                camera.along_z += arrow_key_camera_rotation_speed;
+            }
+            if(is_arrow_right_down)
+            {
+                camera.along_z -= arrow_key_camera_rotation_speed;
             }
         }
         /*
@@ -567,15 +708,13 @@ main(void)
                                 length:sizeof(shader_viewport)
                                 atIndex:1];
 
-                m4 proj_matrix = projection(focal_length, window_width_over_height, 0.1f, 1000.0f);
-                m4 view_matrix = QuarternionRotationM4(V3(1, 0, 0), -camera.alongX)*
-                                QuarternionRotationM4(V3(0, 1, 0), -camera.alongY)*
-                                QuarternionRotationM4(V3(0, 0, 1), -camera.alongZ)*
-                                Translate(-camera.p.x, -camera.p.y, -camera.p.z);
-                m4 proj_view = proj_matrix*view_matrix;
+                m4 proj_matrix = projection(focal_length, window_width_over_height, 0.1f, 10000.0f);
+                m4 view_matrix = world_to_camera(camera.p, camera.along_x, camera.along_y, camera.along_z);
+
+                m4 proj_view = proj_matrix*camera_rhs_to_lhs()*view_matrix;
                 per_frame_data per_frame_data = {};
                 per_frame_data.proj_view = convert_m4_to_r32_4x4(proj_view);
-                v3 light_p = V3(light_radius*cosf(light_angle), 10.0f, light_radius*sinf(light_angle));
+                v3 light_p = V3(light_radius*cosf(light_angle), light_radius*sinf(light_angle), 10.f);
                 per_frame_data.light_p = convert_to_r32_3(light_p);
                 [render_encoder setVertexBytes: &per_frame_data
                                 length: sizeof(per_frame_data)
@@ -583,21 +722,60 @@ main(void)
 
                 // NOTE/joon : make sure you update the non-vertex information first
                 per_object_data per_object_data = {};
-                per_object_data.model = convert_m4_to_r32_4x4(Scale(1, 1, 1));
-                [render_encoder setVertexBytes: &per_object_data
-                                length: sizeof(per_object_data)
-                                atIndex: 3]; 
-                [render_encoder setVertexBuffer: terrain_mesh.vertex_buffer
-                                offset: 0
-                                atIndex:0]; 
-                [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
-                                indexCount: terrain_mesh.index_count 
-                                indexType: MTLIndexTypeUInt32
-                                indexBuffer: terrain_mesh.index_buffer 
-                                indexBufferOffset: 0 
-                                instanceCount: 1]; 
+#if 0
+                for(u32 terrain_index = 0;
+                        terrain_index < array_count(terrain_meshes);
+                        terrain_index++)
+                {
+                    r32 distance = 4.9f;
+                    switch(terrain_index)
+                    {
+                        case 0:
+                        {
+                            // top
+                            per_object_data.model = convert_m4_to_r32_4x4(Translate(0, 0, distance)*Scale(0.1f, 0.1f, 0.1f));
+                        }break;
+                        case 1:
+                        {
+                            // bottom
+                            per_object_data.model = convert_m4_to_r32_4x4(Translate(0, 0, -distance)*Scale(0.1f, 0.1f, 0.1f));
+                        }break;
+                        case 2:
+                        {
+                            // left
+                            per_object_data.model = convert_m4_to_r32_4x4(Translate(0, distance, 0)*Scale(0.1f, 0.1f, 0.1f));
+                        }break;
+                        case 3:
+                        {
+                            // right
+                            per_object_data.model = convert_m4_to_r32_4x4(Translate(0, -distance, 0)*Scale(0.1f, 0.1f, 0.1f));
+                        }break;
+                        case 4:
+                        {
+                            // front
+                            per_object_data.model = convert_m4_to_r32_4x4(Translate(distance, 0, 0)*Scale(0.1f, 0.1f, 0.1f));
+                        }break;
+                        case 5:
+                        {
+                            // back
+                            per_object_data.model = convert_m4_to_r32_4x4(Translate(-distance, 0, 0)*Scale(0.1f, 0.1f, 0.1f));
+                        }break;
+                    }
+                    [render_encoder setVertexBytes: &per_object_data
+                                    length: sizeof(per_object_data)
+                                    atIndex: 3]; 
+                    [render_encoder setVertexBuffer: terrain_meshes[terrain_index].vertex_buffer
+                                    offset: 0
+                                    atIndex:0]; 
+                    [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
+                                    indexCount: terrain_meshes[terrain_index].index_count 
+                                    indexType: MTLIndexTypeUInt32
+                                    indexBuffer: terrain_meshes[terrain_index].index_buffer 
+                                    indexBufferOffset: 0 
+                                    instanceCount: 1]; 
+                }
 
-                per_object_data.model = convert_m4_to_r32_4x4(Scale(20, 20, 20));
+                per_object_data.model = convert_m4_to_r32_4x4(Translate(10, 0, 0)*Scale(1, 1, 1));
                 [render_encoder setVertexBytes: &per_object_data
                                 length: sizeof(per_object_data)
                                 atIndex: 3]; 
@@ -610,8 +788,9 @@ main(void)
                                 indexBuffer: cow_mesh.index_buffer 
                                 indexBufferOffset: 0 
                                 instanceCount: 1]; 
+#endif
 #if 1
-                per_object_data.model = convert_m4_to_r32_4x4(Scale(20, 20, 20));
+                per_object_data.model = convert_m4_to_r32_4x4(Translate(0, 0, 10)*Scale(20, 20, 20));
                 [render_encoder setVertexBytes: &per_object_data
                                 length: sizeof(per_object_data)
                                 atIndex: 3]; 
@@ -624,26 +803,72 @@ main(void)
                                 indexBuffer: suzanne_mesh.index_buffer 
                                 indexBufferOffset: 0 
                                 instanceCount: 1]; 
-#endif
 
+#endif
+                per_object_data.model = convert_m4_to_r32_4x4(Translate(0, 0, 0)*Scale(3, 3, 3));
+                [render_encoder setVertexBytes: &per_object_data
+                                length: sizeof(per_object_data)
+                                atIndex: 3]; 
+                [render_encoder setVertexBuffer: sphere_mesh.vertex_buffer
+                                offset: 0
+                                atIndex:0]; 
+                [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
+                                indexCount: sphere_mesh.index_count 
+                                indexType: MTLIndexTypeUInt32
+                                indexBuffer: sphere_mesh.index_buffer 
+                                indexBufferOffset: 0 
+                                instanceCount: 1]; 
 
                 [render_encoder endEncoding];
 
-                /*
-                   TODO(joon): use this method to time with the rendering loop?
-                - (void)presentDrawable:(id<MTLDrawable>)drawable 
-                         atTime:(CFTimeInterval)presentationTime;
-                 */
+            
+                u64 time_before_presenting = mach_absolute_time();
+                u64 time_passed = mach_time_diff_in_nano_seconds(last_time, time_before_presenting, nano_seconds_per_tick);
+                u64 time_left_until_present_in_nano_seconds = target_nano_seconds_per_frame - time_passed;
+                                                            
+                double time_left_until_present_in_sec = time_left_until_present_in_nano_seconds/(double)sec_to_nano_sec;
+
                 // TODO(joon):currentdrawable vs nextdrawable?
+                // NOTE(joon): This will work find, as long as we match our display refresh rate with our game
                 [command_buffer presentDrawable: view.currentDrawable];
+                //[command_buffer presentDrawable:view.currentDrawable
+                                //atTime:time_left_until_present_in_sec];
             }
 
 
-            // NOTE : equivalent to vkQueueSubmit
+            // NOTE : equivalent to vkQueueSubmit,
+            // TODO(joon): Sync with the swap buffer!
             [command_buffer commit];
         }
+        light_angle += 0.01f;
 
-        light_angle += 0.00002f;
+        u64 time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
+
+        // NOTE(joon): Because nanosleep is such a high resolution sleep method, for precise timing,
+        // we need to undersleep and spend time in a loop for the precise page flip
+        u64 undersleep_nano_seconds = 1000000;
+        if(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
+        {
+            timespec time_spec = {};
+            time_spec.tv_nsec = target_nano_seconds_per_frame - time_passed_in_nano_seconds -  undersleep_nano_seconds;
+
+            nanosleep(&time_spec, 0);
+        }
+        else
+        {
+            // TODO : Missed Frame!
+            // TODO(joon) : When this happens, we need to do something with the display link?
+        }
+
+        // For a short period of time, loop
+        time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
+        while(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
+        {
+            time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
+        }
+
+        // update the time stamp
+        last_time = mach_absolute_time();
     }
     return 0;
 }

@@ -33,6 +33,30 @@ typedef struct
     alignas(16) r32_4x4 model;
 }per_object_data;
 
+inline r32_3
+R32_3(float x, float y, float z)
+{
+    r32_3 result = {};
+
+    result.x = x;
+    result.y = y;
+    result.z = z;
+
+    return result;
+}
+
+inline r32_4
+R32_4(float x, float y, float z, float w)
+{
+    r32_4 result = {};
+
+    result.x = x;
+    result.y = y;
+    result.z = z;
+    result.w = w;
+
+    return result;
+}
 
 inline r32_4
 convert_to_r32_4(r32_3 v, float w)

@@ -50,6 +50,9 @@ typedef double r64;
 #define maximum(a, b) ((a>b)? a:b) 
 #define minimum(a, b) ((a<b)? a:b) 
 
+#define pi_32 3.14159265358979323846264338327950288419716939937510582097494459230f
+#define half_pi_32 (pi_32/2.0f)
+
 #include "math.h"
 struct v2
 {
@@ -262,9 +265,10 @@ operator*(r32 value, v3 a)
     return result;
 }
 
+// RHS!!!!
 // NOTE(joon) : This assumes the vectors ordered counter clockwisely
 inline v3
-Cross(v3 a, v3 b)
+cross(v3 a, v3 b)
 {
     v3 result = {};
 
@@ -294,7 +298,17 @@ normalize(v3 a)
     return a/Length(a);
 }
 
+inline r32
+dot(v3 a, v3 b)
+{
+    return a.x*b.x + a.y*b.y + a.z*b.z;
+}
 
+inline v3
+hadamard(v3 a, v3 b)
+{
+    return V3(a.x*b.x, a.y*b.y, a.z*b.z);
+}
 
 struct v4
 {
@@ -331,6 +345,16 @@ V4(r32 x, r32 y, r32 z, r32 w)
     result.x = x;
     result.y = y;
     result.z = z;
+    result.w = w;
+
+    return result;
+}
+
+inline v4
+V4(v3 xyz, r32 w)
+{
+    v4 result = {};
+    result.xyz = xyz;
     result.w = w;
 
     return result;
@@ -607,7 +631,7 @@ operator*(r32 value, m4 &b)
 }
 
 inline v4
-operator*(m4 &m, v4 v)
+operator*(m4 m, v4 v)
 {
     v4 result = {};
     result.x = m.column[0].e[0]*v.x + 
@@ -655,28 +679,6 @@ Translate(r32 x, r32 y, r32 z)
     result.column[3].e[2] = z;
 
     return result;
-}
-
-inline m4
-View(v3 p, v3 lookatDir, v3 up)
-{
-
-    // TODO(joon) : No assert, but normalize here?
-    lookatDir = -1.0f*normalize(lookatDir);
-
-    v3 right = normalize(Cross(up, lookatDir));
-
-    v3 newUp = Cross(lookatDir, right);
-
-    m4 rotation = {};
-    rotation.column[0] = V4(right.x, up.x, lookatDir.x, 0);
-    rotation.column[1] = V4(right.y, up.y, lookatDir.y, 0);
-    rotation.column[2] = V4(right.z, up.z, lookatDir.z, 0);
-    rotation.column[3] = V4(0, 0, 0, 1);
-
-    m4 translation = Translate(-p.x, -p.y, -p.z);
-
-    return rotation*translation;
 }
 
 /*
@@ -801,6 +803,55 @@ QuarternionRotationV001(r32 rad, v3 vectorToRotate)
     return result;
 }
 
+// NOTE/Joon: RHS/initial view direction is 1, 0, 0(in world space)
+inline m4
+world_to_camera(v3 camera_world_p, r32 along_x, r32 along_y, r32 along_z)
+{
+    // quarternion does not guarantee the rotation order independency(this buggd me quite a while)
+    // so in here, we will assume that the order of rotation is always x->y->z
+    // as long as we are begin consistent, we should be fine.
+    m4 quarternion = QuarternionRotationM4(V3(0, 0, 1), along_z)*QuarternionRotationM4(V3(0, 1, 0), along_y)*QuarternionRotationM4(V3(1, 0, 0), along_x);
+    v3 camera_x_axis = (quarternion*V4(1, 0, 0, 0)).xyz;
+    v3 camera_y_axis = (quarternion*V4(0, 1, 0, 0)).xyz;
+    v3 camera_z_axis = (quarternion*V4(0, 0, 1, 0)).xyz;
+
+    // NOTE(joon): Identical with projecting the world space coordinate onto the camera vectors
+    m4 rotation = {};
+    rotation.column[0] = V4(camera_x_axis.x, camera_y_axis.x, camera_z_axis.x, 0);
+    rotation.column[1] = V4(camera_x_axis.y, camera_y_axis.y, camera_z_axis.y, 0);
+    rotation.column[2] = V4(camera_x_axis.z, camera_y_axis.z, camera_z_axis.z, 0);
+    rotation.column[3] = V4(0, 0, 0, 1);
+
+    m4 translation = Translate(-camera_world_p.x, -camera_world_p.y, -camera_world_p.z);
+
+    return rotation*translation;
+} 
+
+// NOTE(joon): Assumes that the initial lookat dir is always (1, 0, 0) in world coordinate
+inline v3
+camera_to_world_v100(r32 along_x, r32 along_y, r32 along_z)
+{
+    m4 quarternion = QuarternionRotationM4(V3(0, 0, 1), along_z)*QuarternionRotationM4(V3(0, 1, 0), along_y)*QuarternionRotationM4(V3(1, 0, 0), along_x);
+    v3 camera_x_axis = (quarternion*V4(1, 0, 0, 0)).xyz;
+    //v3 camera_y_axis = QuarternionRotationV001(along_z, QuarternionRotationV100(along_x, V3(0, 1, 0)));
+    //v3 camera_z_axis = QuarternionRotationV100(along_x, QuarternionRotationV010(along_y, V3(0, 0, 1)));
+
+    return camera_x_axis;
+}
+
+inline m4
+camera_rhs_to_lhs()
+{
+    m4 result = {};
+
+    result.column[0] = V4(0, 0, 1, 0);
+    result.column[1] = V4(-1, 0, 0, 0);
+    result.column[2] = V4(0, 1, 0, 0);
+    result.column[3] = V4(0, 0, 0, 1);
+
+    return result;
+}
+
 inline b32
 clip_space_top_is_one(void)
 {
@@ -824,13 +875,11 @@ projection(r32 focal_length, r32 aspect_ratio_width_over_height, r32 near, r32 f
 
     result.column[0] = V4(focal_length, 0, 0, 0);
     result.column[1] = V4(0, focal_length*aspect_ratio_width_over_height, 0, 0);
-    result.column[2] = V4(0, 0, c*(near+far)/(near-far), -1);
-    result.column[3] = V4(0, 0, (2.0f*far*near)/(near-far), 0);
+    result.column[2] = V4(0, 0, c*(near+far)/(far-near), 1);
+    result.column[3] = V4(0, 0, (-2.0f*far*near)/(far-near), 0);
 
     return result;
 }
-
-
 
 // r = frustumHalfWidth
 // t = frustumHalfHeight
@@ -1069,6 +1118,7 @@ start_memory_arena(void *base, size_t size, u64 *used)
 internal void *
 push_size(memory_arena *memory_arena, size_t size, size_t alignment = 0)
 {
+    assert(size != 0);
     assert(memory_arena->temp_memory_count == 0);
     assert(memory_arena->used < memory_arena->total_size);
 
@@ -1093,6 +1143,8 @@ struct temp_memory
 internal void *
 push_size(temp_memory *temp_memory, size_t size, size_t alignment = 0)
 {
+    assert(size != 0);
+
     void *result = (u8 *)temp_memory->base + temp_memory->used;
     temp_memory->used += size;
 

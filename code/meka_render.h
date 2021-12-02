@@ -13,7 +13,7 @@ struct raw_mesh
     v3 *normals;
     u32 normal_count;
 
-    v2 *textureCoords;
+    v2 *texture_coords;
     u32 texture_coord_count;
 
     u32 *indices;
@@ -48,9 +48,9 @@ struct camera
     {
         struct
         {
-            r32 alongX;
-            r32 alongY;
-            r32 alongZ;
+            r32 along_x;
+            r32 along_y;
+            r32 along_z;
         };
 
         struct

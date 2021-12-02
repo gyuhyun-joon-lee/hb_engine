@@ -36,7 +36,10 @@ vertex_function(uint vertexID [[vertex_id]],
     r32_3 world_p = convert_to_r32_3(per_object_data->model*convert_to_r32_4(model_p, 1.0f));
 
     output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
-    output.p = world_p;
+    output.p.x = -world_p.y;
+    output.p.y = world_p.z;
+    output.p.z = world_p.x;
+
     output.normal = normalize(convert_to_r32_3(per_object_data->model * convert_to_r32_4(normal, 0.0f)));
     output.light_p = per_frame_data->light_p;
 
@@ -57,6 +60,7 @@ frag_phong_lighting(vertex_output vertex_output [[stage_in]])
 
     r32_3 result_color = ambient + diffuse;
     r32_4 out_color = convert_to_r32_4(result_color, 1.0f);
+    out_color = 2.f*R32_4(48/255.0f, 10/255.0f, 36/255.0f, 1);
 
     return out_color;
 }

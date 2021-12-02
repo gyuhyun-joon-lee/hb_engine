@@ -38,38 +38,36 @@ random_range(r32 value, r32 range)
 
 internal void
 generate_mountain_inside_terrain(raw_mesh *terrain, 
-                            i32 x_count, i32 z_count,
-                            r32 center_x, r32 center_z, 
+                            i32 x_count, i32 y_count,
+                            v2 center,
                             i32 stride,
                             r32 dim, r32 radius, r32 max_height)
 {
-    i32 min_x = maximum(round_r32_i32((center_x - radius)/dim), 0);
-    i32 max_x = minimum(round_r32_i32((center_x + radius)/dim), x_count);
+    i32 min_x = maximum(round_r32_i32((center.x - radius)/dim), 0);
+    i32 max_x = minimum(round_r32_i32((center.x + radius)/dim), x_count);
 
-    i32 min_z = maximum(round_r32_i32((center_z - radius)/dim), 0);
-    i32 max_z = minimum(round_r32_i32((center_z + radius)/dim), z_count);
+    i32 min_y = maximum(round_r32_i32((center.y - radius)/dim), 0);
+    i32 max_y = minimum(round_r32_i32((center.y + radius)/dim), y_count);
     
     i32 center_x_i32 = (i32)((max_x + min_x)/2.0f);
-    i32 center_z_i32 = (i32)((max_z + min_z)/2.0f);
+    i32 center_y_i32 = (i32)((max_y + min_y)/2.0f);
 
-    v3 *row = terrain->positions + min_z*stride + min_x;
-    for(i32 z = min_z;
-            z < max_z;
-            z++)
+    v3 *row = terrain->positions + min_y*stride + min_x;
+    for(i32 y = min_y;
+            y < max_y;
+            y++)
     {
         v3 *p = row;
 
-        r32 y = 0.0f;
         for(i32 x = min_x;
             x < max_x;
             x++)
         {
-            r32 distance = dim*Length(V2i(center_x_i32, center_z_i32) - V2i(x, z));
+            r32 distance = dim*Length(V2i(center_x_i32, center_y_i32) - V2i(x, y));
             if(distance <= radius)
             {
                 r32 height = (1.0f - (distance / radius))*max_height;
-                p->y = random_range(height, 0.45f*height);
-                //p->y = height*random_between_0_1();
+                p->z = random_range(height, 0.45f*height);
             }
 
             p++;
@@ -79,6 +77,86 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
     }
 }
 
+// TODO(joon): not a particuarly intuitive parameters
+internal raw_mesh
+generate_sphere_mesh(u32 desired_column_count, u32 desired_row_count)
+{
+    raw_mesh result = {};
+    
+    r32 rad_per_column = 2.0f*pi_32 / (r32)desired_column_count;
+    r32 rad_per_row = (pi_32) / (r32)desired_row_count;
+    r32 radius = 0.5f;
+
+    u32 expected_vertex_count = desired_column_count*desired_row_count;
+    u32 expected_index_count = 6*(desired_row_count-1)*desired_column_count;
+
+    result.positions = (v3 *)malloc(sizeof(v3)*expected_vertex_count);
+    result.normals = (v3 *)malloc(sizeof(v3)*expected_vertex_count);
+    result.indices = (u32 *)malloc(sizeof(u32)*expected_index_count);
+
+    for(u32 row = 0;
+            row < desired_row_count;
+            row++)
+    {
+        r32 cos_phi = cosf(-half_pi_32 + row*rad_per_row);
+        r32 sin_phi = sinf(-half_pi_32 + row*rad_per_row);
+
+        r32 z_for_this_row = radius * sin_phi;
+        for(u32 column = 0;
+                column < desired_column_count;
+                column++)
+        {
+            r32 cos_theta = cosf(column*rad_per_column);
+            r32 sin_theta = sinf(column*rad_per_column);
+            v3 p = radius * cos_phi * V3(cos_theta,
+                                        sin_theta,
+                                        0);
+            p.z = z_for_this_row;
+            p = random_between(0.8f, 1.1f) * p;
+
+            result.positions[result.position_count++] = p;
+            result.normals[result.normal_count++] = normalize(p);
+        }
+    }
+
+    assert(result.position_count == expected_vertex_count);
+    
+    for(u32 row = 0;
+            row < desired_row_count - 1;
+            row++)
+    {
+        for(u32 column = 0;
+                column < desired_column_count;
+                column++)
+        {
+            /*
+               NOTE/Joon: Given certain cycle, we will construct the mesh like this
+               v2-----v3
+               |       |
+               |       |
+               |       |
+               v0-----v1 -> indices : 012, 132
+            */
+            u32 i0 = row*desired_column_count + column;
+            u32 i1 = row*desired_column_count + (column+1) % desired_column_count;
+            u32 i2 = (row+1)*desired_column_count + column;
+            u32 i3 = (row+1)*desired_column_count + (column+1) % desired_column_count;
+
+            result.indices[result.index_count++] = i0;
+            result.indices[result.index_count++] = i1;
+            result.indices[result.index_count++] = i2;
+
+            result.indices[result.index_count++] = i1;
+            result.indices[result.index_count++] = i3;
+            result.indices[result.index_count++] = i2;
+        }
+    }
+
+    assert(result.index_count == expected_index_count);
+
+    return result;
+}
+
 /*
    NOTE/Joon: when we generate a terrain, we think it as a plane full of quads, and manipulate
    the y value of it.
@@ -86,28 +164,28 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
    quad_width = how many quad vertically
 */
 internal raw_mesh
-generate_simple_terrain(memory_arena *memory_arena, u32 quad_width, u32 quad_height)
+generate_plane_terrain_mesh(memory_arena *memory_arena, u32 quad_width, u32 quad_height)
 {
     // 100 vertices means there will be 99 quads per line
     raw_mesh terrain = {};
     terrain.position_count = (quad_width) * (quad_height);
     terrain.positions = push_array(memory_arena, v3, terrain.position_count);
 
-    r32 startingX = 0;
-    r32 startingZ = 0;
-    r32 dim = 5;
-    for(u32 z = 0;
-            z < quad_height;
-            ++z)
+    r32 dim = 1;
+    r32 startingX = -dim*(quad_width/2);
+    r32 startingY = -dim*(quad_height/2);
+    for(u32 y = 0;
+            y < quad_height;
+            ++y)
     {
         for(u32 x = 0;
                 x < quad_width;
                 ++x)
         {
-            r32 randomY = random_between_minus_1_1();
-            r32 yRange = 2.f;
-            v3 p = V3(startingX + x*dim, yRange*randomY, startingZ + z*dim);
-            terrain.positions[z*quad_width + x] = p;
+            r32 random_z = dim*random_between(-0.5f, 0.5f);
+            
+            v3 p = V3(startingX + x*dim, startingY + y*dim, random_z);
+            terrain.positions[y*quad_width + x] = p;
         }
     }
 
@@ -115,14 +193,14 @@ generate_simple_terrain(memory_arena *memory_arena, u32 quad_width, u32 quad_hei
             mountain_index < 12;
             mountain_index++)
     {
-        r32 x = random_between(0, quad_width*dim);
-        r32 z = random_between(0, quad_height*dim);
+        v2 mountain_center = V2(random_between(0, quad_width*dim),
+                                random_between(0, quad_height*dim));
 
-        r32 height = random_between(20, 100);
-        r32 radius = random_between(10, 100);
+        r32 height = dim*random_between(5, 30);
+        r32 radius = dim*random_between(quad_width/12, quad_width/5);
         generate_mountain_inside_terrain(&terrain, 
                 quad_width, quad_height, 
-                x, z, quad_width,
+                mountain_center, quad_width,
                 dim, radius, height);
     }
 
@@ -130,24 +208,35 @@ generate_simple_terrain(memory_arena *memory_arena, u32 quad_width, u32 quad_hei
     terrain.indices = push_array(memory_arena, u32, terrain.index_count);
 
     u32 indexIndex = 0;
-    for(u32 z = 0;
-            z < quad_height-1;
-            ++z)
+    for(u32 y = 0;
+            y < quad_height-1;
+            ++y)
     {
         for(u32 x = 0;
                 x < quad_width-1;
                 ++x)
         {
-            u32 startingIndex = z*quad_height + x;
+            /*
+               NOTE/Joon: Given certain cycle, we will construct the mesh like this
+               v2-----v3
+               |       |
+               |       |
+               |       |
+               v0-----v1 -> indices : 012, 132
+            */
+            u32 startingIndex = y*quad_height + x;
+            u32 i0 = y*quad_height + x;
+            u32 i1 = i0 + 1;
+            u32 i2 = i0 + quad_width;
+            u32 i3 = i2 + 1;
 
+            terrain.indices[indexIndex++] = i0;
+            terrain.indices[indexIndex++] = i1;
+            terrain.indices[indexIndex++] = i2;
 
-            terrain.indices[indexIndex++] = (u16)startingIndex;
-            terrain.indices[indexIndex++] = (u16)(startingIndex+quad_width);
-            terrain.indices[indexIndex++] = (u16)(startingIndex+quad_width+1);
-
-            terrain.indices[indexIndex++] = (u16)startingIndex;
-            terrain.indices[indexIndex++] = (u16)(startingIndex+quad_width+1);
-            terrain.indices[indexIndex++] = (u16)(startingIndex+1);
+            terrain.indices[indexIndex++] = i1;
+            terrain.indices[indexIndex++] = i3;
+            terrain.indices[indexIndex++] = i2;
 
             assert(indexIndex <= terrain.index_count);
         }

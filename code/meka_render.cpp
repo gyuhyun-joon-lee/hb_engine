@@ -34,8 +34,7 @@ generate_vertex_normals(memory_arena *permanent_arena , memory_arena *trasient_a
         v3 v0 = raw_mesh->positions[i0] - raw_mesh->positions[i1];
         v3 v1 = raw_mesh->positions[i2] - raw_mesh->positions[i1];
 
-        v3 normal = normalize(Cross(v1, v0));
-
+        v3 normal = normalize(cross(v1, v0));
         normal_hits[i0].normal_sum += normal;
         normal_hits[i0].hit++;
         normal_hits[i1].normal_sum += normal;

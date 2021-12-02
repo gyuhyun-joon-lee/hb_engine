@@ -628,9 +628,9 @@ OptimizeMeshGH(raw_mesh *loadedMesh,
         v3 vb = loadedMesh->positions[ib];
         v3 vc = loadedMesh->positions[ic];
 
-        v3 cross = normalize(Cross(va-vb, vc-vb));
+        v3 c = normalize(cross(va-vb, vc-vb));
         // d for plane equation
-        r32 d = cross.x*va.x + cross.y*va.y + cross.z*va.z;
+        r32 d = c.x*va.x + c.y*va.y + c.z*va.z;
 
         /*
             cost for a vertex = (vertex transpose)*(for all planes that intercept at that vertex, Sum of all Kp) * vertex
@@ -641,15 +641,15 @@ OptimizeMeshGH(raw_mesh *loadedMesh,
             ad bd cd d^2
             and because Kp is symmetrical, we can only store 10 floating points
          */
-        r32 Kp00 = cross.x*cross.x; // a*a
-        r32 Kp10 = cross.x*cross.y; // a*b
-        r32 Kp11 = cross.y*cross.y; // b*b
-        r32 Kp20 = cross.x*cross.z; // a*c
-        r32 Kp21 = cross.y*cross.z; // b*c
-        r32 Kp22 = cross.z*cross.z; // c*c
-        r32 Kp30 = cross.x*d; // a*d
-        r32 Kp31 = cross.y*d; // b*d
-        r32 Kp32 = cross.z*d; // c*d
+        r32 Kp00 = c.x*c.x; // a*a
+        r32 Kp10 = c.x*c.y; // a*b
+        r32 Kp11 = c.y*c.y; // b*b
+        r32 Kp20 = c.x*c.z; // a*c
+        r32 Kp21 = c.y*c.z; // b*c
+        r32 Kp22 = c.z*c.z; // c*c
+        r32 Kp30 = c.x*d; // a*d
+        r32 Kp31 = c.y*d; // b*d
+        r32 Kp32 = c.z*d; // c*d
         r32 Kp33 = d*d; // d*d
 
         r32 *Qa = QPerEachVertex + QStride*ia;
@@ -973,6 +973,8 @@ enum obj_token_type
     obj_token_type_r32,
     obj_token_type_slash,
     obj_token_type_hyphen,
+    obj_token_type_newline, // unfortunately, this is the only way to parse the obj files
+
     obj_token_type_eof,
 };
 
@@ -996,7 +998,7 @@ struct obj_tokenizer
 internal void
 eat_all_white_spaces(obj_tokenizer *tokenizer)
 {
-    while((*tokenizer->at == '\n' ||
+    while((//*tokenizer->at == '\n' ||
           *tokenizer->at == '\r' || 
           *tokenizer->at == ' '||
           *tokenizer->at == '#' ) &&
@@ -1095,6 +1097,12 @@ peek_token(obj_tokenizer *tokenizer, b32 should_advance)
                 advance = 1;
             }break;
 
+            case '\n':
+            {
+                result.type = obj_token_type_newline;
+                advance = 1;
+            }break;
+
             case '0':
             case '1':
             case '2':
@@ -1146,10 +1154,73 @@ peek_token(obj_tokenizer *tokenizer, b32 should_advance)
     return result;
 }
 
-internal void
-parse_obj_tokens(u8 *file, size_t file_size)
+// Mostly used for v for vn
+// TODO(Joon) : Also usuable for parsing two numeric values?
+internal v3
+peek_up_to_three_numeric_values(obj_tokenizer *tokenizer)
+{
+    v3 result = {};
+
+    u32 numeric_token_count = 0;
+    float numbers[3] = {};
+
+    b32 is_minus = false;
+    b32 newline_appeared = false;
+    while(!newline_appeared)
+    {
+        obj_token token = peek_token(tokenizer, true);
+
+        switch(token.type)
+        {
+            case obj_token_type_r32: 
+            {
+                numbers[numeric_token_count++] = (is_minus?-1:1)*token.value_r32;
+                is_minus = false;
+            }break;
+
+            case obj_token_type_i32: 
+            {
+                numbers[numeric_token_count++] = (is_minus?-1:1)*token.value_r32;
+                is_minus = false;
+            }break;
+
+            case obj_token_type_hyphen: 
+            {
+                if(is_minus)
+                {
+                    assert(0);
+                }
+                else
+                {
+                    is_minus = true;
+                }
+            }break;
+
+            case obj_token_type_newline:
+            {
+                newline_appeared = true;
+            }break;
+
+            default:{assert(0);}break; // not allowed!
+        }
+        assert(numeric_token_count <= 3);
+    }
+
+    assert(numeric_token_count == 3);
+
+    result.x = numbers[0];
+    result.y = numbers[1];
+    result.z = numbers[2];
+
+    return result;
+}
+
+internal raw_mesh
+parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_size)
 {
     assert(file && file_size > 0);
+
+    raw_mesh result ={};
 
     obj_tokenizer tokenizer = {};
     tokenizer.at = file;
@@ -1157,10 +1228,15 @@ parse_obj_tokens(u8 *file, size_t file_size)
 
     b32 is_parsing = true;
 
-    u32 v_line_count = 0;
-    u32 vn_line_count = 0;
-    u32 vt_line_count = 0;
-    u32 f_line_count = 0;
+    u32 v_count = 0;
+    u32 vn_count = 0;
+    u32 vt_count = 0;
+
+    u32 index_count = 0;
+    u32 vn_index_count = 0;
+    u32 vt_index_count = 0;
+   
+    // TODO(joon): Just checking one letter might not be safe
     // pre parse the amount of things(vertex, vertex normal, indices..) that we need?
     while(is_parsing)
     {
@@ -1170,37 +1246,68 @@ parse_obj_tokens(u8 *file, size_t file_size)
         {
             case obj_token_type_v:
             {
-                v_line_count++;
+                v_count++;
             }break;
             case obj_token_type_vn:
             {
-                vn_line_count++;
+                vn_count++;
             }break;
             case obj_token_type_vt:
             {
-                vt_line_count++;
+                vt_count++;
             }break;
             case obj_token_type_f:
             {
-                u32 face_number_count = 0;
-                while(1)
-                {
-                    obj_token peek = peek_token(&tokenizer, false);
+                b32 newline_appeared = false;
 
-                    if(peek.type == obj_token_type_i32)
+                // NOTE : property_indicator%3 == 0(v), 1(vt), 2(vn),
+                u32 property_indicator = 0;
+                u32 index_count_this_line = 0;
+                while(!newline_appeared)
+                {
+                    token = peek_token(&tokenizer, true);
+
+                    switch(token.type)
                     {
-                        face_number_count++;
-                        // TODO/Joon : Because we cannot advance the tokenizer if it was not numeric,
-                        // we peek first and then actually advance it. Can we do better here?
-                        peek_token(&tokenizer, true);
+                        case obj_token_type_i32:
+                        {
+                            if(property_indicator == 0)
+                            {
+                                index_count_this_line++;
+                            }
+                            else if(property_indicator == 1)
+                            {
+                                vt_index_count++;
+                            }
+                            else
+                            {
+                                assert(property_indicator <=  2);
+                                vn_index_count++;
+                            }
+
+                            obj_token peek = peek_token(&tokenizer, false);
+                            if(peek.type == obj_token_type_i32)
+                            {
+                                property_indicator = 0;
+                            }
+                        }break;
+
+                        case obj_token_type_slash:
+                        {
+                            property_indicator++;
+                        }break;
+
+                        case obj_token_type_newline:
+                        {
+                            newline_appeared = true;
+                        }break;
+
+                        default:{assert(0);}break; // not allowed!
                     }
-                    else
-                    {
-                        break;
-                    }
+
                 }
 
-                int a = 1;
+                index_count += 3*(index_count_this_line-2);
             }break;
             case obj_token_type_eof:
             {
@@ -1209,6 +1316,38 @@ parse_obj_tokens(u8 *file, size_t file_size)
         }
     }
 
+    result.position_count = v_count;
+    result.normal_count = vn_count;
+    result.texture_coord_count = vt_count;
+    result.index_count = index_count;
+    
+    assert(result.position_count != 0);
+    result.positions = (v3 *)push_array(permanent_memory_arena, v3, result.position_count);
+
+    assert(result.index_count != 0);
+    result.indices = (u32 *)push_array(permanent_memory_arena, u32, result.index_count);
+
+    if(result.normal_count != 0)
+    {
+        result.normals = (v3 *)push_array(permanent_memory_arena, v3, result.normal_count);
+    }
+
+    if(result.texture_coord_count != 0)
+    {
+        result.texture_coords = (v2 *)push_array(permanent_memory_arena, v3, result.texture_coord_count);
+    }
+
+    // Reset the counts to use them below
+    v_count = 0;
+    vn_count = 0;
+    vt_count = 0;
+
+    index_count = 0;
+    vn_index_count = 0;
+    vt_index_count = 0;
+
+    // Reset the tokenizer to the start of file
+    tokenizer.at = file;
     is_parsing = true;
     while(is_parsing)
     {
@@ -1219,46 +1358,11 @@ parse_obj_tokens(u8 *file, size_t file_size)
             case obj_token_type_v:
             {
                 // feed up to three numeric tokens(including minus)
-                u32 numeric_token_count = 0;
-                float numbers[3] = {};
-
-                b32 is_minus = false;
-                while(numeric_token_count < 3)
-                {
-                    obj_token t = peek_token(&tokenizer, true);
-
-                    switch(t.type)
-                    {
-                        case obj_token_type_r32: 
-                        {
-                            numbers[numeric_token_count++] = (is_minus?-1:1)*t.value_r32;
-                        }break;
-                        case obj_token_type_i32: 
-                        {
-                            numbers[numeric_token_count++] = (is_minus?-1:1)*t.value_r32;
-                        }break;
-                        case obj_token_type_hyphen: 
-                        {
-                            if(is_minus)
-                            {
-                                assert(0);
-                            }
-                            else
-                            {
-                                is_minus = true;
-                            }
-                        }break;
-
-                        default:{assert(0);}break; // not allowed!
-                    }
-
-                    assert(numeric_token_count);
-
-                }
+                result.positions[v_count++] = peek_up_to_three_numeric_values(&tokenizer);
             }break;
             case obj_token_type_vn:
             {
-                // feed up to three numeric tokens(including minus)
+                result.normals[vn_count++] = peek_up_to_three_numeric_values(&tokenizer);
             }break;
             case obj_token_type_vt:
             {
@@ -1266,7 +1370,74 @@ parse_obj_tokens(u8 *file, size_t file_size)
             }break;
             case obj_token_type_f:
             {
-                // ???
+                b32 newline_appeared = false;
+
+                // NOTE : property_indicator%3 == 0(v), 1(vt), 2(vn),
+                u32 property_indicator = 0;
+                u32 first_index = 0;
+                u32 index_count_this_line = 0;
+                while(!newline_appeared)
+                {
+                    token = peek_token(&tokenizer, true);
+
+                    switch(token.type)
+                    {
+                        case obj_token_type_i32:
+                        {
+                            if(property_indicator == 0)
+                            {
+                                if(index_count_this_line < 3)
+                                {
+                                    if(index_count_this_line == 0)
+                                    {
+                                        first_index = token.value_i32 - 1;
+                                    }
+                                    result.indices[index_count++] = token.value_i32 - 1;
+
+                                    index_count_this_line++;
+                                }
+                                else
+                                {
+                                    u32 previous_index = result.indices[index_count-1];
+
+                                    result.indices[index_count++] = first_index;
+                                    result.indices[index_count++] = previous_index;
+                                    result.indices[index_count++] = token.value_i32 - 1;
+                                }
+                            }
+                            else if(property_indicator == 1)
+                            {
+                                // TODO(Joon) : We are not currently using these values. 
+                                // result.vt_indices[vt_index_count++] = token.value_i32 - 1;
+                            }
+                            else
+                            {
+                                // TODO(Joon) : We are not currently using these values. 
+                                assert(property_indicator <=  2);
+                                //result.vn_indices[vn_index_count++] = token.value_i32 - 1;
+                            }
+
+                            obj_token peek = peek_token(&tokenizer, false);
+                            if(peek.type == obj_token_type_i32)
+                            {
+                                property_indicator = 0;
+                            }
+                        }break;
+
+                        case obj_token_type_slash:
+                        {
+                            property_indicator++;
+                        }break;
+
+                        case obj_token_type_newline:
+                        {
+                            newline_appeared = true;
+                        }break;
+
+                        default:{assert(0);}break; // not allowed!
+                    }
+                }
+
             }break;
             case obj_token_type_eof:
             {
@@ -1274,6 +1445,10 @@ parse_obj_tokens(u8 *file, size_t file_size)
             }break;
         }
     }
+
+    assert(index_count == result.index_count);
+
+    return result;
 }
  
 #if MEKA_ARM
@@ -1290,7 +1465,7 @@ parse_obj_fast(u8 *file, size_t file_size)
 
     struct mach_timebase_info mach_time_info;
     mach_timebase_info(&mach_time_info);
-    r32 nano_sec_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
+    r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
 
     u64 begin_time = mach_absolute_time();
 
@@ -1325,7 +1500,7 @@ parse_obj_fast(u8 *file, size_t file_size)
     }
 
     u64 end_time = mach_absolute_time();
-    u64 TimeDifferenceInNanoSecond = (end_time-begin_time)*nano_sec_per_tick;
+    u64 TimeDifferenceInNanoSecond = (end_time-begin_time)*nano_seconds_per_tick;
 
     int a = 1;
 }
