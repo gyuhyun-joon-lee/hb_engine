@@ -13,17 +13,17 @@ struct raw_mesh
     v3 *normals;
     u32 normal_count;
 
-    v2 *texture_coords;
-    u32 texture_coord_count;
+    v2 *texcoords;
+    u32 texcoord_count;
 
     u32 *indices;
     u32 index_count;
 
-    u32 *vn_indices;
-    u32 vn_index_count;
+    u32 *normal_indices;
+    u32 normal_index_count;
 
-    u32 *vt_indices;
-    u32 vt_index_count;
+    u32 *texcoord_indices;
+    u32 texcoord_index_count;
 };
 
 // mesh that is ready in a form thatto be consumed by the renderer

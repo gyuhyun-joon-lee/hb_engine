@@ -10,19 +10,23 @@
 #undef internal
 #undef assert
 
+#include "meka_types.h"
 #include "meka_platform.h"
+#include "meka_math.h"
 // NOTE(joon):add platform independent codes here
 
 #include "meka_render.h"
 #include "meka_terrain.cpp"
 #include "meka_mesh_loader.cpp"
 #include "meka_render.cpp"
+#include "meka_ray.cpp"
 
 internal u64 
 mach_time_diff_in_nano_seconds(u64 begin, u64 end, r32 nano_seconds_per_tick)
 {
     return (u64)(((end - begin)*nano_seconds_per_tick));
 }
+
 PLATFORM_READ_FILE(debug_macos_read_file)
 {
     platform_read_file_result Result = {};
@@ -73,6 +77,7 @@ PLATFORM_WRITE_ENTIRE_FILE(debug_macos_write_file)
     }
 }
 #endif
+
 PLATFORM_FREE_FILE_MEMORY(debug_macos_free_file_memory)
 {
     free(memory);
@@ -146,11 +151,43 @@ display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_t
     return kCVReturnSuccess;
 }
 
+internal void
+metal_record_render_command(id<MTLRenderCommandEncoder> render_encoder, render_mesh *mesh, 
+                            v3 scale, v3 translate, v3 color = V3(1, 1, 1))
+{
+    // TODO(joon) : I wonder if Metal copies whatever data it needs, 
+    // or does it need a seperate storage that holds all the uniform buffer just like in Vulkan?
+    u32 per_object_data_index_in_shader = 2;
+    per_object_data per_object_data = {};
+    per_object_data.model = convert_m4_to_r32_4x4(translate_m4(translate)*scale_m4(scale));
+    per_object_data.color = convert_to_r32_3(color);
+
+    [render_encoder setVertexBytes: &per_object_data
+                    length: sizeof(per_object_data)
+                    atIndex: per_object_data_index_in_shader]; 
+
+    [render_encoder setVertexBuffer: mesh->vertex_buffer
+                    offset: 0
+                    atIndex:0]; 
+
+    [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
+                    indexCount: mesh->index_count 
+                    indexType: MTLIndexTypeUInt32
+                    indexBuffer: mesh->index_buffer 
+                    indexBufferOffset: 0 
+                    instanceCount: 1]; 
+}
+
 internal render_mesh
 metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh, memory_arena *memory_arena)
 {
     assert(raw_mesh->normals);
     assert(raw_mesh->position_count == raw_mesh->normal_count);
+    // TODO(joon) : Does not allow certain vertex to have different normal index per face
+    if(raw_mesh->normal_indices)
+    {
+        assert(raw_mesh->indices[0] == raw_mesh->normal_indices[0]);
+    }
 
     // TODO(joon) : not super important, but what should be the size of this
     temp_memory mesh_temp_memory = start_temp_memory(memory_arena, megabytes(16));
@@ -160,7 +197,6 @@ metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh,
     for(u32 vertex_index = 0;
             vertex_index < raw_mesh->position_count;
             ++vertex_index)
-
     {
         temp_vertex *vertex = vertices + vertex_index;
 
@@ -169,8 +205,7 @@ metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh,
         vertex->p.y = raw_mesh->positions[vertex_index].y;
         vertex->p.z = raw_mesh->positions[vertex_index].z;
 
-        v3 src_normal = raw_mesh->normals[vertex_index];
-        assert(src_normal.x <=1.0f &&src_normal.y <=1.0f&&src_normal.z <=1.0f);
+        assert(is_normalized(raw_mesh->normals[vertex_index]));
 
         vertex->normal.x = raw_mesh->normals[vertex_index].x;
         vertex->normal.y = raw_mesh->normals[vertex_index].y;
@@ -463,26 +498,45 @@ main(void)
     NSString *file_path = @"/Volumes/meka/meka_renderer/code/shader/shader.metallib";
     // TODO(joon) : maybe just use newDefaultLibrary? If so, figure out where should we put the .metal files
     id<MTLLibrary> shader_library = [device newLibraryWithFile:(NSString *)file_path 
-                                                         error: &error];
+                                            error: &error];
     check_ns_error(error);
 
     id<MTLFunction> vertex_function = [shader_library newFunctionWithName:@"vertex_function"];
-    id<MTLFunction> frag_phong_lighting = [shader_library newFunctionWithName:@"frag_phong_lighting"];
+    id<MTLFunction> frag_phong_lighting = [shader_library newFunctionWithName:@"frag_raycast"];
 
-    MTLRenderPipelineDescriptor *metal_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
-    metal_pipeline_descriptor.label = @"Simple Pipeline";
-    metal_pipeline_descriptor.vertexFunction = vertex_function;
-    metal_pipeline_descriptor.fragmentFunction = frag_phong_lighting;
-    metal_pipeline_descriptor.sampleCount = 1;
-    metal_pipeline_descriptor.rasterSampleCount = metal_pipeline_descriptor.sampleCount;
-    metal_pipeline_descriptor.rasterizationEnabled = true;
-    metal_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
-    metal_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    metal_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-    metal_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+    id<MTLFunction> line_vertex_function = [shader_library newFunctionWithName:@"line_vertex_function"];
+    id<MTLFunction> line_frag_function = [shader_library newFunctionWithName:@"line_frag_function"];
 
-    id<MTLRenderPipelineState> metal_pipeline_state = [device newRenderPipelineStateWithDescriptor:metal_pipeline_descriptor
+    MTLRenderPipelineDescriptor *phong_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
+    phong_pipeline_descriptor.label = @"Simple Pipeline";
+    phong_pipeline_descriptor.vertexFunction = vertex_function;
+    phong_pipeline_descriptor.fragmentFunction = frag_phong_lighting;
+    phong_pipeline_descriptor.sampleCount = 1;
+    phong_pipeline_descriptor.rasterSampleCount = phong_pipeline_descriptor.sampleCount;
+    phong_pipeline_descriptor.rasterizationEnabled = true;
+    phong_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+    phong_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    phong_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+    phong_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+
+    id<MTLRenderPipelineState> metal_pipeline_state = [device newRenderPipelineStateWithDescriptor:phong_pipeline_descriptor
                                                                  error:&error];
+
+    MTLRenderPipelineDescriptor *line_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
+    line_pipeline_descriptor.label = @"Line Pipeline";
+    line_pipeline_descriptor.vertexFunction = line_vertex_function;
+    line_pipeline_descriptor.fragmentFunction = line_frag_function;
+    line_pipeline_descriptor.sampleCount = 1;
+    line_pipeline_descriptor.rasterSampleCount = line_pipeline_descriptor.sampleCount;
+    line_pipeline_descriptor.rasterizationEnabled = true;
+    line_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassLine;
+    line_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    line_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+    line_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+
+    id<MTLRenderPipelineState> line_pipeline_state = [device newRenderPipelineStateWithDescriptor:line_pipeline_descriptor
+                                                                error:&error];
+
     check_ns_error(error);
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
@@ -494,7 +548,27 @@ main(void)
         CVDisplayLinkStart(display_link);
     }
 
-    memory_arena terrain_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(32), &platform_memory.permanent_memory_used);
+    v3 quad_positions[] = 
+    {
+        {-1, -1, 0}, 
+        {1, -1, 0}, 
+        {1, 1, 0}, 
+        {-1, 1 ,0}
+    };
+
+    u32 quad_indices[] = 
+    {
+        0, 1, 2,
+        0, 2, 3
+    };
+
+    raw_mesh quad_raw_mesh = {};
+    quad_raw_mesh.positions = quad_positions;
+    quad_raw_mesh.position_count = array_count(quad_positions);
+    quad_raw_mesh.indices = quad_indices;
+    quad_raw_mesh.index_count = array_count(quad_indices);
+    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &quad_raw_mesh);
+    render_mesh quad_mesh = metal_create_render_mesh_from_raw_mesh(device, &quad_raw_mesh, &transient_memory_arena);
 
     raw_mesh sphere_raw_mesh = generate_sphere_mesh(100, 100);
     render_mesh sphere_mesh = metal_create_render_mesh_from_raw_mesh(device, &sphere_raw_mesh, &transient_memory_arena);
@@ -505,6 +579,7 @@ main(void)
     m4 front_rotation = QuarternionRotationM4(V3(0, 1, 0), half_pi_32);
     m4 back_rotation = QuarternionRotationM4(V3(0, 1, 0), -half_pi_32);
 
+    memory_arena terrain_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(32), &platform_memory.permanent_memory_used);
     raw_mesh terrains[6] = {};
     render_mesh terrain_meshes[6] = {};
     // top
@@ -581,7 +656,7 @@ main(void)
 
     camera camera = {};
     r32 focal_length = 1.0f;
-    camera.p = V3(-10, 0, 0);
+    camera.p = V3(-10, 0, 5);
     
     r32 light_angle = 0.f;
     r32 light_radius = 1000.0f;
@@ -594,6 +669,8 @@ main(void)
     while(is_game_running)
     {
         macos_handle_event(app, window);
+
+        v3 camera_dir = camera_to_world_v100(camera.along_x, camera.along_y ,camera.along_z);
 
         // TODO/joon: check if the focued window is working properly
         b32 is_window_focused = [app keyWindow] && [app mainWindow];
@@ -624,16 +701,15 @@ main(void)
             v4 result2 = camera_rhs_to_lhs()*r;
 
             r32 camera_speed = 1.0f;
-            v3 cameraDir = camera_to_world_v100(camera.along_x, camera.along_y ,camera.along_z);
 
             if(is_w_down)
             {
-                camera.p += camera_speed*cameraDir;
+                camera.p += camera_speed*camera_dir;
             }
 
             if(is_s_down)
             {
-                camera.p -= camera_speed*cameraDir;
+                camera.p -= camera_speed*camera_dir;
             }
 
             r32 arrow_key_camera_rotation_speed = 0.02f;
@@ -654,6 +730,28 @@ main(void)
                 camera.along_z -= arrow_key_camera_rotation_speed;
             }
         }
+
+        v3 quad_translate = V3(0, 0, 0);
+        v3 quad_scale = V3(100, 100, 1);
+        m4 model = translate_m4(quad_translate)*scale_m4(quad_scale);
+
+        v3 color = V3(0.1f, 0.1f, 0.1f);
+        for(u32 i = 0;
+                i < quad_raw_mesh.index_count;
+                i += 3)
+        {
+            v3 v0 = (model*V4(quad_raw_mesh.positions[quad_raw_mesh.indices[i]], 1.0f)).xyz;
+            v3 v1 = (model*V4(quad_raw_mesh.positions[quad_raw_mesh.indices[i+1]], 1.0f)).xyz;
+            v3 v2 = (model*V4(quad_raw_mesh.positions[quad_raw_mesh.indices[i+2]], 1.0f)).xyz;
+
+            b32 intersect_result = ray_intersect_with_triangle(v0, v1, v2, camera.p, camera_dir);
+
+            if(intersect_result)
+            {
+                color = V3(0.8f, 0.2f, 0.2f);
+            }
+        }
+
         /*
             TODO(joon) : For more precisely timed rendering, the operations should be done in this order
             1. Update the game based on the input
@@ -701,13 +799,6 @@ main(void)
                 [render_encoder setCullMode: MTLCullModeBack];
                 [render_encoder setDepthStencilState: metal_depth_state];
 
-                vector_float2 shader_viewport = {(r32)window_width, (r32)window_height};
-                shader_viewport.x = (r32)window_width;
-                shader_viewport.y = (r32)window_height;
-                [render_encoder setVertexBytes:&shader_viewport
-                                length:sizeof(shader_viewport)
-                                atIndex:1];
-
                 m4 proj_matrix = projection(focal_length, window_width_over_height, 0.1f, 10000.0f);
                 m4 view_matrix = world_to_camera(camera.p, camera.along_x, camera.along_y, camera.along_z);
 
@@ -718,7 +809,7 @@ main(void)
                 per_frame_data.light_p = convert_to_r32_3(light_p);
                 [render_encoder setVertexBytes: &per_frame_data
                                 length: sizeof(per_frame_data)
-                                atIndex: 2]; 
+                                atIndex: 1]; 
 
                 // NOTE/joon : make sure you update the non-vertex information first
                 per_object_data per_object_data = {};
@@ -728,99 +819,79 @@ main(void)
                         terrain_index++)
                 {
                     r32 distance = 4.9f;
+
+                    v3 translate = {};
+                    v3 scale = V3(0.1f, 0.1f, 0.1f);
+
                     switch(terrain_index)
                     {
                         case 0:
                         {
                             // top
-                            per_object_data.model = convert_m4_to_r32_4x4(Translate(0, 0, distance)*Scale(0.1f, 0.1f, 0.1f));
+                            translate = V3(0, 0, distance);
                         }break;
                         case 1:
                         {
                             // bottom
-                            per_object_data.model = convert_m4_to_r32_4x4(Translate(0, 0, -distance)*Scale(0.1f, 0.1f, 0.1f));
+                            translate = V3(0, 0, -distance);
                         }break;
                         case 2:
                         {
                             // left
-                            per_object_data.model = convert_m4_to_r32_4x4(Translate(0, distance, 0)*Scale(0.1f, 0.1f, 0.1f));
+                            translate = V3(0, distance, 0);
                         }break;
                         case 3:
                         {
                             // right
-                            per_object_data.model = convert_m4_to_r32_4x4(Translate(0, -distance, 0)*Scale(0.1f, 0.1f, 0.1f));
+                            translate = V3(0, -distance, 0);
                         }break;
                         case 4:
                         {
                             // front
-                            per_object_data.model = convert_m4_to_r32_4x4(Translate(distance, 0, 0)*Scale(0.1f, 0.1f, 0.1f));
+                            translate = V3(distance, 0, 0);
                         }break;
                         case 5:
                         {
                             // back
-                            per_object_data.model = convert_m4_to_r32_4x4(Translate(-distance, 0, 0)*Scale(0.1f, 0.1f, 0.1f));
+                            translate = V3(-distance, 0, 0);
                         }break;
                     }
-                    [render_encoder setVertexBytes: &per_object_data
-                                    length: sizeof(per_object_data)
-                                    atIndex: 3]; 
-                    [render_encoder setVertexBuffer: terrain_meshes[terrain_index].vertex_buffer
-                                    offset: 0
-                                    atIndex:0]; 
-                    [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
-                                    indexCount: terrain_meshes[terrain_index].index_count 
-                                    indexType: MTLIndexTypeUInt32
-                                    indexBuffer: terrain_meshes[terrain_index].index_buffer 
-                                    indexBufferOffset: 0 
-                                    instanceCount: 1]; 
+
+                    metal_record_render_command(render_encoder, terrain_meshes + terrain_index, scale, translate);
                 }
-
-                per_object_data.model = convert_m4_to_r32_4x4(Translate(10, 0, 0)*Scale(1, 1, 1));
-                [render_encoder setVertexBytes: &per_object_data
-                                length: sizeof(per_object_data)
-                                atIndex: 3]; 
-                [render_encoder setVertexBuffer: cow_mesh.vertex_buffer
-                                offset: 0
-                                atIndex:0]; 
-                [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
-                                indexCount: cow_mesh.index_count 
-                                indexType: MTLIndexTypeUInt32
-                                indexBuffer: cow_mesh.index_buffer 
-                                indexBufferOffset: 0 
-                                instanceCount: 1]; 
 #endif
-#if 1
-                per_object_data.model = convert_m4_to_r32_4x4(Translate(0, 0, 10)*Scale(20, 20, 20));
-                [render_encoder setVertexBytes: &per_object_data
-                                length: sizeof(per_object_data)
-                                atIndex: 3]; 
-                [render_encoder setVertexBuffer: suzanne_mesh.vertex_buffer
-                                offset: 0
-                                atIndex:0]; 
-                [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
-                                indexCount: suzanne_mesh.index_count 
-                                indexType: MTLIndexTypeUInt32
-                                indexBuffer: suzanne_mesh.index_buffer 
-                                indexBufferOffset: 0 
-                                instanceCount: 1]; 
 
+#if 0
+                metal_record_render_command(render_encoder, &cow_mesh, V3(1 ,1, 1), V3(10, 0, 0));
+                metal_record_render_command(render_encoder, &suzanne_mesh, V3(20, 20, 20), V3(0, 0, 2));
+                metal_record_render_command(render_encoder, &sphere_mesh, V3(3, 3, 3), V3(0, 0, 0));
 #endif
-                per_object_data.model = convert_m4_to_r32_4x4(Translate(0, 0, 0)*Scale(3, 3, 3));
+                //metal_record_render_command(render_encoder, &quad_mesh, quad_scale, quad_translate, color);
+
+                [render_encoder setRenderPipelineState:line_pipeline_state];
+
+                //per_object_data.model = convert_m4_to_r32_4x4(translate_m4(V3(0, 0, 0))*scale_m4(10, 10, 1000));
+                per_object_data.color = convert_to_r32_3(V3(0, 0.15f, 0.8f));
+
                 [render_encoder setVertexBytes: &per_object_data
                                 length: sizeof(per_object_data)
-                                atIndex: 3]; 
-                [render_encoder setVertexBuffer: sphere_mesh.vertex_buffer
-                                offset: 0
-                                atIndex:0]; 
-                [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
-                                indexCount: sphere_mesh.index_count 
-                                indexType: MTLIndexTypeUInt32
-                                indexBuffer: sphere_mesh.index_buffer 
-                                indexBufferOffset: 0 
-                                instanceCount: 1]; 
+                                atIndex: 2]; 
+
+                line_vertex line_vertices[2];
+                line_vertices[0].p = convert_to_r32_3(camera.p + 100.0f*camera_dir);
+                line_vertices[1].p = convert_to_r32_3(camera.p + 1000.0f * camera_dir);
+                //line_vertices[0].p = {0, 0, 0};
+                //line_vertices[1].p = {0, 0, 10000};
+
+                [render_encoder setVertexBytes: line_vertices
+                                length: sizeof(line_vertex) * array_count(line_vertices) 
+                                atIndex: 0]; 
+
+                [render_encoder drawPrimitives:MTLPrimitiveTypeLine
+                                vertexStart:0 
+                                vertexCount:2];
 
                 [render_encoder endEncoding];
-
             
                 u64 time_before_presenting = mach_absolute_time();
                 u64 time_passed = mach_time_diff_in_nano_seconds(last_time, time_before_presenting, nano_seconds_per_tick);
@@ -834,7 +905,6 @@ main(void)
                 //[command_buffer presentDrawable:view.currentDrawable
                                 //atTime:time_left_until_present_in_sec];
             }
-
 
             // NOTE : equivalent to vkQueueSubmit,
             // TODO(joon): Sync with the swap buffer!

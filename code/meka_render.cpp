@@ -4,6 +4,7 @@ struct vertex_normal_hit
     i32 hit;
 };
 
+// TODO(joon): exclude duplicate vertex normals
 internal void
 generate_vertex_normals(memory_arena *permanent_arena , memory_arena *trasient_arena, raw_mesh *raw_mesh)
 {

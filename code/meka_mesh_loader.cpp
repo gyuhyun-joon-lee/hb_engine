@@ -1215,6 +1215,8 @@ peek_up_to_three_numeric_values(obj_tokenizer *tokenizer)
     return result;
 }
 
+// TODO(joon): parsing positions and vertex normals work just fine,
+// but havent yet tested with the texture coords. Will do when I have a png loader :)
 internal raw_mesh
 parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_size)
 {
@@ -1228,13 +1230,13 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
 
     b32 is_parsing = true;
 
-    u32 v_count = 0;
-    u32 vn_count = 0;
-    u32 vt_count = 0;
+    u32 position_count = 0;
+    u32 normal_count = 0;
+    u32 texcoord_count = 0;
 
     u32 index_count = 0;
-    u32 vn_index_count = 0;
-    u32 vt_index_count = 0;
+    u32 normal_index_count = 0;
+    u32 texcoord_index_count = 0;
    
     // TODO(joon): Just checking one letter might not be safe
     // pre parse the amount of things(vertex, vertex normal, indices..) that we need?
@@ -1246,15 +1248,15 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
         {
             case obj_token_type_v:
             {
-                v_count++;
+                position_count++;
             }break;
             case obj_token_type_vn:
             {
-                vn_count++;
+                normal_count++;
             }break;
             case obj_token_type_vt:
             {
-                vt_count++;
+                texcoord_count++;
             }break;
             case obj_token_type_f:
             {
@@ -1277,12 +1279,12 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
                             }
                             else if(property_indicator == 1)
                             {
-                                vt_index_count++;
+                                texcoord_index_count++;
                             }
                             else
                             {
                                 assert(property_indicator <=  2);
-                                vn_index_count++;
+                                normal_index_count++;
                             }
 
                             obj_token peek = peek_token(&tokenizer, false);
@@ -1316,35 +1318,53 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
         }
     }
 
-    result.position_count = v_count;
-    result.normal_count = vn_count;
-    result.texture_coord_count = vt_count;
+    result.position_count = position_count;
+    result.normal_count = normal_count;
+    result.texcoord_count = texcoord_count;
     result.index_count = index_count;
+    result.normal_index_count = normal_index_count;
     
+    // NOTE(joon) : position and indices are crucial, so we assert heree
     assert(result.position_count != 0);
     result.positions = (v3 *)push_array(permanent_memory_arena, v3, result.position_count);
-
     assert(result.index_count != 0);
     result.indices = (u32 *)push_array(permanent_memory_arena, u32, result.index_count);
 
+    // NOTE(joon): properties below are not crucial, but we need to check the count of it 
+    // because malloc will return the pointer whether the count is zero or not
+
+    // Do not allow only one of them being NULL 
+    assert((result.normal_count != 0 && result.normal_index_count != 0) ||
+            (result.normal_count == 0 && result.normal_index_count == 0));
     if(result.normal_count != 0)
     {
         result.normals = (v3 *)push_array(permanent_memory_arena, v3, result.normal_count);
     }
-
-    if(result.texture_coord_count != 0)
+    if(result.normal_index_count != 0)
     {
-        result.texture_coords = (v2 *)push_array(permanent_memory_arena, v3, result.texture_coord_count);
+        result.normal_indices = (u32 *)push_array(permanent_memory_arena, u32, result.normal_index_count);
+    }
+
+    // Do not allow only one of them being NULL 
+    assert((result.texcoord_count != 0 && result.texcoord_index_count != 0) ||
+            (result.texcoord_count == 0 && result.texcoord_index_count == 0));
+    if(result.texcoord_count != 0)
+    {
+        result.texcoords = (v2 *)push_array(permanent_memory_arena, v2, result.texcoord_count);
+    }
+    if(result.texcoord_index_count != 0)
+    {
+        result.texcoord_indices = (u32 *)push_array(permanent_memory_arena, u32, result.normal_index_count);
     }
 
     // Reset the counts to use them below
-    v_count = 0;
-    vn_count = 0;
-    vt_count = 0;
+    position_count = 0;
+    normal_count = 0;
+    texcoord_count = 0;
 
     index_count = 0;
-    vn_index_count = 0;
-    vt_index_count = 0;
+    normal_index_count = 0;
+    texcoord_index_count = 0;
 
     // Reset the tokenizer to the start of file
     tokenizer.at = file;
@@ -1358,11 +1378,11 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
             case obj_token_type_v:
             {
                 // feed up to three numeric tokens(including minus)
-                result.positions[v_count++] = peek_up_to_three_numeric_values(&tokenizer);
+                result.positions[position_count++] = peek_up_to_three_numeric_values(&tokenizer);
             }break;
             case obj_token_type_vn:
             {
-                result.normals[vn_count++] = peek_up_to_three_numeric_values(&tokenizer);
+                result.normals[normal_count++] = peek_up_to_three_numeric_values(&tokenizer);
             }break;
             case obj_token_type_vt:
             {
@@ -1407,14 +1427,12 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
                             }
                             else if(property_indicator == 1)
                             {
-                                // TODO(Joon) : We are not currently using these values. 
-                                // result.vt_indices[vt_index_count++] = token.value_i32 - 1;
+                                result.texcoord_indices[texcoord_index_count++] = token.value_i32 - 1;
                             }
                             else
                             {
-                                // TODO(Joon) : We are not currently using these values. 
                                 assert(property_indicator <=  2);
-                                //result.vn_indices[vn_index_count++] = token.value_i32 - 1;
+                                result.normal_indices[normal_index_count++] = token.value_i32 - 1;
                             }
 
                             obj_token peek = peek_token(&tokenizer, false);
@@ -1447,10 +1465,13 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
     }
 
     assert(index_count == result.index_count);
+    assert(normal_index_count == result.normal_index_count);
+    assert(texcoord_index_count == result.texcoord_index_count);
 
     return result;
 }
  
+#if 0
 #if MEKA_ARM
 #include <arm_neon.h>
 #elif MEKA_X86_64
@@ -1739,10 +1760,10 @@ parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_mem
     mesh.index_count = index_count;
     mesh.indices = push_array(permanent_memory_arena, u32, sizeof(u32)*index_count);
 
-    mesh.vn_index_count = index_count;
-    mesh.vn_indices = push_array(permanent_memory_arena, u32, sizeof(u32)*index_count);
+    mesh.normal_index_count = index_count;
+    mesh.normal_indices = push_array(permanent_memory_arena, u32, sizeof(u32)*me);
 
-    mesh.vt_index_count = index_count;
+    mesh.texcoord_index_count = index_count;
     mesh.vt_indices = push_array(permanent_memory_arena, u32, sizeof(u32)*index_count);
 
     mesh.positions = push_array(permanent_memory_arena, v3, sizeof(v3)*v_line_count);
@@ -1752,8 +1773,8 @@ parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_mem
     }
 
     u32 mesh_index_count = 0;
-    u32 mesh_vn_index_count = 0;
-    u32 mesh_vt_index_count = 0;
+    u32 mesh_normal_index_count = 0;
+    u32 mesh_texcoord_index_count = 0;
     for(u32 lexicon_index = 0;
             lexicon_index < lexicon_count;
             ++lexicon_index)
@@ -1807,9 +1828,9 @@ parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_mem
                             i+stride < number_count;
                             i += stride)
                     {
-                        mesh.vn_indices[mesh_vn_index_count++] = numbers[0+offset]-1;
-                        mesh.vn_indices[mesh_vn_index_count++] = numbers[i+offset]-1;
-                        mesh.vn_indices[mesh_vn_index_count++] = numbers[i+stride+offset]-1;
+                        mesh.vn_indices[mesh_normal_index_count++] = numbers[0+offset]-1;
+                        mesh.vn_indices[mesh_normal_index_count++] = numbers[i+offset]-1;
+                        mesh.vn_indices[mesh_normal_index_count++] = numbers[i+stride+offset]-1;
                     }
                 }
                 else if(vn_line_count == 0 && vt_line_count != 0)
@@ -1819,9 +1840,9 @@ parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_mem
                             i+stride < number_count;
                             i += stride)
                     {
-                        mesh.vt_indices[mesh_vt_index_count++] = numbers[0+offset]-1;
-                        mesh.vt_indices[mesh_vt_index_count++] = numbers[i+offset]-1;
-                        mesh.vt_indices[mesh_vt_index_count++] = numbers[i+stride+offset]-1;
+                        mesh.vt_indices[mesh_texcoord_index_count++] = numbers[0+offset]-1;
+                        mesh.vt_indices[mesh_texcoord_index_count++] = numbers[i+offset]-1;
+                        mesh.vt_indices[mesh_texcoord_index_count++] = numbers[i+stride+offset]-1;
                     }
                 }
                 else
@@ -1831,9 +1852,9 @@ parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_mem
                             i+stride < number_count;
                             i += stride)
                     {
-                        mesh.vt_indices[mesh_vt_index_count++] = numbers[0+offset]-1;
-                        mesh.vt_indices[mesh_vt_index_count++] = numbers[i+offset]-1;
-                        mesh.vt_indices[mesh_vt_index_count++] = numbers[i+stride+offset]-1;
+                        mesh.vt_indices[mesh_texcoord_index_count++] = numbers[0+offset]-1;
+                        mesh.vt_indices[mesh_texcoord_index_count++] = numbers[i+offset]-1;
+                        mesh.vt_indices[mesh_texcoord_index_count++] = numbers[i+stride+offset]-1;
                     }
 
                     offset = 2;
@@ -1841,9 +1862,9 @@ parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_mem
                             i+stride < number_count;
                             i += stride)
                     {
-                        mesh.vn_indices[mesh_vn_index_count++] = numbers[0+offset]-1;
-                        mesh.vn_indices[mesh_vn_index_count++] = numbers[i+offset]-1;
-                        mesh.vn_indices[mesh_vn_index_count++] = numbers[i+stride+offset]-1;
+                        mesh.vn_indices[mesh_normal_index_count++] = numbers[0+offset]-1;
+                        mesh.vn_indices[mesh_normal_index_count++] = numbers[i+offset]-1;
+                        mesh.vn_indices[mesh_normal_index_count++] = numbers[i+stride+offset]-1;
                     }
                 }
             }break;
@@ -1857,19 +1878,4 @@ parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_mem
 
     return mesh;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#endif

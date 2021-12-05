@@ -38,10 +38,10 @@ random_range(r32 value, r32 range)
 
 internal void
 generate_mountain_inside_terrain(raw_mesh *terrain, 
-                            i32 x_count, i32 y_count,
-                            v2 center,
-                            i32 stride,
-                            r32 dim, r32 radius, r32 max_height)
+                                i32 x_count, i32 y_count,
+                                v2 center,
+                                i32 stride,
+                                r32 dim, r32 radius, r32 max_height)
 {
     i32 min_x = maximum(round_r32_i32((center.x - radius)/dim), 0);
     i32 max_x = minimum(round_r32_i32((center.x + radius)/dim), x_count);
@@ -63,7 +63,7 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
             x < max_x;
             x++)
         {
-            r32 distance = dim*Length(V2i(center_x_i32, center_y_i32) - V2i(x, y));
+            r32 distance = dim*length(V2i(center_x_i32, center_y_i32) - V2i(x, y));
             if(distance <= radius)
             {
                 r32 height = (1.0f - (distance / radius))*max_height;
