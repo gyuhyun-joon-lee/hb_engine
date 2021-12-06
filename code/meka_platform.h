@@ -111,11 +111,19 @@ StringCompare(char *src, char *test)
     return result;
 }
 
+#if MEKA_ARM
+#include <arm_neon.h>
+#elif MEKA_X64
+#include <immintrin.h>
+#endif
+
 // TODO/Joon: intrinsic zero memory?
+// TODO(joon): can be faster using wider vectors
 inline void
 zero_memory(void *memory, u64 size)
 {
     // TODO/joon: What if there's no neon support
+#if MEKA_ARM
     u8 *byte = (u8 *)memory;
     uint8x16_t zero_128 = vdupq_n_u8(0);
 
@@ -134,6 +142,10 @@ zero_memory(void *memory, u64 size)
             *byte++ = 0;
         }
     }
+#else
+    // TODO(joon): support for intel simd, too!
+    memset (memory, 0, size);
+#endif
 }
 
 struct platform_memory
@@ -158,7 +170,7 @@ struct memory_arena
 
 
 internal memory_arena
-start_memory_arena(void *base, size_t size, u64 *used)
+start_memory_arena(void *base, size_t size, u64 *used, b32 should_be_zero = true)
 {
     memory_arena result = {};
 
@@ -168,7 +180,10 @@ start_memory_arena(void *base, size_t size, u64 *used)
     *used += result.total_size;
 
     // TODO/joon :zeroing memory every time might not be a best idea
-    zero_memory(result.base, result.total_size);
+    if(should_be_zero)
+    {
+        zero_memory(result.base, result.total_size);
+    }
 
     return result;
 }
@@ -217,7 +232,7 @@ push_size(temp_memory *temp_memory, size_t size, size_t alignment = 0)
 }
 
 internal temp_memory
-start_temp_memory(memory_arena *memory_arena, size_t size)
+start_temp_memory(memory_arena *memory_arena, size_t size, b32 should_be_zero = true)
 {
     temp_memory result = {};
     result.base = (u8 *)memory_arena->base + memory_arena->used;
@@ -228,8 +243,10 @@ start_temp_memory(memory_arena *memory_arena, size_t size)
 
     memory_arena->temp_memory_count++;
 
-    // TODO/joon :zeroing memory every time might not be a best idea
-    zero_memory(result.base, result.total_size);
+    if(should_be_zero)
+    {
+        zero_memory(result.base, result.total_size);
+    }
 
     return result;
 }
@@ -245,6 +262,37 @@ end_temp_memory(temp_memory *temp_memory)
     // IMPORTANT(joon) : As the nature of this, all temp memories should be cleared at once
     memory_arena->used -= temp_memory->total_size;
 }
+
+enum debug_cycle_counter_id
+{
+    debug_cycle_counter_generate_vertex_normals,
+    debug_cycle_counter_count
+};
+
+struct debug_cycle_counter
+{
+    u64 cycle_count;
+    u32 hit_count;
+};
+
+u64 rdtsc(void)
+{
+	u64 val;
+#if MEKA_ARM 
+	asm volatile("mrs %0, cntvct_el0" : "=r" (val));
+#elif MEKA_X64
+    val = __rdtsc();
+#endif
+	return val;
+}
+
+global_variable debug_cycle_counter debug_cycle_counters[debug_cycle_counter_count];
+
+#define begin_cycle_counter(ID) u64 begin_cycle_count_##ID = rdtsc();
+#define end_cycle_counter(ID) debug_cycle_counters[debug_cycle_counter_##ID].cycle_count += rdtsc() - begin_cycle_count_##ID; \
+        debug_cycle_counters[debug_cycle_counter_##ID].hit_count++; \
+
+#define PLATFORM_DEBUG_PRINT_CYCLE_COUNTERS(name) void (name)(debug_cycle_counter *debug_cycle_counters)
 
 struct thread_work_queue;
 #define THREAD_WORK_CALLBACK(name) void name(void *data)

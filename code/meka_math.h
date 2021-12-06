@@ -220,7 +220,7 @@ cross(v3 a, v3 b)
     v3 result = {};
 
     result.x = a.y*b.z - b.y*a.z;
-    result.y = -(a.x*b.z - b.x*a.z);
+    result.y = b.x*a.z - a.x*b.z;
     result.z = a.x*b.y - b.x*a.y;
 
     return result;

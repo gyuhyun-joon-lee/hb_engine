@@ -13,6 +13,7 @@
 #include "meka_types.h"
 #include "meka_platform.h"
 #include "meka_math.h"
+#include "meka_random.h"
 // NOTE(joon):add platform independent codes here
 
 #include "meka_render.h"
@@ -384,6 +385,10 @@ macos_handle_event(NSApplication *app, NSWindow *window)
     }
 }
 
+PLATFORM_DEBUG_PRINT_CYCLE_COUNTERS(macos_debug_print_cycle_counters)
+{
+}
+
 int 
 main(void)
 {
@@ -425,7 +430,8 @@ main(void)
 
     platform_read_file_result cow_obj_file = platform_api.read_file("/Volumes/meka/meka_renderer/data/cow.obj");
     raw_mesh raw_cow_mesh = parse_obj_tokens(&mesh_memory_arena, cow_obj_file.memory, cow_obj_file.size);
-    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &raw_cow_mesh);
+    //generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &raw_cow_mesh);
+    generate_vertex_normals_simd(&mesh_memory_arena, &transient_memory_arena, &raw_cow_mesh);
     platform_api.free_file_memory(cow_obj_file.memory);
 
 #if 1
@@ -502,11 +508,7 @@ main(void)
     check_ns_error(error);
 
     id<MTLFunction> vertex_function = [shader_library newFunctionWithName:@"vertex_function"];
-    id<MTLFunction> frag_phong_lighting = [shader_library newFunctionWithName:@"frag_raycast"];
-
-    id<MTLFunction> line_vertex_function = [shader_library newFunctionWithName:@"line_vertex_function"];
-    id<MTLFunction> line_frag_function = [shader_library newFunctionWithName:@"line_frag_function"];
-
+    id<MTLFunction> frag_phong_lighting = [shader_library newFunctionWithName:@"phong_frag_function"];
     MTLRenderPipelineDescriptor *phong_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
     phong_pipeline_descriptor.label = @"Simple Pipeline";
     phong_pipeline_descriptor.vertexFunction = vertex_function;
@@ -522,6 +524,25 @@ main(void)
     id<MTLRenderPipelineState> metal_pipeline_state = [device newRenderPipelineStateWithDescriptor:phong_pipeline_descriptor
                                                                  error:&error];
 
+    id<MTLFunction> raytracing_vertex_function = [shader_library newFunctionWithName:@"raytracing_vertex_function"];
+    id<MTLFunction> raytracing_frag_function = [shader_library newFunctionWithName:@"raytracing_frag_function"];
+    MTLRenderPipelineDescriptor *raytracing_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
+    raytracing_pipeline_descriptor.label = @"Raytracing Pipeline";
+    raytracing_pipeline_descriptor.vertexFunction = raytracing_vertex_function;
+    raytracing_pipeline_descriptor.fragmentFunction = raytracing_frag_function;
+    raytracing_pipeline_descriptor.sampleCount = 1;
+    raytracing_pipeline_descriptor.rasterSampleCount = raytracing_pipeline_descriptor.sampleCount;
+    raytracing_pipeline_descriptor.rasterizationEnabled = true;
+    raytracing_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+    raytracing_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    raytracing_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+    raytracing_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+
+    id<MTLRenderPipelineState> raytracing_pipline_state = [device newRenderPipelineStateWithDescriptor:raytracing_pipeline_descriptor
+                                                                 error:&error];
+
+    id<MTLFunction> line_vertex_function = [shader_library newFunctionWithName:@"line_vertex_function"];
+    id<MTLFunction> line_frag_function = [shader_library newFunctionWithName:@"line_frag_function"];
     MTLRenderPipelineDescriptor *line_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
     line_pipeline_descriptor.label = @"Line Pipeline";
     line_pipeline_descriptor.vertexFunction = line_vertex_function;
@@ -558,8 +579,8 @@ main(void)
 
     u32 quad_indices[] = 
     {
-        0, 1, 2,
-        0, 2, 3
+        0, 2, 1,
+        0, 3, 2
     };
 
     raw_mesh quad_raw_mesh = {};
@@ -650,13 +671,35 @@ main(void)
     terrain_meshes[5] = metal_create_render_mesh_from_raw_mesh(device, terrains + 5, &transient_memory_arena);
 
     render_mesh cow_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_cow_mesh, &transient_memory_arena);
-#if 1
     render_mesh suzanne_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_suzanne_mesh, &transient_memory_arena);
-#endif
+
+    struct triangle
+    {
+        alignas(16) v3 p;
+    };
+    
+    u32 test_triangle_count = 64;
+    triangle *test_triangle_vertices = push_array(&mesh_memory_arena, triangle, 3*test_triangle_count);
+
+    // NOTE(joon) : creating test triangles for raytracing
+    // setVertexBytes can draw up to 85(4kb / 16 / 3) triangles without the index buffer
+    for(u32 triangle_index = 0;
+            triangle_index < test_triangle_count;
+            triangle_index++)
+    {
+        r32 position_range = 10.0f;
+        v3 position = V3(random_between(-position_range, position_range), 
+                        random_between(-position_range, position_range), 
+                        random_between(-position_range, position_range));
+
+        test_triangle_vertices[3*triangle_index + 0].p = position + V3(random_between(2, 3), random_between(2, 4), random_between(2, 3));
+        test_triangle_vertices[3*triangle_index + 1].p = position + V3(random_between(2, 3), random_between(2, 4), random_between(2, 3));
+        test_triangle_vertices[3*triangle_index + 2].p = position + V3(random_between(2, 3), random_between(2, 4), random_between(2, 3));
+    }
 
     camera camera = {};
     r32 focal_length = 1.0f;
-    camera.p = V3(-10, 0, 5);
+    camera.p = V3(-20, 0, 5);
     
     r32 light_angle = 0.f;
     r32 light_radius = 1000.0f;
@@ -796,7 +839,8 @@ main(void)
 
                 [render_encoder setTriangleFillMode: MTLTriangleFillModeFill];
                 [render_encoder setFrontFacingWinding: MTLWindingCounterClockwise];
-                [render_encoder setCullMode: MTLCullModeBack];
+                [render_encoder setCullMode: MTLCullModeNone];
+                //[render_encoder setCullMode: MTLCullModeBack];
                 [render_encoder setDepthStencilState: metal_depth_state];
 
                 m4 proj_matrix = projection(focal_length, window_width_over_height, 0.1f, 10000.0f);
@@ -860,16 +904,26 @@ main(void)
                     metal_record_render_command(render_encoder, terrain_meshes + terrain_index, scale, translate);
                 }
 #endif
-
-#if 0
                 metal_record_render_command(render_encoder, &cow_mesh, V3(1 ,1, 1), V3(10, 0, 0));
+#if 0
                 metal_record_render_command(render_encoder, &suzanne_mesh, V3(20, 20, 20), V3(0, 0, 2));
                 metal_record_render_command(render_encoder, &sphere_mesh, V3(3, 3, 3), V3(0, 0, 0));
 #endif
-                //metal_record_render_command(render_encoder, &quad_mesh, quad_scale, quad_translate, color);
+
+                [render_encoder setRenderPipelineState:raytracing_pipline_state];
+
+                per_object_data.color = convert_to_r32_3(V3(0, 0.15f, 0.8f));
+                [render_encoder setVertexBytes: &per_object_data
+                                length: sizeof(per_object_data)
+                                atIndex: 2]; 
+                [render_encoder setVertexBytes: test_triangle_vertices
+                                length: 3*sizeof(triangle) * test_triangle_count 
+                                atIndex: 0]; 
+                [render_encoder drawPrimitives:MTLPrimitiveTypeTriangle
+                                vertexStart:0 
+                                vertexCount:3*test_triangle_count];
 
                 [render_encoder setRenderPipelineState:line_pipeline_state];
-
                 //per_object_data.model = convert_m4_to_r32_4x4(translate_m4(V3(0, 0, 0))*scale_m4(10, 10, 1000));
                 per_object_data.color = convert_to_r32_3(V3(0, 0.15f, 0.8f));
 
@@ -883,6 +937,9 @@ main(void)
                 //line_vertices[0].p = {0, 0, 0};
                 //line_vertices[1].p = {0, 0, 10000};
 
+                // NOTE(joon): setVertexBytes can only used for data with size up to 4kb
+                // with vertex that only has position value(16 bytes), it can draw up to 83 triangles
+                // without using the index buffer
                 [render_encoder setVertexBytes: line_vertices
                                 length: sizeof(line_vertex) * array_count(line_vertices) 
                                 atIndex: 0]; 
@@ -935,6 +992,17 @@ main(void)
         while(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
         {
             time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
+        }
+
+        // NOTE(joon) : debug_printf_all_cycle_counters
+        for(u32 cycle_counter_index = 0;
+                cycle_counter_index < debug_cycle_counter_count;
+                cycle_counter_index++)
+        {
+            printf("ID:%u  Total Cycles: %llu Hit Count: %u, CyclesPerHit: %u\n", cycle_counter_index, 
+                                                                             debug_cycle_counters[cycle_counter_index].cycle_count,
+                                                                            debug_cycle_counters[cycle_counter_index].hit_count, 
+                                                                            (u32)(debug_cycle_counters[cycle_counter_index].cycle_count/debug_cycle_counters[cycle_counter_index].hit_count));
         }
 
         // update the time stamp

@@ -44,7 +44,7 @@ vertex_function(uint vertexID [[vertex_id]],
 }
 
 fragment r32_4 
-frag_phong_lighting(vertex_output vertex_output [[stage_in]])
+phong_frag_function(vertex_output vertex_output [[stage_in]])
 {
     r32_3 light_color = {1, 1, 1};
     r32_3 light_dir = normalize(vertex_output.light_p - vertex_output.p.xyz);
@@ -57,13 +57,32 @@ frag_phong_lighting(vertex_output vertex_output [[stage_in]])
 
     r32_3 result_color = ambient + diffuse;
     r32_4 out_color = convert_to_r32_4(result_color, 1.0f);
-    out_color = 2.f*R32_4(48/255.0f, 10/255.0f, 36/255.0f, 1);
+    //out_color = 2.f*R32_4(48/255.0f, 10/255.0f, 36/255.0f, 1);
 
     return out_color;
 }
 
+// NOTE(joon): Not exactly doing the raytracing, just rendering the raytraced objects
+// NOTE(joon): This also receives a world coordinate position as an input
+vertex vertex_output
+raytracing_vertex_function(uint vertexID [[vertex_id]],
+                            constant r32_3 *vertices [[buffer(0)]],
+                            constant per_frame_data *per_frame_data [[buffer(1)]],
+                            constant per_object_data *per_object_data [[buffer(2)]])
+{
+    vertex_output output = {};
+
+    r32_3 world_p = vertices[vertexID];
+
+    output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
+
+    output.color = per_object_data->color;
+
+    return output;
+}
+
 fragment r32_4 
-frag_raycast(vertex_output vertex_output [[stage_in]])
+raytracing_frag_function(vertex_output vertex_output [[stage_in]])
 {
     return convert_to_r32_4(vertex_output.color, 1.0f);
 }

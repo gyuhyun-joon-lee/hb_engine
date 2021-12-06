@@ -1,3 +1,12 @@
+struct material
+{
+    r32 reflectiveness; // 0.0f being very rough like a chalk, and 1 being really relfective(like mirror)
+    v3 emit_color; // things like sky, lightbulb have this value
+    v3 reflection_color; // most of the other things in real life, that does not have enough energy to emit themselves
+};
+
+// TODO(joon) : This works for both inward & outward normals, 
+// but we might only want to test it against the outward normal
 internal b32
 ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_start, v3 ray_dir)
 {
@@ -5,17 +14,18 @@ ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_start, v3 ray_dir)
        NOTE(joon) : 
        Moller-Trumbore line triangle intersection argorithm
 
-       |t| =    1        |(T x E1) * E2|
-       |u| = -------  x  |(R x E2) * T |
-       |v| = (R x E2)    |(T x E1) * R |
+       |t| =       1           |(T x E1) * E2|
+       |u| = -------------  x  |(ray_dir x E2) * T |
+       |v| = (ray_dir x E2)    |(T x E1) * ray_dir |
 
-       where T = ray_start - v0, E1 = v1 - v0, E2 = v2 - v0 and v0, v1, v2 are in _counter clockwise order_
-       ray  = ray_start + t * R;
+       where T = ray_start - v0, E1 = v1 - v0, E2 = v2 - v0,
+       ray  = ray_start + t * ray_dir;
 
        u & v = barycentric coordinates of the triangle, as a triangle can be represented in a form of 
        (1 - u - v)*v0 + u*v1 + v*v2;
 
-       Note that there are a lot of same cross products, which we can store and save some calculations
+       Note that there are a lot of same cross products, which we can calculate just once and reuse
+       v0, v1, v2 can be in any order
     */
     b32 result = false;
 

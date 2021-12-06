@@ -3,7 +3,7 @@ ARCHITECTURE = -arch arm64
 MAKEFLAGS += --silent
 
 # -O0 = unoptimized, -O2 = compiler optimized
-COMPILER_FLAGS = -g -Wall -O0 -std=c++11 -lm -D MEKA_DEBUG=1 -D MEKA_LLVM=1 -D MEKA_ARM=1 -D MEKA_VULKAN=0 -D MEKA_METAL=1 -I../external
+COMPILER_FLAGS = -g -Wall -O0 -std=c++11 -lm -D MEKA_DEBUG=1 -D MEKA_LLVM=1 -D MEKA_ARM=1 -D MEKA_VULKAN=0 -D MEKA_METAL=1 #to test the library, enable this -I../external
 # to disable warning, prefix the name of the warning with no-
 COMPILER_IGNORE_WARNINGS = -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-writable-strings -Wno-switch -Wno-objc-missing-super-calls -Wno-missing-braces -Wnonportable-include-path
 MAIN_CODE_PATH = ../code
