@@ -15,4 +15,13 @@ Occasionally, I might use some of the single-header libraries such as 'stb_image
 Fow now, Meka Renderer is _not_ meant to be used professionally in any means. This is more like a playground for me to learn and explore.
 Feel free to explore, and if you want to keep track of the progress, you can visit _mekalopo.com_
 
+# Sample Images
+4096rays/pixel, 104.837008ns/ray
+![Sample 4](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/4.png)
+256rays/pixel, 104.837008ns/ray
+![Sample 5](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/5.png)
+![Sample 1](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/1.png)
+![Sample 2](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/2.png)
+![Sample 3](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/3.png)
+
 
