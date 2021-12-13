@@ -29,7 +29,7 @@ typedef double r64;
 #define assert(Expression) if(!(Expression)) {int *a = 0; *a = 0;}
 #define array_count(Array) (sizeof(Array) / sizeof(Array[0]))
 
-#define global_variable static
+#define global static
 #define local_persist static
 #define internal static
 
@@ -37,6 +37,10 @@ typedef double r64;
 #define megabytes(value) 1024LL*kilobytes(value)
 #define gigabytes(value) 1024LL*megabytes(value)
 #define terabytes(value) 1024LL*gigabytes(value)
+
+#define sec_to_nano_sec 1.0e+9f
+#define sec_to_micro_sec 1000.0f
+//#define nano_sec_to_micro_sec 0.0001f // TODO(joon): Find the correct value :(
 
 #define maximum(a, b) ((a>b)? a:b) 
 #define minimum(a, b) ((a<b)? a:b) 
@@ -59,8 +63,12 @@ struct platform_read_file_result
     u8 *memory;
     u64 size; // TOOD/joon : make this to be at least 64bit
 };
+
 #define PLATFORM_READ_FILE(name) platform_read_file_result (name)(char *filename)
 typedef PLATFORM_READ_FILE(platform_read_file);
+
+#define PLATFORM_WRITE_ENTIRE_FILE(name) void (name)(char *file_name, void *memory_to_write, u32 size)
+typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 
 #define PLATFORM_FREE_FILE_MEMORY(name) void (name)(void *memory)
 typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
@@ -68,6 +76,7 @@ typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
 struct platform_api
 {
     platform_read_file *read_file;
+    platform_write_entire_file *write_entire_file;
     platform_free_file_memory *free_file_memory;
 };
 
@@ -286,7 +295,7 @@ u64 rdtsc(void)
 	return val;
 }
 
-global_variable debug_cycle_counter debug_cycle_counters[debug_cycle_counter_count];
+global debug_cycle_counter debug_cycle_counters[debug_cycle_counter_count];
 
 #define begin_cycle_counter(ID) u64 begin_cycle_count_##ID = rdtsc();
 #define end_cycle_counter(ID) debug_cycle_counters[debug_cycle_counter_##ID].cycle_count += rdtsc() - begin_cycle_count_##ID; \
@@ -306,8 +315,8 @@ struct thread_work_item
     b32 written; // indicates whether this item is properly filled or not
 };
 
-#define PLATFORM_FINISH_ALL_THREAD_WORK_QUEUE_ITEMS(name) void name(thread_work_queue *queue)
-typedef PLATFORM_FINISH_ALL_THREAD_WORK_QUEUE_ITEMS(platform_finish_all_thread_work_queue_items);
+#define PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(name) void name(thread_work_queue *queue)
+typedef PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(platform_complete_all_thread_work_queue_items);
 
 #define PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(name) void name(thread_work_queue *queue, thread_work_callback *threadWorkCallback, void *data)
 typedef PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(platform_add_thread_work_queue_item);
@@ -317,14 +326,14 @@ typedef PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(platform_add_thread_work_queue_item)
 struct thread_work_queue
 {
     // NOTE(joon) : volatile forces the compiler not to optimize the value out, and always to the load(as other thread can change it)
-    u32 volatile writeIndex;
-    u32 volatile readIndex;
+    int volatile work_index; // index to the queue that is currently under work
+    int volatile add_index;
 
-    thread_work_item items[256];
+    thread_work_item items[1024];
 
     // now this can be passed onto other codes, such as seperate game code to be used as rendering 
-    platform_add_thread_work_queue_item *AddThreadWorkQueueItem;
-    platform_finish_all_thread_work_queue_items * FinishAllThreadWorkQueueItems;
+    platform_add_thread_work_queue_item *add_thread_work_queue_item;
+    platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
 };
 
 #endif

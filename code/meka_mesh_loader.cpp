@@ -85,358 +85,6 @@ parse_numeric(u8 *start)
     return result;
 }
 
-#if 0
-/*
-    TODO(joon)
-    - Cannot load more than u32 amount of points
-    - Cannot load more than one mesh
-    - Doesnt load any material and texture information
-    - Doesnt check how many points are there in advance
-    - Doesnt check how many buffers are specified inside the file
- */
-// NOTE(joon) : Loads single mesh only gltf file, in a _very_ slow way.
-internal raw_mesh
-ReadSingleMeshOnlygltf(platform_api *platformApi, char *gltfFileName, char *binFileName)
-{
-    platform_read_file_result gltf = platformApi->ReadFile(gltfFileName);
-    platform_read_file_result bin = platformApi->ReadFile(binFileName);
-
-    raw_mesh result = {};
-
-    if(gltf.memory && bin.memory)
-    {
-        char *c = (char *)gltf.memory;
-
-        char *meshesCharPtr = 0;
-        while(*c != '\0')
-        {
-            if(StringCompare(c, "meshes"))
-            {
-                meshesCharPtr = c;
-                break;
-            }
-
-            c++;
-        }
-
-        c = (char *)gltf.memory;
-        char *bufferViewCharPtr = 0;
-        while(*c != '\0')
-        {
-            if(StringCompare(c, "bufferViews"))
-            {
-                bufferViewCharPtr = c;
-                break;
-            }
-
-            c++;
-        }
-
-        assert(meshesCharPtr && bufferViewCharPtr);
-
-        u32 positionBufferViewIndex = UINT_MAX;
-        u32 normalBufferViewIndex = UINT_MAX;
-        u32 textureCoordBufferViewIndex = UINT_MAX;
-        u32 indexBufferViewIndex = UINT_MAX;
-
-        u32 boxBracketCount = 0;
-        //u32 curlyBracketCount = 0;
-        c = (char *)meshesCharPtr;
-        while(*c != '\0')
-        {
-            if(StringCompare(c, "\"NORMAL\""))
-            {
-                normalBufferViewIndex = FindClosestConsecutiveUInt32(c);
-            }
-            else if(StringCompare(c, "\"POSITION\""))
-            {
-                positionBufferViewIndex = FindClosestConsecutiveUInt32(c);
-            }
-            else if(StringCompare(c, "\"TEXCOORD_0\""))
-            {
-                textureCoordBufferViewIndex = FindClosestConsecutiveUInt32(c);
-            }
-            else if(StringCompare(c, "\"indices\""))
-            {
-                indexBufferViewIndex = FindClosestConsecutiveUInt32(c);
-            }
-            else if(*c == '[')
-            {
-                boxBracketCount++;
-            }
-            else if(*c == ']')
-            {
-                boxBracketCount--;
-                if(boxBracketCount == 0)
-                {
-                    break;
-                }
-            }
-            c++;
-        }
-
-        // TODO(joon) : Obviously, this is a hack.
-        u32 bufferIndices[100] = {};
-        u32 bufferIndexCount = 0;
-        u32 byteLengths[100] = {};
-        u32 byteLengthCount = 0;
-        u32 byteOffsets[100] = {};
-        u32 byteOffsetCount = 0;
-        //u32 targets[100] = {};
-
-        u32 curlBracketCount = 0;
-        boxBracketCount = 0;
-        c = (char *)bufferViewCharPtr;
-        while(*c != '\0')
-        {
-            if(StringCompare(c, "\"buffer\""))
-            {
-                bufferIndices[bufferIndexCount++] = FindClosestConsecutiveUInt32(c);
-            }
-            else if(StringCompare(c, "\"byteLength\""))
-            {
-                byteLengths[byteLengthCount++] = FindClosestConsecutiveUInt32(c);
-            }
-            else if(StringCompare(c, "\"byteOffset\""))
-            {
-                byteOffsets[byteOffsetCount++] = FindClosestConsecutiveUInt32(c);
-            }
-            else if(StringCompare(c, "\"target\""))
-            {
-                // TODO(joon) : Should we care about this?
-            }
-            else if(*c == '[')
-            {
-                boxBracketCount++;
-            }
-            else if(*c == ']')
-            {
-                boxBracketCount--;
-                if(boxBracketCount == 0)
-                {
-                    break;
-                }
-            }
-            else if(*c == '{')
-            {
-                // one block of bufferview has started
-                curlBracketCount++;
-            }
-            else if(*c == '}')
-            {
-                curlBracketCount--;
-                assert(curlBracketCount == 0);
-
-                // Some gltf files does not include the bytesOffset variable 
-                // for the first member of bufferView to save memory
-                if(byteOffsetCount != bufferIndexCount)
-                {
-                    assert(byteOffsetCount < bufferIndexCount);
-                    byteOffsets[byteOffsetCount] = 0;
-                    byteOffsetCount = bufferIndexCount;
-                }
-            }
-            
-            c++;
-        }
-
-        if(positionBufferViewIndex != UINT_MAX)
-        {
-            // TODO(joon) : We don't care about buffer index, as there is just one buffer
-            assert(byteLengths[positionBufferViewIndex]%(sizeof(v3)) == 0);
-
-            result.position_count = (byteLengths[positionBufferViewIndex]/(sizeof(v3)));
-            result.positions = (v3 *)malloc(sizeof(v3)*result.position_count);
-
-            r32 *memory = (r32 *)((u8 *)bin.memory + byteOffsets[positionBufferViewIndex]);
-            for(u32 pIndex = 0;
-                pIndex < result.position_count;
-                pIndex++)
-            {
-                result.positions[pIndex].x = (r32)*memory;
-                result.positions[pIndex].y = (r32)*(memory + 1);
-                result.positions[pIndex].z = (r32)*(memory + 2);
-
-                memory += 3;
-            }
-        }
-        else
-        {
-            // TODO(joon) : vertex position is mandatory!
-            assert(0);
-        }
-
-        if(normalBufferViewIndex != UINT_MAX)
-        {
-            assert(byteLengths[normalBufferViewIndex]%(sizeof(r32)*3) == 0);
-
-            result.normalCount = (byteLengths[positionBufferViewIndex]/(sizeof(r32)*3));
-            result.normals = (v3 *)malloc(sizeof(v3)*result.normalCount);
-
-            r32 *memory = (r32 *)((u8 *)bin.memory + byteOffsets[normalBufferViewIndex]);
-            for(u32 normalIndex = 0;
-                normalIndex < result.normalCount;
-                normalIndex++)
-            {
-                result.normals[normalIndex].x = *memory;
-                result.normals[normalIndex].y = *(memory + 1);
-                result.normals[normalIndex].z = *(memory + 2);
-
-                memory += 3;
-            }
-        }
-        else
-        {
-            // TODO(joon) : Generate normal vectors ourselves, if there are no normal information
-            //assert(0);
-        }
-
-        if(textureCoordBufferViewIndex != UINT_MAX)
-        {
-            assert(byteLengths[textureCoordBufferViewIndex]%(sizeof(r32)*2) == 0);
-
-            result.textureCoordCount = (byteLengths[textureCoordBufferViewIndex]/(sizeof(r32)*2));
-            result.textureCoords = (v2 *)malloc(sizeof(v2)*result.textureCoordCount);
-
-            r32 *memory = (r32 *)((u8 *)bin.memory + byteOffsets[normalBufferViewIndex]);
-            for(u32 textureCoordIndex = 0;
-                textureCoordIndex < result.textureCoordCount;
-                textureCoordIndex++)
-            {
-                result.textureCoords[textureCoordIndex].x = *memory;
-                result.textureCoords[textureCoordIndex].y = *(memory + 1);
-
-                memory += 2;
-            }
-        }
-        else
-        {
-            // TODO(joon) : Again, texture coord is not mandatory, so we should not assert here.
-            //assert(0);
-        }
-
-        if(indexBufferViewIndex != UINT_MAX)
-        {
-            // TODO(joon) : Is all the indices inside gltf 16 bit or should we manually check that
-            // by getting the total count from gltf?
-            assert(byteLengths[indexBufferViewIndex]%(sizeof(u16)) == 0);
-
-            result.index_count = byteLengths[indexBufferViewIndex]/sizeof(u16);
-            assert(result.index_count%3 == 0); // no faces should be open
-            result.indices = (u16 *)malloc(sizeof(u16)*result.index_count);
-
-            u16 *memory = (u16 *)((u8 *)bin.memory + byteOffsets[indexBufferViewIndex]);
-            for(u32 indexIndex = 0;
-                indexIndex < result.index_count;
-                indexIndex++)
-            {
-                result.indices[indexIndex] = *memory;
-
-                memory += 1;
-            }
-        }
-        else
-        {
-            assert(0);
-        }
-    }
-    else
-    {
-        // TODO(joon) : this gltf file cannot be loaded!
-        assert(0);
-    }
-
-    return result;
-}
-#endif
-
-#define decimalPointP1 0.1f
-#define decimalPointP2 0.01f
-#define decimalPointP3 0.001f
-#define decimalPointP4 0.0001f
-#define decimalPointP5 0.00001f
-#define decimalPointP6 0.000001f
-
-internal r32
-ParseCharIntoR32(char *buffer, u32 start, u32 end, u32 decimalPointP, b32 isNegativeValue)
-{
-    i32 decimal = 0;
-
-    for(u32 index = start;
-        index < end;
-        ++index)
-    {
-        char c = buffer[index]; 
-        switch(c)
-        {
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7':
-            case '8':
-            case '9':
-            case '0':
-            {
-                i32 number = c - 48;
-                decimal = 10*decimal;
-                decimal += number;
-            }
-        }
-    }
-
-    if(isNegativeValue)
-    {
-        decimal *= -1;
-    }
-
-    r32 result = (r32)decimal;
-    // TODO(joon) : This is busted if we have a number without decimal point
-    if(end - decimalPointP - 1 > 0)
-    {
-        float decimalPointR32 = 0.0f;
-        switch(end - decimalPointP - 1)
-        {
-            case 1:
-            {
-                decimalPointR32 = decimalPointP1;
-            }break;
-            case 2:
-            {
-                decimalPointR32 = decimalPointP2;
-            }break;
-            case 3:
-            {
-                decimalPointR32 = decimalPointP3;
-            }break;
-            case 4:
-            {
-                decimalPointR32 = decimalPointP4;
-            }break;
-            case 5:
-            {
-                decimalPointR32 = decimalPointP5;
-            }break;
-            case 6:
-            {
-                decimalPointR32 = decimalPointP6;
-            }break;
-
-            default:
-            {
-                // TODO(joon): doesn't support more than 6 deicmal points, as it's out of floating point precision
-                assert(0);
-            }break;
-        }
-
-        result *= decimalPointR32;
-    }
-
-    return result;
-}
-
 char *
 AdvancePointerUntil_v_(char *c)
 {
@@ -1218,7 +866,7 @@ peek_up_to_three_numeric_values(obj_tokenizer *tokenizer)
 // TODO(joon): parsing positions and vertex normals work just fine,
 // but havent yet tested with the texture coords. Will do when I have a png loader :)
 internal raw_mesh
-parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_size)
+parse_obj_tokens(memory_arena *memory_arena, u8 *file, size_t file_size)
 {
     assert(file && file_size > 0);
 
@@ -1326,9 +974,9 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
     
     // NOTE(joon) : position and indices are crucial, so we assert heree
     assert(result.position_count != 0);
-    result.positions = (v3 *)push_array(permanent_memory_arena, v3, result.position_count);
+    result.positions = (v3 *)push_array(memory_arena, v3, result.position_count);
     assert(result.index_count != 0);
-    result.indices = (u32 *)push_array(permanent_memory_arena, u32, result.index_count);
+    result.indices = (u32 *)push_array(memory_arena, u32, result.index_count);
 
     // NOTE(joon): properties below are not crucial, but we need to check the count of it 
     // because malloc will return the pointer whether the count is zero or not
@@ -1338,11 +986,11 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
             (result.normal_count == 0 && result.normal_index_count == 0));
     if(result.normal_count != 0)
     {
-        result.normals = (v3 *)push_array(permanent_memory_arena, v3, result.normal_count);
+        result.normals = (v3 *)push_array(memory_arena, v3, result.normal_count);
     }
     if(result.normal_index_count != 0)
     {
-        result.normal_indices = (u32 *)push_array(permanent_memory_arena, u32, result.normal_index_count);
+        result.normal_indices = (u32 *)push_array(memory_arena, u32, result.normal_index_count);
     }
 
     // Do not allow only one of them being NULL 
@@ -1350,11 +998,11 @@ parse_obj_tokens(memory_arena *permanent_memory_arena, u8 *file, size_t file_siz
             (result.texcoord_count == 0 && result.texcoord_index_count == 0));
     if(result.texcoord_count != 0)
     {
-        result.texcoords = (v2 *)push_array(permanent_memory_arena, v2, result.texcoord_count);
+        result.texcoords = (v2 *)push_array(memory_arena, v2, result.texcoord_count);
     }
     if(result.texcoord_index_count != 0)
     {
-        result.texcoord_indices = (u32 *)push_array(permanent_memory_arena, u32, result.normal_index_count);
+        result.texcoord_indices = (u32 *)push_array(memory_arena, u32, result.normal_index_count);
     }
 
     // Reset the counts to use them below
@@ -1628,7 +1276,7 @@ parse_obj_line_with_v_or_vn(u8 *start, u8 *end)
 // TODO/Joon : not super important, but measure the time just for fun
 // Naive method, which is stepping character by character(1 byte)
 internal raw_mesh
-parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_memory_arena, u8 *file, size_t file_size)
+parse_obj_slow(memory_arena *memory_arena, memory_arena *transient_memory_arena, u8 *file, size_t file_size)
 {
     assert(file && file_size != 0);
 
@@ -1758,18 +1406,18 @@ parse_obj_slow(memory_arena *permanent_memory_arena, memory_arena *transient_mem
 
     raw_mesh mesh = {};
     mesh.index_count = index_count;
-    mesh.indices = push_array(permanent_memory_arena, u32, sizeof(u32)*index_count);
+    mesh.indices = push_array(memory_arena, u32, sizeof(u32)*index_count);
 
     mesh.normal_index_count = index_count;
-    mesh.normal_indices = push_array(permanent_memory_arena, u32, sizeof(u32)*me);
+    mesh.normal_indices = push_array(memory_arena, u32, sizeof(u32)*me);
 
     mesh.texcoord_index_count = index_count;
-    mesh.vt_indices = push_array(permanent_memory_arena, u32, sizeof(u32)*index_count);
+    mesh.vt_indices = push_array(memory_arena, u32, sizeof(u32)*index_count);
 
-    mesh.positions = push_array(permanent_memory_arena, v3, sizeof(v3)*v_line_count);
+    mesh.positions = push_array(memory_arena, v3, sizeof(v3)*v_line_count);
     if(vn_line_count)
     {
-        mesh.normals = push_array(permanent_memory_arena, v3, sizeof(v3)*vn_line_count);
+        mesh.normals = push_array(memory_arena, v3, sizeof(v3)*vn_line_count);
     }
 
     u32 mesh_index_count = 0;

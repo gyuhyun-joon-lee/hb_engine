@@ -22,7 +22,7 @@ struct vertex_output
 // NOTE(joon) : vertex is a prefix for vertex shader
 vertex vertex_output
 vertex_function(uint vertexID [[vertex_id]],
-             constant temp_vertex *vertices [[buffer(0)]],
+             constant temp_vertex *vertices [[buffer(0)]], 
              constant per_frame_data *per_frame_data [[buffer(1)]],
              constant per_object_data *per_object_data [[buffer(2)]])
 {
@@ -31,11 +31,12 @@ vertex_function(uint vertexID [[vertex_id]],
     r32_3 model_p = vertices[vertexID].p;
     r32_3 normal = vertices[vertexID].normal;
 
-    // TODO(joon): This is so werid...
     r32_3 world_p = (per_object_data->model*convert_to_r32_4(model_p, 1.0f)).xyz;
 
-    output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
+    r32_4 view_p = per_frame_data->view*convert_to_r32_4(world_p, 1.0f);
+    output.clip_position = per_frame_data->proj*view_p;
 
+    output.p = world_p;
     output.normal = normalize((per_object_data->model * convert_to_r32_4(normal, 0.0f)).xyz);
     output.light_p = per_frame_data->light_p;
     output.color = per_object_data->color;
@@ -72,7 +73,7 @@ raytracing_vertex_function(uint vertexID [[vertex_id]],
 {
     vertex_output output = {};
 
-    r32_3 world_p = vertices[vertexID];
+    r32_3 world_p = vertices[vertexID].xyz;
 
     output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
 

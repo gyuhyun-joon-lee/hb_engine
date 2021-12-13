@@ -17,6 +17,19 @@ typedef float r32;
 typedef double r64;
 #endif
 
+#define flt_min FLT_MIN
+#define flt_max FLT_MAX
+#define u32_max UINT32_MAX
+#define u16_max UINT16_MAX
+#define u8_max UINT8_MAX
+
+#define i32_min INT32_MIN
+#define i32_max INT32_MAX
+#define i16_min INT16_MIN
+#define i16_max INT16_MAX
+#define i8_min INT8_MIN
+#define i8_max INT8_MAX
+
 struct v2
 {
     r32 x;
@@ -25,9 +38,28 @@ struct v2
 
 struct v3
 {
-    r32 x;
-    r32 y;
-    r32 z;
+    union
+    {
+        struct 
+        {
+            r32 x;
+            r32 y;
+            r32 z;
+        };
+        struct 
+        {
+            r32 r;
+            r32 g;
+            r32 b;
+        };
+        struct 
+        {
+            v2 xy;
+            r32 ignored;
+        };
+
+        r32 e[3];
+    };
 };
 
 struct v4

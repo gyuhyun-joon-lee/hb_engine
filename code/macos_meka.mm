@@ -5,6 +5,11 @@
 #include <mach/mach_time.h> // mach_absolute_time
 #include <stdio.h> // printf for debugging purpose
 #include <sys/stat.h>
+#include <libkern/OSAtomic.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <Carbon/Carbon.h>
+
 #include "meka_metal_shader_shared.h"
 
 #undef internal
@@ -14,6 +19,7 @@
 #include "meka_platform.h"
 #include "meka_math.h"
 #include "meka_random.h"
+#include "meka_simd.h"
 // NOTE(joon):add platform independent codes here
 
 #include "meka_render.h"
@@ -21,6 +27,31 @@
 #include "meka_mesh_loader.cpp"
 #include "meka_render.cpp"
 #include "meka_ray.cpp"
+
+//TODO(joon) : Put input handlers inside some struct or something
+global b32 is_w_down;
+global b32 is_a_down;
+global b32 is_s_down;
+global b32 is_d_down;
+
+global b32 is_i_down;
+global b32 is_j_down;
+global b32 is_k_down;
+global b32 is_l_down;
+
+global b32 is_arrow_up_down;
+global b32 is_arrow_down_down;
+global b32 is_arrow_left_down;
+global b32 is_arrow_right_down;
+
+// TODO(joon): Get rid of global variables?
+global v2 last_mouse_p;
+global v2 mouse_diff;
+
+global u64 last_time;
+
+global b32 is_game_running;
+global dispatch_semaphore_t semaphore;
 
 internal u64 
 mach_time_diff_in_nano_seconds(u64 begin, u64 end, r32 nano_seconds_per_tick)
@@ -58,33 +89,30 @@ PLATFORM_READ_FILE(debug_macos_read_file)
     return Result;
 }
 
-#if 0
-PLATFORM_WRITE_ENTIRE_FILE(debug_macos_write_file)
+PLATFORM_WRITE_ENTIRE_FILE(debug_macos_write_entire_file)
 {
-    // NOTE : This call will fail if the file already exists.
-    int File = open(fileNameToCreate, O_WRONLY|O_CREAT|O_EXCL, S_IRWXU);
-    if(File >= 0) // NOTE : If the open() succeded, the return value is non-negative value.
+    int file = open(file_name, O_WRONLY|O_CREAT|O_TRUNC, S_IRWXU);
+
+    if(file >= 0) 
     {
-        if(write(File, memoryToWrite, fileSize) == -1)
+        if(write(file, memory_to_write, size) == -1)
         {
-            // TODO : LOG here
+            // TODO(joon) : LOG here
         }
 
-        close(File);
+        close(file);
     }
     else
     {
-        // TODO : File already exists. LOG here.
+        // TODO(joon) :LOG
+        printf("Failed to create file\n");
     }
 }
-#endif
 
 PLATFORM_FREE_FILE_MEMORY(debug_macos_free_file_memory)
 {
     free(memory);
 }
-
-global_variable b32 is_game_running;
 
 @interface 
 app_delegate : NSObject<NSApplicationDelegate>
@@ -111,16 +139,6 @@ app_delegate : NSObject<NSApplicationDelegate>
     [pool drain];
 }
 
-- (void)windowDidBecomeKey:(NSNotification *)notification
-{
-    int a = 1;
-}
-
-- (void)windowDidBecomeMain:(NSNotification *)notification
-{
-    int a = 1;
-}
-
 @end
 
 #define check_ns_error(error)\
@@ -132,7 +150,6 @@ app_delegate : NSObject<NSApplicationDelegate>
     }\
 }\
 
-global_variable u64 last_time;
 
 internal CVReturn 
 display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_time, const CVTimeStamp* output_time,
@@ -160,8 +177,8 @@ metal_record_render_command(id<MTLRenderCommandEncoder> render_encoder, render_m
     // or does it need a seperate storage that holds all the uniform buffer just like in Vulkan?
     u32 per_object_data_index_in_shader = 2;
     per_object_data per_object_data = {};
-    per_object_data.model = convert_m4_to_r32_4x4(translate_m4(translate)*scale_m4(scale));
-    per_object_data.color = convert_to_r32_3(color);
+    per_object_data.model = translate_m4(translate)*scale_m4(scale);
+    per_object_data.color = color;
 
     [render_encoder setVertexBytes: &per_object_data
                     length: sizeof(per_object_data)
@@ -233,20 +250,6 @@ metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh,
     return result;
 }
 
-#include <Carbon/Carbon.h>
-//TODO(joon) : obviously not a final code
-global_variable b32 is_w_down;
-global_variable b32 is_a_down;
-global_variable b32 is_s_down;
-global_variable b32 is_d_down;
-global_variable b32 is_arrow_up_down;
-global_variable b32 is_arrow_down_down;
-global_variable b32 is_arrow_left_down;
-global_variable b32 is_arrow_right_down;
-
-global_variable v2 last_mouse_p;
-global_variable v2 mouse_diff;
-
 internal void
 macos_handle_event(NSApplication *app, NSWindow *window)
 {
@@ -265,8 +268,6 @@ macos_handle_event(NSApplication *app, NSWindow *window)
     v2 rel_mouse_location = {};
     rel_mouse_location.x = mouse_location.x - bottom_left_p.x;
     rel_mouse_location.y = mouse_location.y - bottom_left_p.y;
-
-    
 
     r32 mouse_speed_when_clipped = 0.08f;
     if(rel_mouse_location.x >= 0.0f && rel_mouse_location.x < content_rect_dim.x)
@@ -295,7 +296,7 @@ macos_handle_event(NSApplication *app, NSWindow *window)
         mouse_diff.y = mouse_speed_when_clipped;
     }
 
-    // NOTE(joon) : Make y to be bottom-up
+    // NOTE(joon) : MacOS screen coordinate is bottom-up, so just for the convenience, make y to be bottom-up
     mouse_diff.y *= -1.0f;
 
     last_mouse_p.x = mouse_location.x;
@@ -344,6 +345,24 @@ macos_handle_event(NSApplication *app, NSWindow *window)
                         {
                             is_d_down = is_down;
                         }
+
+                        else if(key_code == kVK_ANSI_I)
+                        {
+                            is_i_down = is_down;
+                        }
+                        else if(key_code == kVK_ANSI_J)
+                        {
+                            is_j_down = is_down;
+                        }
+                        else if(key_code == kVK_ANSI_K)
+                        {
+                            is_k_down = is_down;
+                        }
+                        else if(key_code == kVK_ANSI_L)
+                        {
+                            is_l_down = is_down;
+                        }
+
                         else if(key_code == kVK_LeftArrow)
                         {
                             is_arrow_left_down = is_down;
@@ -383,15 +402,407 @@ macos_handle_event(NSApplication *app, NSWindow *window)
             break;
         }
     }
+} 
+
+
+#pragma pack(push, 1)
+struct debug_bmp_file_header
+{
+    u16 file_header;
+    u32 file_size;
+    u16 reserved_1;
+    u16 reserved_2;
+    u32 pixel_offset;
+
+    u32 header_size;
+    u32 width;
+    u32 height;
+    u16 color_plane_count;
+    u16 bits_per_pixel;
+    u32 compression;
+
+    u32 image_size;
+    u32 pixels_in_meter_x;
+    u32 pixels_in_meter_y;
+    u32 colors;
+    u32 important_color_count;
+    u32 red_mask;
+    u32 green_mask;
+    u32 blue_mask;
+    u32 alpha_mask;
+};
+#pragma pack(pop)
+
+// TODO(joon) : It seems like this combines read & write barrier, but make sure
+// TODO(joon) : mfence?(DSB)
+#define write_barrier() OSMemoryBarrier(); 
+#define read_barrier() OSMemoryBarrier();
+
+struct macos_thread
+{
+    u32 ID;
+    thread_work_queue *queue;
+};
+
+// NOTE(joon) : use this to add what thread should do
+internal 
+THREAD_WORK_CALLBACK(print_string)
+{
+    char *stringToPrint = (char *)data;
+    printf("%s\n", stringToPrint);
 }
 
-PLATFORM_DEBUG_PRINT_CYCLE_COUNTERS(macos_debug_print_cycle_counters)
+struct thread_work_raytrace_tile_data
+{
+    raytracer_data raytracer_input;
+};
+
+global volatile u64 total_bounced_ray_count;
+internal 
+THREAD_WORK_CALLBACK(thread_work_callback_render_tile)
+{
+    thread_work_raytrace_tile_data *raytracer_data = (thread_work_raytrace_tile_data *)data;
+    raytracer_output output = render_raytraced_image_tile(&raytracer_data->raytracer_input);
+
+    // TODO(joon): double check the return value of the OSAtomicIncrement32, is it really a post incremented value? 
+    i32 rendered_tile_count = OSAtomicIncrement32Barrier((volatile int32_t *)&raytracer_data->raytracer_input.world->rendered_tile_count);
+
+    u64 ray_count = raytracer_data->raytracer_input.ray_per_pixel_count*
+                    (raytracer_data->raytracer_input.one_past_max_x - raytracer_data->raytracer_input.min_x) * 
+                    (raytracer_data->raytracer_input.one_past_max_y - raytracer_data->raytracer_input.min_y);
+    OSAtomicAdd64Barrier(ray_count, (volatile int64_t *)&raytracer_data->raytracer_input.world->total_ray_count);
+    OSAtomicAdd64Barrier(output.bounced_ray_count, (volatile int64_t *)&raytracer_data->raytracer_input.world->bounced_ray_count);
+
+    printf("%dth tile finished with %llu rays\n", rendered_tile_count, raytracer_data->raytracer_input.world->total_ray_count);
+}
+
+// TODO(joon) : With current memory arena, we cannot multi-thread the parsing obj
+// Make an atomic version(with thread safey) of memory arena?
+#if 0
+internal
+THREAD_WORK_CALLBACK(load_and_parse_obj)
 {
 }
+#endif
 
+// NOTE(joon): This is single producer multiple consumer - 
+// meaning, it _does not_ provide any thread safety
+// For example, if the two threads try to add the work item,
+// one item might end up over-writing the other one
+internal void
+macos_add_thread_work_item(thread_work_queue *queue,
+                            thread_work_callback *work_callback,
+                            void *data)
+{
+    assert(data); // TODO(joon) : There might be a work that does not need any data?
+    thread_work_item *item = queue->items + queue->add_index;
+    item->callback = work_callback;
+    item->data = data;
+    item->written = true;
+
+    write_barrier();
+    queue->add_index++;
+
+    // increment the semaphore value by 1
+    dispatch_semaphore_signal(semaphore);
+}
+
+internal b32
+macos_do_thread_work_item(thread_work_queue *queue, u32 thread_index)
+{
+    b32 did_work = false;
+    if(queue->work_index != queue->add_index)
+    {
+        int original_work_index = queue->work_index;
+        int expected_work_index = original_work_index + 1;
+
+        if(OSAtomicCompareAndSwapIntBarrier(original_work_index, expected_work_index, &queue->work_index))
+        {
+            thread_work_item *item = queue->items + original_work_index;
+            item->callback(item->data);
+
+            //printf("Thread %u: Finished working\n", thread_index);
+            did_work = true;
+        }
+    }
+
+    return did_work;
+}
+
+internal 
+PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_queue_items)
+{
+    // TODO(joon): If there was a last thread that was working on the item,
+    // this does not guarantee that the last work will be finished.
+    // Maybe add some flag inside the thread? (sleep / working / ...)
+    while(queue->work_index != queue->add_index) 
+    {
+        macos_do_thread_work_item(queue, 0);
+    }
+}
+
+internal void*
+thread_proc(void *data)
+{
+    macos_thread *thread = (macos_thread *)data;
+    while(1)
+    {
+        if(macos_do_thread_work_item(thread->queue, thread->ID))
+        {
+        }
+        else
+        {
+            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+        }
+    }
+
+    return 0;
+}
+    
 int 
 main(void)
 {
+    struct mach_timebase_info mach_time_info;
+    mach_timebase_info(&mach_time_info);
+    r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
+
+    u32 output_width = 1920;
+    u32 output_height = 1080;
+
+    u32 output_size = sizeof(u32)*output_width*output_height + sizeof(debug_bmp_file_header);
+    u8 *output = (u8 *)malloc(output_size);
+    zero_memory(output, output_size);
+    
+    debug_bmp_file_header *bmp_header = (debug_bmp_file_header *)output;  
+    bmp_header->file_header = 19778;
+    bmp_header->file_size = output_size;
+    bmp_header->pixel_offset = sizeof(debug_bmp_file_header);
+
+    bmp_header->header_size = sizeof(debug_bmp_file_header) - 14;
+    bmp_header->width = output_width;
+    bmp_header->height = output_height;
+    bmp_header->color_plane_count = 1;
+    bmp_header->bits_per_pixel = 32;
+    bmp_header->compression = 3;
+
+    bmp_header->image_size = sizeof(u32)*output_width*output_height;
+    bmp_header->pixels_in_meter_x = 11811;
+    bmp_header->pixels_in_meter_y = 11811;
+    bmp_header->red_mask = 0x00ff0000;
+    bmp_header->green_mask = 0x0000ff00;
+    bmp_header->blue_mask = 0x000000ff;
+    bmp_header->alpha_mask = 0xff000000;
+
+    material materials[6] = {};
+    // TODO(joon): objects with emit color seems like working ok only ifbthe emit color is much brighter than the limit.. 
+    // are we doing something wrong ?
+    materials[0].emit_color = V3(0.1f, 0.1f, 1.0f);
+
+    materials[1].emit_color = V3(0.01f, 0.01f, 0.01f);
+    materials[1].reflection_color = V3(0.3f, 0.12f, 0.12f);
+    materials[1].reflectivity = 0.0f; 
+
+    materials[2].emit_color = 2*V3(1.0f, 0.1f, 0.2f);
+    materials[2].reflectivity = 0.5f;
+
+    materials[3].reflection_color = V3(0.3f, 0.7f, 0.2f);
+    materials[3].reflectivity = 1.0f;
+
+    materials[4].reflection_color = V3(0.3f, 0.1f, 0.7f);
+    materials[4].reflectivity = 0.6f;
+
+    materials[5].reflection_color = V3(0.9f, 0.7f, 0.8f);
+    materials[5].reflectivity = 0.9f;
+
+    plane planes[1] = {};
+    planes[0].normal = V3(0, 0, 1);
+    planes[0].d = 0;
+    planes[0].material_index = 1;
+
+    sphere spheres[3] = {};
+    spheres[0].center = V3(0, 0, 0); 
+    spheres[0].r = 1; 
+    spheres[0].material_index = 2;
+
+    spheres[1].center = V3(3, -2, 0.8f); 
+    spheres[1].r = 0.7f; 
+    spheres[1].material_index = 3;
+
+    spheres[2].center = V3(-3, 0, 2); 
+    spheres[2].r = 1; 
+    spheres[2].material_index = 4;
+
+    triangle triangles[2] = {};
+    triangles[0].v0 = V3(-30, 7, 0); 
+    triangles[0].v1 = V3(-20, 60, 2); 
+    triangles[0].v2 = V3(0, 4, 2); 
+    triangles[0].material_index = 5;
+
+    triangles[1].v0 = V3(-3, 4, 0.5f); 
+    triangles[1].v1 = V3(3, 4, 0.5f); 
+    triangles[1].v2 = V3(0, 4, 5); 
+    triangles[1].material_index = 5;
+
+    world world = {};
+    world.material_count = array_count(materials);
+    world.materials = materials;
+
+    world.plane_count = array_count(planes);
+    world.planes = planes;
+
+    world.sphere_count = array_count(spheres);
+    world.spheres = spheres;
+
+    world.triangle_count = array_count(triangles);
+    world.triangles = triangles;
+
+    v3 camera_p = V3(2, -10, 1);
+
+    v3 camera_z_axis = normalize(camera_p); // - V3(0, 0, 0), which is the center of the world
+    v3 camera_x_axis = normalize(cross(V3(0, 0, 1), camera_z_axis));
+    v3 camera_y_axis = normalize(cross(camera_z_axis, camera_x_axis));
+
+    r32 film_width = 1.0f;
+    r32 film_height = 1.0f;
+    if(output_width > output_height)
+    {
+        film_height *= output_height/(r32)output_width;
+    }
+    else if(output_width < output_height)
+    {
+        film_width *= output_width/(r32)output_height;
+    }
+
+    r32 half_film_width = film_width/2.0f;
+    r32 half_film_height = film_height/2.0f;
+
+    r32 half_x_per_pixel = 0.5f*film_width/output_width;
+    r32 half_y_per_pixel = 0.5f*film_height/output_height;
+    
+    r32 distance_from_camera_to_film = 1.0f;
+    v3 film_center = camera_p - distance_from_camera_to_film*camera_z_axis;
+
+    // TODO(joon): m1 pro has 8 high performance cores and 2 efficiency cores,
+    // any way to use all of them?
+    u32 core_count = 8;
+
+    // NOTE(joon): If the height is a positive value, the bitmap is bottom-up
+    u32 *pixels = (u32 *)(output + sizeof(debug_bmp_file_header));
+    
+    semaphore = dispatch_semaphore_create(0);
+
+    pthread_attr_t thread_attribute = {};
+    pthread_attr_init(&thread_attribute);
+
+    thread_work_queue work_queue = {};
+#if 1
+    // TODO(joon) : spawn threads based on the core count
+    macos_thread threads[7] = {};
+
+    for(u32 thread_index = 0;
+            thread_index < array_count(threads);
+            ++thread_index)
+    {
+        macos_thread *thread = threads + thread_index;
+        thread->ID = thread_index + 1; // 0th thread is the main thread
+        thread->queue = &work_queue;
+        
+        pthread_t thread_id; // we don't care about this one, we just generate our own id
+        int result = pthread_create(&thread_id, &thread_attribute, &thread_proc, (void *)(threads + thread_index));
+
+        if(result != 0) // 0 is the success value in posix
+        {
+            assert(0);
+        }
+    }
+#endif
+
+    // NOTE(joon): This value should be carefully managed, as it affects to the drainout effect
+    // for now, 16 by 16 seems like outputting the best(close to) result(1.57 sec)?
+    u32 tile_x_count = 16;
+    u32 tile_y_count = 16;
+    u32 pixel_count_per_tile_x = output_width/tile_x_count;
+    u32 pixel_count_per_tile_y = output_height/tile_y_count;
+
+    world.total_tile_count = tile_x_count * tile_y_count;
+    world.rendered_tile_count = 0;
+
+    thread_work_raytrace_tile_data *raytracer_datas = (thread_work_raytrace_tile_data *)malloc(sizeof(thread_work_raytrace_tile_data) * tile_x_count * tile_y_count);
+    u32 raytracer_data_index = 0;
+
+    u64 begin_raytracing_time = mach_absolute_time();
+    for(u32 tile_y = 0;
+            tile_y < tile_y_count;
+            ++tile_y)
+    {
+        u32 min_y = tile_y * pixel_count_per_tile_y;
+        u32 one_past_max_y = min_y + pixel_count_per_tile_y;
+
+        if(one_past_max_y > output_height)
+        {
+            one_past_max_y = output_height;
+        }
+
+        for(u32 tile_x = 0;
+                tile_x < tile_x_count;
+                ++tile_x)
+        {
+            u32 min_x = tile_x * pixel_count_per_tile_x;
+            u32 one_past_max_x = min_x + pixel_count_per_tile_x;
+
+            if(one_past_max_x > output_width)
+            {
+                one_past_max_x = output_width;
+            }
+
+            thread_work_raytrace_tile_data *data = raytracer_datas + raytracer_data_index++;
+            data->raytracer_input.world = &world;
+
+            data->raytracer_input.pixels = pixels;
+            data->raytracer_input.output_width = output_width; 
+            data->raytracer_input.output_height = output_height;
+
+            data->raytracer_input.film_center = film_center;  
+            data->raytracer_input.film_width = film_width; 
+            data->raytracer_input.film_height = film_height;
+
+            data->raytracer_input.camera_p = camera_p;
+            data->raytracer_input.camera_x_axis = camera_x_axis;
+            data->raytracer_input.camera_y_axis = camera_y_axis; 
+            data->raytracer_input.camera_z_axis = camera_z_axis;
+
+            data->raytracer_input.min_x = min_x;
+            data->raytracer_input.one_past_max_x = one_past_max_x;
+            data->raytracer_input.min_y = min_y;
+            data->raytracer_input.one_past_max_y = one_past_max_y;
+
+            data->raytracer_input.ray_per_pixel_count = 16;
+
+            macos_add_thread_work_item(&work_queue,
+                                        thread_work_callback_render_tile,
+                                        (void *)data);
+        }
+    }
+    macos_complete_all_thread_work_queue_items(&work_queue);
+
+    // complete all thread work only gurantee that all the works are fired up, 
+    // but does not gurantee that all of them are done
+    while(world.total_tile_count != world.rendered_tile_count)
+    {
+    }
+
+    // 7.71052sec
+    u64 nano_sec_elapsed = mach_time_diff_in_nano_seconds(begin_raytracing_time, mach_absolute_time(), nano_seconds_per_tick);
+    
+    printf("Raytracing finished in : %.6fsec\n", (float)((double)nano_sec_elapsed/(double)sec_to_nano_sec));
+    printf("Total Ray Count : %llu, ", world.total_ray_count);
+    printf("Bounced Ray Count : %llu, ", world.bounced_ray_count);
+    printf("%0.6fns/ray\n", ((double)nano_sec_elapsed/world.bounced_ray_count));
+
+    //usleep(1000000);
+
+    debug_macos_write_entire_file("/Volumes/meka/meka_renderer/data/test.bmp", (void *)output, output_size);
+
     srand((u32)time(NULL));
 
 	i32 window_width = 1920;
@@ -401,6 +812,7 @@ main(void)
     //TODO : writefile?
     platform_api platform_api = {};
     platform_api.read_file = debug_macos_read_file;
+    platform_api.write_entire_file = debug_macos_write_entire_file;
     platform_api.free_file_memory = debug_macos_free_file_memory;
 
     platform_memory platform_memory = {};
@@ -412,11 +824,6 @@ main(void)
                 (vm_address_t *)&platform_memory.permanent_memory,
                 total_size, 
                 VM_FLAGS_ANYWHERE);
-
-#define sec_to_nano_sec 1.0e+9f
-    struct mach_timebase_info mach_time_info;
-    mach_timebase_info(&mach_time_info);
-    r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
 
     u32 target_frames_per_second = 120;
     r32 target_seconds_per_frame = 1.0f/(r32)target_frames_per_second;
@@ -458,7 +865,9 @@ main(void)
     [SubMenuOfMenuItemWithAppName addItem:quitMenuItem];
     [menu_item_with_item_name setSubmenu:SubMenuOfMenuItemWithAppName];
 
-    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width/2.0f, (r32)window_height/2.0f);
+    // TODO(joon): when connected to the external display, this should be window_width and window_height
+    // but if not, this should be window_width/2 and window_height/2. Why?
+    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width, (r32)window_height);
 
     NSWindow *window = [[NSWindow alloc] initWithContentRect : window_rect
                                         // Apple window styles : https://developer.apple.com/documentation/appkit/nswindow/stylemask
@@ -569,28 +978,6 @@ main(void)
         CVDisplayLinkStart(display_link);
     }
 
-    v3 quad_positions[] = 
-    {
-        {-1, -1, 0}, 
-        {1, -1, 0}, 
-        {1, 1, 0}, 
-        {-1, 1 ,0}
-    };
-
-    u32 quad_indices[] = 
-    {
-        0, 2, 1,
-        0, 3, 2
-    };
-
-    raw_mesh quad_raw_mesh = {};
-    quad_raw_mesh.positions = quad_positions;
-    quad_raw_mesh.position_count = array_count(quad_positions);
-    quad_raw_mesh.indices = quad_indices;
-    quad_raw_mesh.index_count = array_count(quad_indices);
-    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &quad_raw_mesh);
-    render_mesh quad_mesh = metal_create_render_mesh_from_raw_mesh(device, &quad_raw_mesh, &transient_memory_arena);
-
     raw_mesh sphere_raw_mesh = generate_sphere_mesh(100, 100);
     render_mesh sphere_mesh = metal_create_render_mesh_from_raw_mesh(device, &sphere_raw_mesh, &transient_memory_arena);
 
@@ -673,13 +1060,35 @@ main(void)
     render_mesh cow_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_cow_mesh, &transient_memory_arena);
     render_mesh suzanne_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_suzanne_mesh, &transient_memory_arena);
 
-    struct triangle
-    {
-        alignas(16) v3 p;
-    };
-    
     u32 test_triangle_count = 64;
-    triangle *test_triangle_vertices = push_array(&mesh_memory_arena, triangle, 3*test_triangle_count);
+    test_triangle *test_triangles = push_array(&mesh_memory_arena, test_triangle, test_triangle_count);
+
+#if 0
+    material materials[5] = {};
+    materials[0].reflectiveness = 1.0f;
+    materials[0].emit_color = V3(0, 0, 0);
+    materials[0].reflection_color = V3(random_between_0_1(), random_between_0_1(), random_between_0_1());
+
+    materials[1].reflectiveness = 0.0f;
+    materials[1].emit_color = V3(0, 0, 0);
+    materials[1].reflection_color = V3(random_between_0_1(), random_between_0_1(), random_between_0_1());
+
+    materials[2].reflectiveness = 0.2f;
+    materials[2].emit_color = V3(0, 0, 0);
+    materials[2].reflection_color = V3(random_between_0_1(), random_between_0_1(), random_between_0_1());
+    
+    materials[3].reflectiveness = 0.4f;
+    materials[3].emit_color = V3(0, 0, 0);
+    materials[3].reflection_color = V3(random_between_0_1(), random_between_0_1(), random_between_0_1());
+
+    materials[4].reflectiveness = 0.0f;
+    materials[4].emit_color = V3(1, 0, 0);
+    materials[4].reflection_color = V3(0, 0, 0);
+#endif
+
+    // TODO(joon): Get rid of rand()
+    u32 random_seed = (u32)rand();
+    random_series series = start_random_series(random_seed); 
 
     // NOTE(joon) : creating test triangles for raytracing
     // setVertexBytes can draw up to 85(4kb / 16 / 3) triangles without the index buffer
@@ -687,20 +1096,28 @@ main(void)
             triangle_index < test_triangle_count;
             triangle_index++)
     {
-        r32 position_range = 10.0f;
-        v3 position = V3(random_between(-position_range, position_range), 
-                        random_between(-position_range, position_range), 
-                        random_between(-position_range, position_range));
+        test_triangle *triangle = test_triangles + triangle_index;
 
-        test_triangle_vertices[3*triangle_index + 0].p = position + V3(random_between(2, 3), random_between(2, 4), random_between(2, 3));
-        test_triangle_vertices[3*triangle_index + 1].p = position + V3(random_between(2, 3), random_between(2, 4), random_between(2, 3));
-        test_triangle_vertices[3*triangle_index + 2].p = position + V3(random_between(2, 3), random_between(2, 4), random_between(2, 3));
+        r32 position_range = 10.0f;
+        v3 position = V3(random_between(&series, -position_range, position_range), 
+                        random_between(&series, -position_range, position_range), 
+                        random_between(&series, -position_range, position_range));
+
+        triangle->v0 = position + V3(random_between(&series, 4, 7), random_between(&series, 3, 8), random_between(&series, 3, 8));
+        triangle->v1 = position + V3(random_between(&series, 4, 7), random_between(&series, 3, 8), random_between(&series, 3, 8));
+        triangle->v2 = position + V3(random_between(&series, 4, 7), random_between(&series, 3, 9), random_between(&series, 3, 8));
+
+        triangle->material_index = 0;
+
     }
 
     camera camera = {};
     r32 focal_length = 1.0f;
-    camera.p = V3(-20, 0, 5);
-    
+    camera.p = V3(-10, 0, 0);
+    camera.initial_z_axis = V3(-1, 0, 0);
+    camera.initial_x_axis = normalize(cross(V3(0, 0, 1), camera.initial_z_axis));
+    camera.initial_y_axis = normalize(cross(camera.initial_z_axis, camera.initial_x_axis));
+     
     r32 light_angle = 0.f;
     r32 light_radius = 1000.0f;
 
@@ -708,42 +1125,32 @@ main(void)
     [app run];
 
     u64 last_time = mach_absolute_time();
-    is_game_running = true;
+    is_game_running = false;
     while(is_game_running)
     {
         macos_handle_event(app, window);
 
-        v3 camera_dir = camera_to_world_v100(camera.along_x, camera.along_y ,camera.along_z);
+        v3 camera_dir = camera_to_world(-camera.initial_z_axis, camera.initial_x_axis, camera.along_x, 
+                                                        camera.initial_y_axis, camera.along_y,
+                                                        camera.initial_z_axis, camera.along_z);
 
         // TODO/joon: check if the focued window is working properly
         b32 is_window_focused = [app keyWindow] && [app mainWindow];
 
         if(is_window_focused)
         {
-            // TODO(joon) : more rigorous rotation speed
-            // NOTE/Joon: We always make the the screen coordinates are bottom up, so when the mouse goes up, the screen coordinate will also go up
-            //camera.along_z -= 4.0f*(mouse_diff.x/(r32)window_width);
-            //camera.along_y -= 4.0f*(mouse_diff.y/(r32)window_height);
+            m4 temp_view_matrix = world_to_camera(camera.p, 
+                                            camera.initial_x_axis, camera.along_x, 
+                                            camera.initial_y_axis, camera.along_y, 
+                                            camera.initial_z_axis, camera.along_z);
 
-            v3 a= QuarternionRotationV001(camera.along_z, QuarternionRotationV010(camera.along_y, V3(1, 0, 0)));
-            v3 b= QuarternionRotationV010(camera.along_y, QuarternionRotationV001(camera.along_z, V3(1, 0, 0)));
+            m4 proj = projection(focal_length, window_width_over_height, 0.1f, 10000.0f);
 
-            m4 view_matrix = world_to_camera(camera.p, camera.along_x, camera.along_y, camera.along_z);
-            v4 p1 = V4(0, 10, 0, 1);
-            v4 p2 = V4(0, -10, 0,1);
-            v4 p3 = V4(10, 0, 0,1);
-            v4 p4 = V4(-10, 0, 0,1);
+            v4 temp = V4(0, 1, 1, 1);
+            v4 view_temp = (temp_view_matrix * temp);
+            v4 proj_temp = proj*view_temp;
 
-            p1 = view_matrix*p1;
-            p2 = view_matrix*p2;
-            p3 = view_matrix*p3;
-            p4 = view_matrix*p4;
-
-            v4 v = V4(10.f, 0, 0, 1);
-            v4 r = view_matrix*v;
-            v4 result2 = camera_rhs_to_lhs()*r;
-
-            r32 camera_speed = 1.0f;
+            r32 camera_speed = 0.1f;
 
             if(is_w_down)
             {
@@ -755,45 +1162,84 @@ main(void)
                 camera.p -= camera_speed*camera_dir;
             }
 
-            r32 arrow_key_camera_rotation_speed = 0.02f;
-            if(is_arrow_up_down)
+            r32 arrow_key_camera_rotation_speed = 0.01f;
+            if(is_arrow_up_down || is_i_down)
             {
-                camera.along_y -= arrow_key_camera_rotation_speed;
+                camera.along_x += arrow_key_camera_rotation_speed;
             }
-            if(is_arrow_down_down)
+            if(is_arrow_down_down || is_k_down)
+            {
+                camera.along_x -= arrow_key_camera_rotation_speed;
+            }
+            if(is_arrow_left_down || is_j_down)
             {
                 camera.along_y += arrow_key_camera_rotation_speed;
             }
-            if(is_arrow_left_down)
+            if(is_arrow_right_down || is_l_down)
             {
-                camera.along_z += arrow_key_camera_rotation_speed;
-            }
-            if(is_arrow_right_down)
-            {
-                camera.along_z -= arrow_key_camera_rotation_speed;
+                camera.along_y -= arrow_key_camera_rotation_speed;
             }
         }
 
-        v3 quad_translate = V3(0, 0, 0);
-        v3 quad_scale = V3(100, 100, 1);
-        m4 model = translate_m4(quad_translate)*scale_m4(quad_scale);
-
-        v3 color = V3(0.1f, 0.1f, 0.1f);
-        for(u32 i = 0;
-                i < quad_raw_mesh.index_count;
-                i += 3)
+#if 0
+        // NOTE(joon): This weird convention comes from the fact that the camera lookat direction is always (1, 0, 0) in camera space.
+        // TODO(joon): Maybe change this to be more understandable value?
+        v3 camera_space_left_bottom_corner = V3(focal_length, 0.5f, -0.5f*window_width_over_height);
+        r32 film_y = 0.0f;
+        for(u32 y = 0;
+                y < window_height;
+                ++y)
         {
-            v3 v0 = (model*V4(quad_raw_mesh.positions[quad_raw_mesh.indices[i]], 1.0f)).xyz;
-            v3 v1 = (model*V4(quad_raw_mesh.positions[quad_raw_mesh.indices[i+1]], 1.0f)).xyz;
-            v3 v2 = (model*V4(quad_raw_mesh.positions[quad_raw_mesh.indices[i+2]], 1.0f)).xyz;
-
-            b32 intersect_result = ray_intersect_with_triangle(v0, v1, v2, camera.p, camera_dir);
-
-            if(intersect_result)
+            r32 film_x = 0.0f;
+            for(u32 x = 0;
+                    x < window_width;
+                    ++x)
             {
-                color = V3(0.8f, 0.2f, 0.2f);
+                v3 result = V3(0, 0, 0);
+                u32 ray_count = 8;
+
+                for(u32 ray_index = 0;
+                        ray_index < ray_count;
+                        ++ray_index)
+                {
+                    // TODO(joon): Test this code
+                    v3 camera_space_pixel_p = camera_space_left_bottom_corner + V3(0, -film_x, film_y);
+                    v3 world_space_camera_dir = camera_to_world(camera_space_pixel_p, camera.along_x, camera.along_y, camera.along_z);
+
+                    v3 attenuation = V3(1, 1, 1);
+
+                    v3 ray_origin = camera.p;
+                    v3 ray_dir = world_space_camera_dir;
+                    for(u32 triangle_index = 0;
+                            triangle_index < test_triangle_count;
+                            ++triangle_index)
+                    {
+                        triangle *triangle = test_triangles + triangle_index;
+                        v3 *triangle_color = test_triangle_colors + triangle_index;
+                        *triangle_color = V3(0, 0, 1);
+                        
+                        ray_intersect_result ray_intersect_result = ray_intersect_with_triangle(triangle->v0, triangle->v1, triangle->v2, 
+                                                                                ray_origin, ray_dir);
+
+                        if(ray_intersect_result.hit)
+                        {
+                            material *material = materials + triangle_index;
+                            result += hadamard(material->emit_color, attenuation);
+                            attenuation = hadamard(attenuation, material->reflection_color);
+
+                            ray_origin = ray_intersect_result.next_ray_origin;
+                            // TODO(joon) : pure bounce vs random bounce, based on the reflectivity
+                            ray_dir = ray_intersect_result.ray_reflection;
+                        }
+                    }
+                }
+
+                film_x += 1.0f;
+                result /= ray_count;
             }
+            film_y += window_width_over_height;
         }
+#endif
 
         /*
             TODO(joon) : For more precisely timed rendering, the operations should be done in this order
@@ -844,11 +1290,15 @@ main(void)
                 [render_encoder setDepthStencilState: metal_depth_state];
 
                 m4 proj_matrix = projection(focal_length, window_width_over_height, 0.1f, 10000.0f);
-                m4 view_matrix = world_to_camera(camera.p, camera.along_x, camera.along_y, camera.along_z);
+                m4 view_matrix = world_to_camera(camera.p, 
+                                                 camera.initial_x_axis, camera.along_x, 
+                                                 camera.initial_y_axis, camera.along_y, 
+                                                 camera.initial_z_axis, camera.along_z);
 
-                m4 proj_view = proj_matrix*camera_rhs_to_lhs()*view_matrix;
+                m4 proj_view = proj_matrix*camera_rhs_to_lhs(view_matrix);
                 per_frame_data per_frame_data = {};
-                per_frame_data.proj_view = convert_m4_to_r32_4x4(proj_view);
+                per_frame_data.proj = convert_m4_to_r32_4x4(proj_matrix);
+                per_frame_data.view = convert_m4_to_r32_4x4(camera_rhs_to_lhs(view_matrix));
                 v3 light_p = V3(light_radius*cosf(light_angle), light_radius*sinf(light_angle), 10.f);
                 per_frame_data.light_p = convert_to_r32_3(light_p);
                 [render_encoder setVertexBytes: &per_frame_data
@@ -904,28 +1354,34 @@ main(void)
                     metal_record_render_command(render_encoder, terrain_meshes + terrain_index, scale, translate);
                 }
 #endif
-                metal_record_render_command(render_encoder, &cow_mesh, V3(1 ,1, 1), V3(10, 0, 0));
+                metal_record_render_command(render_encoder, &cow_mesh, V3(1, 1, 1), V3(0, 0, 0));
 #if 0
                 metal_record_render_command(render_encoder, &suzanne_mesh, V3(20, 20, 20), V3(0, 0, 2));
                 metal_record_render_command(render_encoder, &sphere_mesh, V3(3, 3, 3), V3(0, 0, 0));
-#endif
 
                 [render_encoder setRenderPipelineState:raytracing_pipline_state];
 
-                per_object_data.color = convert_to_r32_3(V3(0, 0.15f, 0.8f));
-                [render_encoder setVertexBytes: &per_object_data
-                                length: sizeof(per_object_data)
-                                atIndex: 2]; 
-                [render_encoder setVertexBytes: test_triangle_vertices
-                                length: 3*sizeof(triangle) * test_triangle_count 
-                                atIndex: 0]; 
-                [render_encoder drawPrimitives:MTLPrimitiveTypeTriangle
-                                vertexStart:0 
-                                vertexCount:3*test_triangle_count];
+                for(u32 triangle_index = 0;
+                        triangle_index < test_triangle_count;
+                        ++triangle_index)
+                {
+                    // NOTE(joon): Draw test triangles one by one, to change each colors
+                    per_object_data.color = V3(1, 0, 0);
+                    [render_encoder setVertexBytes: &per_object_data
+                                    length: sizeof(per_object_data)
+                                    atIndex: 2]; 
+                    [render_encoder setVertexBytes: test_triangles + triangle_index
+                                    length: sizeof(triangle) 
+                                    atIndex: 0]; 
+                    [render_encoder drawPrimitives:MTLPrimitiveTypeTriangle
+                                    vertexStart:0 
+                                    vertexCount:3];
+                }
+#endif
 
                 [render_encoder setRenderPipelineState:line_pipeline_state];
                 //per_object_data.model = convert_m4_to_r32_4x4(translate_m4(V3(0, 0, 0))*scale_m4(10, 10, 1000));
-                per_object_data.color = convert_to_r32_3(V3(0, 0.15f, 0.8f));
+                per_object_data.color = V3(0, 0.15f, 0.8f);
 
                 [render_encoder setVertexBytes: &per_object_data
                                 length: sizeof(per_object_data)
@@ -936,6 +1392,9 @@ main(void)
                 line_vertices[1].p = convert_to_r32_3(camera.p + 1000.0f * camera_dir);
                 //line_vertices[0].p = {0, 0, 0};
                 //line_vertices[1].p = {0, 0, 10000};
+
+                v4 temp_0 = view_matrix*V4(line_vertices[0].p.x, line_vertices[0].p.y, line_vertices[0].p.z, 1.0f);
+                v4 temp_1 = view_matrix*V4(line_vertices[1].p.x, line_vertices[1].p.y, line_vertices[1].p.z, 1.0f);
 
                 // NOTE(joon): setVertexBytes can only used for data with size up to 4kb
                 // with vertex that only has position value(16 bytes), it can draw up to 83 triangles
@@ -984,7 +1443,7 @@ main(void)
         else
         {
             // TODO : Missed Frame!
-            // TODO(joon) : When this happens, we need to do something with the display link?
+            // TODO(joon) : Whenever we miss the frame re-sync with the display link
         }
 
         // For a short period of time, loop
@@ -994,6 +1453,7 @@ main(void)
             time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
         }
 
+#if 0
         // NOTE(joon) : debug_printf_all_cycle_counters
         for(u32 cycle_counter_index = 0;
                 cycle_counter_index < debug_cycle_counter_count;
@@ -1004,9 +1464,13 @@ main(void)
                                                                             debug_cycle_counters[cycle_counter_index].hit_count, 
                                                                             (u32)(debug_cycle_counters[cycle_counter_index].cycle_count/debug_cycle_counters[cycle_counter_index].hit_count));
         }
+#endif
 
         // update the time stamp
         last_time = mach_absolute_time();
     }
+
+    int a = 1;
+
     return 0;
 }

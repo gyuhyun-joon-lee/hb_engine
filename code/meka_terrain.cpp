@@ -1,12 +1,3 @@
-inline i32
-round_r32_i32(r32 value)
-{
-    // TODO(joon) : intrinsic?
-    return (i32)roundf(value);
-}
-
-
-
 internal void
 generate_mountain_inside_terrain(raw_mesh *terrain, 
                                 i32 x_count, i32 y_count,
@@ -14,6 +5,9 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
                                 i32 stride,
                                 r32 dim, r32 radius, r32 max_height)
 {
+    u32 random_seed = (u32)rand();
+    random_series series = start_random_series(random_seed); 
+
     i32 min_x = maximum(round_r32_i32((center.x - radius)/dim), 0);
     i32 max_x = minimum(round_r32_i32((center.x + radius)/dim), x_count);
 
@@ -38,7 +32,7 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
             if(distance <= radius)
             {
                 r32 height = (1.0f - (distance / radius))*max_height;
-                p->z = random_range(height, 0.45f*height);
+                p->z = random_range(&series, height, 0.45f*height);
             }
 
             p++;
@@ -53,6 +47,10 @@ internal raw_mesh
 generate_sphere_mesh(u32 desired_column_count, u32 desired_row_count)
 {
     raw_mesh result = {};
+
+    // TODO(joon): Get rid of rand()
+    u32 random_seed = (u32)rand();
+    random_series series = start_random_series(random_seed); 
     
     r32 rad_per_column = 2.0f*pi_32 / (r32)desired_column_count;
     r32 rad_per_row = (pi_32) / (r32)desired_row_count;
@@ -83,7 +81,7 @@ generate_sphere_mesh(u32 desired_column_count, u32 desired_row_count)
                                         sin_theta,
                                         0);
             p.z = z_for_this_row;
-            p = random_between(0.8f, 1.1f) * p;
+            p = random_between(&series, 0.8f, 1.1f) * p;
 
             result.positions[result.position_count++] = p;
             result.normals[result.normal_count++] = normalize(p);
@@ -137,6 +135,10 @@ generate_sphere_mesh(u32 desired_column_count, u32 desired_row_count)
 internal raw_mesh
 generate_plane_terrain_mesh(memory_arena *memory_arena, u32 quad_width, u32 quad_height)
 {
+    // TODO(joon): Get rid of rand()
+    u32 random_seed = (u32)rand();
+    random_series series = start_random_series(random_seed); 
+
     // 100 vertices means there will be 99 quads per line
     raw_mesh terrain = {};
     terrain.position_count = (quad_width) * (quad_height);
@@ -153,7 +155,7 @@ generate_plane_terrain_mesh(memory_arena *memory_arena, u32 quad_width, u32 quad
                 x < quad_width;
                 ++x)
         {
-            r32 random_z = dim*random_between(-0.5f, 0.5f);
+            r32 random_z = dim*random_between(&series, -0.5f, 0.5f);
             
             v3 p = V3(startingX + x*dim, startingY + y*dim, random_z);
             terrain.positions[y*quad_width + x] = p;
@@ -164,11 +166,11 @@ generate_plane_terrain_mesh(memory_arena *memory_arena, u32 quad_width, u32 quad
             mountain_index < 12;
             mountain_index++)
     {
-        v2 mountain_center = V2(random_between(0, quad_width*dim),
-                                random_between(0, quad_height*dim));
+        v2 mountain_center = V2(random_between(&series, 0, quad_width*dim),
+                                random_between(&series, 0, quad_height*dim));
 
-        r32 height = dim*random_between(5, 30);
-        r32 radius = dim*random_between(quad_width/12, quad_width/5);
+        r32 height = dim*random_between(&series, 5, 30);
+        r32 radius = dim*random_between(&series, quad_width/12, quad_width/5);
         generate_mountain_inside_terrain(&terrain, 
                 quad_width, quad_height, 
                 mountain_center, quad_width,

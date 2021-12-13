@@ -199,6 +199,25 @@ operator/(v3 a, r32 value)
     return result;
 }
 
+inline v3&
+operator/=(v3 &a, r32 value)
+{
+    a.x /= value;
+    a.y /= value;
+    a.z /= value;
+
+    return a;
+}
+
+inline v3&
+operator*=(v3 &a, r32 value)
+{
+    a.x *= value;
+    a.y *= value;
+    a.z *= value;
+
+    return a;
+}
 
 inline v3
 operator*(r32 value, v3 a)
@@ -348,6 +367,17 @@ operator*(r32 value, v4 &a)
     result.w = value*a.w;
 
     return result;
+}
+
+inline v4&
+operator*=(v4 &a, r32 value)
+{
+    a.x *= value;
+    a.y *= value;
+    a.z *= value;
+    a.w *= value;
+
+    return a;
 }
 
 // return identity matrix
@@ -694,19 +724,25 @@ QuarternionRotationV001(r32 rad, v3 vectorToRotate)
     return result;
 }
 
-// NOTE/Joon: RHS/initial view direction is 1, 0, 0(in world space)
+// NOTE(joon): RHS/initial view direction is 1, 0, 0(in world space)
 inline m4
-world_to_camera(v3 camera_world_p, r32 along_x, r32 along_y, r32 along_z)
+world_to_camera(v3 camera_world_p, 
+                v3 initial_camera_x_axis, r32 along_x, 
+                v3 initial_camera_y_axis, r32 along_y, 
+                v3 initial_camera_z_axis, r32 along_z)
 {
     // quarternion does not guarantee the rotation order independency(this buggd me quite a while)
     // so in here, we will assume that the order of rotation is always x->y->z
     // as long as we are begin consistent, we should be fine.
-    m4 quarternion = QuarternionRotationM4(V3(0, 0, 1), along_z)*QuarternionRotationM4(V3(0, 1, 0), along_y)*QuarternionRotationM4(V3(1, 0, 0), along_x);
-    v3 camera_x_axis = (quarternion*V4(1, 0, 0, 0)).xyz;
-    v3 camera_y_axis = (quarternion*V4(0, 1, 0, 0)).xyz;
-    v3 camera_z_axis = (quarternion*V4(0, 0, 1, 0)).xyz;
+    m4 quarternion = QuarternionRotationM4(initial_camera_z_axis, along_z)*
+                    QuarternionRotationM4(initial_camera_y_axis, along_y)*
+                    QuarternionRotationM4(initial_camera_x_axis, along_x);
 
-    // NOTE(joon): Identical with projecting the world space coordinate onto the camera vectors
+    v3 camera_x_axis = (quarternion*V4(initial_camera_x_axis, 0)).xyz;
+    v3 camera_y_axis = (quarternion*V4(initial_camera_y_axis, 0)).xyz;
+    v3 camera_z_axis = (quarternion*V4(initial_camera_z_axis, 0)).xyz;
+
+    // NOTE(joon): Identical with projecting the world space coordinate onto the camera axis vectors
     m4 rotation = {};
     rotation.column[0] = V4(camera_x_axis.x, camera_y_axis.x, camera_z_axis.x, 0);
     rotation.column[1] = V4(camera_x_axis.y, camera_y_axis.y, camera_z_axis.y, 0);
@@ -718,28 +754,30 @@ world_to_camera(v3 camera_world_p, r32 along_x, r32 along_y, r32 along_z)
     return rotation*translation;
 } 
 
-// NOTE(joon): Assumes that the initial lookat dir is always (1, 0, 0) in world coordinate
-// this is required because we the only thing we have is the angles
+// NOTE(joon): Assumes that the lookat dir is always (1, 0, 0) in camera space
+// this is required because the only thing we have is the angles
 inline v3
-camera_to_world_v100(r32 along_x, r32 along_y, r32 along_z)
+camera_to_world(v3 camera_v, 
+                v3 initial_camera_x_axis, r32 along_x, 
+                v3 initial_camera_y_axis, r32 along_y, 
+                v3 initial_camera_z_axis, r32 along_z)
 {
-    m4 quarternion = QuarternionRotationM4(V3(0, 0, 1), along_z)*QuarternionRotationM4(V3(0, 1, 0), along_y)*QuarternionRotationM4(V3(1, 0, 0), along_x);
-    v3 camera_x_axis = (quarternion*V4(1, 0, 0, 0)).xyz;
+    m4 quarternion = QuarternionRotationM4(initial_camera_z_axis, along_z)*
+                    QuarternionRotationM4(initial_camera_y_axis, along_y)*
+                    QuarternionRotationM4(initial_camera_x_axis, along_x);
+    v3 world_v = (quarternion*V4(camera_v, 0)).xyz;
 
-    return camera_x_axis;
+    return world_v;
 }
 
 inline m4
-camera_rhs_to_lhs()
+camera_rhs_to_lhs(m4 view_matrix)
 {
-    m4 result = {};
-
-    result.column[0] = V4(0, 0, 1, 0);
-    result.column[1] = V4(-1, 0, 0, 0);
-    result.column[2] = V4(0, 1, 0, 0);
-    result.column[3] = V4(0, 0, 0, 1);
-
-    return result;
+    view_matrix.column[0].e[2] *= -1.0f;
+    view_matrix.column[1].e[2] *= -1.0f;
+    view_matrix.column[2].e[2] *= -1.0f;
+    view_matrix.column[3].e[2] *= -1.0f;
+    return view_matrix;
 }
 
 inline b32
@@ -757,14 +795,14 @@ clip_space_top_is_one(void)
 
 // NOTE/Joon : This assumes that the window width is always 1m
 inline m4
-projection(r32 focal_length, r32 aspect_ratio_width_over_height, r32 near, r32 far)
+projection(r32 focal_length, r32 aspect_ratio, r32 near, r32 far)
 {
     m4 result = {};
 
     r32 c = clip_space_top_is_one() ? 1.f : 0.f; 
 
     result.column[0] = V4(focal_length, 0, 0, 0);
-    result.column[1] = V4(0, focal_length*aspect_ratio_width_over_height, 0, 0);
+    result.column[1] = V4(0, focal_length*aspect_ratio, 0, 0);
     result.column[2] = V4(0, 0, c*(near+far)/(far-near), 1);
     result.column[3] = V4(0, 0, (-2.0f*far*near)/(far-near), 0);
 
@@ -793,7 +831,7 @@ symmetric_projection(r32 r, r32 t, r32 n, r32 f)
 }
 
 inline r32 
-Clamp(r32 min, r32 value, r32 max)
+clamp(r32 min, r32 value, r32 max)
 {
     r32 result = value;
     if(result < min)
@@ -808,14 +846,14 @@ Clamp(r32 min, r32 value, r32 max)
     return result;
 }
 inline r32 
-Clamp01(r32 value)
+clamp01(r32 value)
 {
-    return Clamp(0.0f, value, 1.0f);
+    return clamp(0.0f, value, 1.0f);
 }
 
 
 inline u32
-Clamp(u32 min, u32 value, u32 max)
+clamp(u32 min, u32 value, u32 max)
 {
     u32 result = value;
     if(result < min)
@@ -831,7 +869,7 @@ Clamp(u32 min, u32 value, u32 max)
 }
 
 inline i32
-Clamp(i32 min, i32 value, i32 max)
+clamp(i32 min, i32 value, i32 max)
 {
     i32 result = value;
     if(result < min)
@@ -849,15 +887,48 @@ Clamp(i32 min, i32 value, i32 max)
 inline r32
 Sin(r32 rad)
 {
+    // TODO(joon) : intrinsic?
     return sinf(rad);
 }
 
 inline r32
 Cos(r32 rad)
 {
+    // TODO(joon) : intrinsic?
     return cosf(rad);
 }
 
+inline i32
+round_r32_i32(r32 value)
+{
+    // TODO(joon) : intrinsic?
+    return (i32)roundf(value);
+}
+
+inline u32
+round_r32_u32(r32 value)
+{
+    // TODO(joon) : intrinsic?
+    return (u32)roundf(value);
+}
+
+inline r32
+lerp(r32 min, r32 t, r32 max)
+{
+    return min + t*(max-min);
+}
+
+inline v3
+lerp(v3 min, r32 t, v3 max)
+{
+    v3 result = {};
+
+    result.x = lerp(min.x, t, max.x);
+    result.y = lerp(min.y, t, max.y);
+    result.z = lerp(min.z, t, max.z);
+
+    return result;
+}
 
 #endif
 

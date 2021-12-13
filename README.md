@@ -14,3 +14,5 @@ Occasionally, I might use some of the single-header libraries such as 'stb_image
 # Caveats
 Fow now, Meka Renderer is _not_ meant to be used professionally in any means. This is more like a playground for me to learn and explore.
 Feel free to explore, and if you want to keep track of the progress, you can visit _mekalopo.com_
+
+

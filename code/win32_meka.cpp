@@ -295,7 +295,7 @@ struct win32_thread
 };
 
 #include <intrin.h>
-// NOTE(joon) : x64(lfence sfece) ARM(dmb for load and dsb for store)
+// NOTE(joon) : x64(lfence sfence) ARM(dmb for load and dsb for store)
 #define WriteBarrier /*prevent compilation reordering*/_WriteBarrier(); /*prevent excute order change by the processor, only needed for special types of memories such as write combine memory*///_mm_sfence(); 
 #define ReadBarrier _ReadBarrier();
 
@@ -383,7 +383,7 @@ ThreadProc(void *data)
         }
         else
         {
-            // NOTE(joon) : Wake up when the semaphore count not 0, and when it wakes up, decrement it by 1
+            // NOTE(joon) : Wake up when the semaphore count is not 0, and when it wakes up, decrement it by 1
             WaitForSingleObjectEx(globalSemaphore, INFINITE, 0);
         }
     }
@@ -391,43 +391,6 @@ ThreadProc(void *data)
     return 0;
 }
 
-// TODO(joon) : maket this to use random table
-internal r32
-random_between_0_1()
-{
-    r32 result = (r32)rand()/(r32)RAND_MAX;
-    return result;
-}
-
-internal r32
-random_between(r32 min, r32 max)
-{
-    return min + (max-min)*random_between_0_1();
-}
-
-internal r32
-random_between_minus_1_1()
-{
-    r32 result = 2.0f*((r32)rand()/(r32)RAND_MAX) - 1.0f;
-    return result;
-}
-
-inline r32
-random_range(r32 value, r32 range)
-{
-    r32 half_range = range/2.0f;
-
-    r32 result = value + half_range*random_between_minus_1_1();
-
-    return result;
-}
-
-inline i32
-round_r32_i32(r32 value)
-{
-    // TODO(joon) : intrinsic?
-    return (i32)roundf(value);
-}
 
 
 internal void
@@ -471,14 +434,6 @@ make_mountain_inside_terrain(loaded_raw_mesh *terrain,
 
         row += stride;
     }
-}
-
-obj_lexicon
-{
-    u32 start; // where the special character starts
-    // TODO/joon : Is it possible to not have any carriage return? what if the file is in one straight line?
-    u32 end; // where the carriage return happens
-    u32 index; // index for each property(vertex, vertex_normal, texture_coord...etc). With this, we can easily multi-thread the code
 }
 
 int CALLBACK 

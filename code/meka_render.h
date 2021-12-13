@@ -41,8 +41,24 @@ struct render_mesh
     unsigned index_count;
 };
 
+/*
+   NOTE(joon): So here's how we construct the camera
+   Initial camera axis : 
+    camera_x : (0, -1, 0)
+    camera_y : (0, 0, 1)
+    camera_z : (-1, 0, 0)
+
+    lookat dir : (1, 0, 0)
+
+    This gives us more reasonable world coordinate when we move from camera space to world space 
+*/
 struct camera
 {
+    // TODO(joon): dont need to store these values, when we finalize the camera code?
+    v3 initial_x_axis;
+    v3 initial_y_axis;
+    v3 initial_z_axis;
+
     v3 p;
     union
     {

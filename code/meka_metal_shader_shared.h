@@ -22,6 +22,23 @@ typedef struct
 
 typedef struct
 {
+#ifdef MEKA_METAL_SHADER
+    r32_3 v0;
+    r32_3 v1;
+    r32_3 v2;
+
+    uint material_index;
+#else
+    alignas(16) v3 v0;
+    alignas(16) v3 v1;
+    alignas(16) v3 v2;
+
+    alignas(4) u32 material_index;
+#endif
+}test_triangle;
+
+typedef struct
+{
     alignas(16) r32_3 p;
 }line_vertex;
 
@@ -33,13 +50,20 @@ typedef struct
 typedef struct
 {
     alignas(16) r32_4x4 proj_view;
+    alignas(16) r32_4x4 proj;
+    alignas(16) r32_4x4 view;
     alignas(16) r32_3 light_p;
 }per_frame_data;
 
 typedef struct
 {
+#ifdef MEKA_METAL_SHADER
     alignas(16) r32_4x4 model;
     alignas(16) r32_3 color;
+#else
+    alignas(16) m4 model;
+    alignas(16) v3 color;
+#endif
 }per_object_data;
 
 inline r32_3
