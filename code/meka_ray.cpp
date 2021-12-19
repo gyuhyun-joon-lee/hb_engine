@@ -489,9 +489,8 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                         simd_f32 det = dot(cross_ray_e2, e1);
 
                         // if the determinant is 0, it means the ray is parallel to the triangle
-                        simd_u32 det_is_zero_mask = compare_equal(det, simd_f32_0);
-
-                        if(!all_lanes_zero(det_is_zero_mask))
+                        simd_u32 det_is_non_zero_mask = compare_not_equal(det, simd_f32_0);
+                        if(!all_lanes_zero(det_is_non_zero_mask))
                         {
                             simd_v3 T = ray_origin - v0;
                             simd_v3 a = cross(T, e1);
@@ -544,6 +543,8 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                                                               lane_2_hit_material->reflectivity, 
                                                               lane_3_hit_material->reflectivity);
 
+                    bounced_ray_count += get_non_zero_lane_count_from_all_set_bit(is_ray_alive_mask);
+
                     // TODO(joon): cos?
                     // TODO(joon): make overwrite_plus function?
                     result_color = overwrite(result_color, is_ray_alive_mask, result_color + attenuation*hit_mat_emit_color); 
@@ -571,7 +572,6 @@ render_raytraced_image_tile_simd(raytracer_data *data)
 
                         ray_dir = lerp(random_reflection, hit_mat_reflectivity, perfect_reflection);
 
-                        bounced_ray_count += get_non_zero_lane_count_from_all_set_bit(is_ray_alive_mask);
                     }
                 }
             }
@@ -627,342 +627,6 @@ render_raytraced_image_tile_simd(raytracer_data *data)
 
     return result;
 }
-
-
-#if 0 
-internal raytracer_output
-render_raytraced_image_tile_simd_2(raytracer_data *data)
-{
-    raytracer_output result = {};
-
-    // NOTE(joon): constants
-    simd_f32_4 simd_f32_2 = vdupq_n_f32(2.0f);
-    simd_f32_4 simd_f32_0 = vdupq_n_f32(0.0f);
-    simd_f32_4 simd_f32_1 = vdupq_n_f32(1.0f);
-    simd_u32_4 simd_u32_0 = vdupq_n_u32(0);
-    simd_u32_4 simd_u32_max = vdupq_n_u32(u32_max);
-    simd_f32_4 simd_f32_minus_1 = vdupq_n_f32(-1.0f);
-    simd_f32_4 simd_f32_max = vdupq_n_f32(flt_max);
-
-    // TODO(joon) : completely made up number
-    simd_f32_4 square_root_tolerance = vdupq_n_f32(0.00001f);
-
-    world *world = data->world;
-    u32 *pixels = data->pixels; 
-    u32 output_width = data->output_width; 
-    u32 output_height = data->output_height;
-    u32 ray_per_pixel_count = data->ray_per_pixel_count;
-    assert(ray_per_pixel_count % MEKA_LANE_WIDTH == 0);
-
-    simd_u32_4 simd_output_width = vdupq_n_u32(output_width);
-    simd_u32_4 simd_output_height = vdupq_n_u32(output_height);
-    simd_u32_4 simd_u32_ray_per_pixel_count = vdupq_n_u32(ray_per_pixel_count);
-    simd_f32_4 simd_f32_ray_per_pixel_count = vdupq_n_f32((f32)ray_per_pixel_count);
-
-    simd_v3 film_center = simd_v3_(data->film_center); 
-    simd_f32_4 film_width = vdupq_n_f32(data->film_width); 
-    simd_f32_4 film_height = vdupq_n_f32(data->film_height);
-
-    simd_v3 camera_p = simd_v3_(data->camera_p);
-    simd_v3 camera_x_axis = simd_v3_(data->camera_x_axis); 
-    simd_v3 camera_y_axis = simd_v3_(data->camera_y_axis); 
-    simd_v3 camera_z_axis = simd_v3_(data->camera_z_axis);
-
-    u32 min_x = data->min_x; 
-    u32 one_past_max_x = data->one_past_max_x;
-    u32 min_y = data->min_y; 
-    u32 one_past_max_y = data->one_past_max_y;
-
-    // TODO(joon): These values should be more realistic. For example, when we ever have a concept of an acutal senser size, 
-    // we should use that value to calculate this!
-    simd_f32_4 x_per_pixel = vdivq_f32(film_width, vcvtq_f32_u32(simd_output_width));
-    simd_f32_4 y_per_pixel = vdivq_f32(film_height, vcvtq_f32_u32(simd_output_height));
-
-    simd_f32_4 half_film_width = vdivq_f32(film_width, simd_f32_2);
-    simd_f32_4 half_film_height = film_height/simd_f32_2;
-
-    // TODO(joon) : completely made up number
-    simd_f32_4 hit_t_threshold = vdupq_n_f32(0.0001f);
-
-    simd_random_series *series = &data->series;
-
-    u32 *row = pixels + min_y*output_width + min_x;
-
-#define simd_u32_4_overwrite_u32(dest, mask, source) vorrq_u32(vandq_u32(dest, vmvnq_u32(mask)), vandq_u32(source, mask))
-#define simd_f32_4_overwrite(dest, mask, source) vreinterpretq_f32_u32(vorrq_u32(vandq_u32(vreinterpretq_u32_f32(dest), vmvnq_u32(mask)), vandq_u32(vreinterpretq_u32_f32(source), mask)))
-#define simd_and_f32(a, mask) vreinterpretq_f32_u32(vandq_u32(vreinterpretq_u32_f32(a), mask));
-
-    // NOTE(joon): This is an _extremely_ hot loop. Very small performance increase/decrease can have a huge impact on the total time
-    u32 bounced_ray_count = 0;
-    for(u32 y = min_y;
-            y < one_past_max_y;
-            ++y)
-    {
-        simd_f32_4 film_y = vdupq_n_f32(2.0f*((r32)y/(r32)output_height) - 1.0f);
-        u32 *pixel = row;
-
-        for(u32 x = min_x;
-                x < one_past_max_x;
-                ++x)
-        {
-            simd_f32_4 film_x = vdupq_n_f32(2.0f*((r32)x/(r32)output_width) - 1.0f);
-            simd_v3 result_color = simd_v3_(v3_(0, 0, 0));
-
-            for(u32 ray_per_pixel_index = 0;
-                    ray_per_pixel_index < ray_per_pixel_count;
-                    ray_per_pixel_index += MEKA_LANE_WIDTH)
-            {
-                // NOTE(joon): These values are inside the loop because as we are casting multiple lights anyway,
-                // we can slightly 'jitter' the ray direction to get the anti-aliasing effect 
-                simd_f32_4 jitter_x = vmulq_f32(x_per_pixel, random_between_0_1(series));
-                simd_f32_4 jitter_y = vmulq_f32(y_per_pixel, random_between_0_1(series));
-
-                simd_f32_4 offset_x = vaddq_f32(film_x, jitter_x);
-                simd_f32_4 offset_y = vaddq_f32(film_y, jitter_y);
-
-                // NOTE(joon): we multiply x and y value by half film dim(to get the position in the sensor which is center oriented) & 
-                // axis(which are defined in world coordinate, so by multiplying them, we can get the world coodinates)
-                simd_v3 film_p = film_center + offset_y*half_film_height*camera_y_axis + offset_x*half_film_width*camera_x_axis;
-
-                // TODO(joon) : later on, we need to make this to be random per ray per pixel!
-                simd_v3 ray_origin = camera_p;
-                simd_v3 ray_dir = film_p - camera_p;
-                simd_v3 attenuation = simd_v3_(v3_(1, 1, 1));
-
-                // NOTE(joon): This will mask out any of the hit_t calculation that we do
-                simd_u32_4 is_ray_alive_mask = simd_u32_max;
-
-                for(u32 bounce_index = 0;
-                        bounce_index < 8;
-                        ++bounce_index)
-                {
-                    simd_f32_4 min_hit_t = simd_f32_max;
-
-                    simd_u32_4 hit_mat_index = simd_u32_0;
-
-                    // NOTE(joon): Want to get rid of this value.. but sphere needs this to calculate the normal :(
-                    simd_v3 next_ray_origin = {};
-                    simd_v3 next_normal = {};
-
-                    for(u32 plane_index = 0;
-                            plane_index < world->plane_count;
-                            ++plane_index)
-                    {
-                        plane *plane = world->planes + plane_index;
-
-                        simd_v3 plane_normal = simd_v3_(plane->normal);
-                        simd_f32_4 plane_d = vdupq_n_f32(plane->d);
-
-                        // NOTE(joon) : if the denominator is 0, it means that the ray is parallel to the plane
-                        // denom = dot(plane_normal, ray_dir)
-                        simd_f32_4 denom = dot(plane_normal, ray_dir);
-
-                        simd_u32_4 denom_mask = vceqq_f32(denom, simd_f32_0);// if denom is not 0, 
-
-                        // TODO(joon): We might just be dividing by 0... is this safe?
-                        simd_f32 hit_t = (dot(-plane_normal, ray_origin) - plane_d)/denom;
-
-                        simd_u32 hit_t_mask = vandq_u32(vandq_u32(denom_mask, vcgeq_f32(hit_t, hit_t_threshold)), vcltq_f32(hit_t, min_hit_t)); // t is bigger than hit_t_threshold && less than min_hit_t
-
-                        simd_u32 this_plane_mat_index = vdupq_n_u32(plane->material_index);
-                        hit_mat_index = simd_u32_4_overwrite(hit_mat_index, hit_t_mask & is_ray_alive_mask, this_plane_mat_index);
-
-                        // NOTE(joon): clear the values that will be overwritten by the new value, or them to overwrite
-                        min_hit_t = simd_f32_4_overwrite(min_hit_t, hit_t_mask & is_ray_alive_mask, hit_t);
-                        next_ray_origin = simd_f32_4_overwrite(next_ray_origin, hit_t_mask & is_ray_alive_mask, ray_origin + (hit_t*ray_dir));
-                        next_normal = simd_f32_4_overwrite(next_normal, hit_t_mask & is_ray_alive_mask, plane_normal);
-                    }
-
-                    for(u32 sphere_index = 0;
-                            sphere_index < world->sphere_count;
-                            ++sphere_index)
-                    {
-                        sphere *sphere = world->spheres + sphere_index;
-
-                        simd_v3 sphere_center = simd_v3_(sphere->center);
-
-                        simd_f32_4 sphere_radius_square = vdupq_n_f32(sphere->radius);
-
-                        simd_v3 rel_ray_origin = ray_origin - sphere_center;
-                        // NOTE(joon): We are using a simplified version of the solutions for the quadratic formula
-                        // which is (-b +/ sqrt(b^2 - ac))/a, where b is half of the original b
-                        simd_f32_4 a = dot(ray_dir, ray_dir);
-                        simd_f32_4 b = dot(ray_dir, rel_ray_origin);
-                        simd_f32_4 minus_b = vmulq_f32(b, simd_f32_minus_1);
-                        simd_f32_4 c = dot(rel_ray_origin, rel_ray_origin) - sphere_radius_square;
-
-                        simd_f32 root_term = vsubq_f32(vmulq_f32(b, b), vmulq_f32(a*c));
-
-                        // TODO(joon): should _not_ always select the one with minus root term!!!
-                        // If the ray starts inside the object(in this case, we have to choose the one with positive root term value)
-
-                        // NOTE(joon): if root term is greater than 0, there are two solutions for the quadratic formula
-                        // which means there are two intersection points with the ray
-                        // intersection point = ((-b - sqrt(root_term))/a)
-                        simd_u32_4 two_intersection_mask = vcgtq_f32(root_term, square_root_tolerance);
-                        simd_f32_4 hit_t_two_intersection = simd_and_f32(vdivq_f32(vsubq_f32(minus_b - sqrt(root_term)), a), two_intersection_mask);
-
-                        // NOTE(joon): if root term is greater than 0, it means there's only one intersection point 
-                        simd_u32_4 one_intersection_mask = vceqq_f32(root_term, simd_f32_0);
-                        simd_f32_4 hit_t_one_intersection = simd_and_f32(vdivq_f32(minus_b, a) & one_intersection_mask);
-
-                        // NOTE(joon): if the root term is a negative value, it means there's no intersection point
-                        simd_u32_4 no_intersection_mask = vmvnq_u32(vandq_u32(two_intersection_mask, one_intersection_mask);
-                        simd_f32_4 hit_t_no_intersecition = simd_and_f32(simd_f32_max, no_intersection_mask);
-
-                        simd_f32_4 hit_t = vorrq_u32(vorrq_u32(hit_t_two_intersection, hit_t_one_intersection), hit_t_no_intersecition);
-                        simd_u32_4 hit_t_mask = vandq_u32(is_ray_alive_mask, vandq_u32(vcgtq_f32(hit_t, hit_t_threshold), vcleq_f32(hit_t, min_hit_t))); // t is bigger than hit_t_threshold && less than min_hit_t
-
-                        // NOTE(joon): clear the values that will be overwritten by the new value, or them to overwrite
-                        min_hit_t = simd_f32_4_overwrite(min_hit_t, hit_t_mask, hit_t);
-                        next_ray_origin = overwrite(next_ray_origin, hit_t_mask, ray_origin + (hit_t*ray_dir));
-                        next_normal = overwrite(next_normal, hit_t_mask, next_ray_origin - sphere_center);
-
-                        simd_u32_4 this_sphere_mat_index = vdupq_n_u32(sphere->material_index);
-                        hit_mat_index = simd_u32_4_overwrite(hit_mat_index, hit_t_mask, this_sphere_mat_index);
-                    }
-
-                    for(u32 triangle_index = 0;
-                            triangle_index < world->triangle_count;
-                            ++triangle_index)
-                    {
-                        triangle *triangle = world->triangles + triangle_index;
-
-                        /*
-                           NOTE(joon) : 
-                           Moller-Trumbore line triangle intersection argorithm
-
-                           |t| =       1           |(T x E1) * E2|
-                           |u| = -------------  x  |(ray_dir x E2) * T |
-                           |v| = (ray_dir x E2)    |(T x E1) * ray_dir |
-
-                           where T = ray_origin - v0, E1 = v1 - v0, E2 = v2 - v0,
-                           ray  = ray_origin + t * ray_dir;
-
-                           u & v = barycentric coordinates of the triangle, as a triangle can be represented in a form of 
-                           (1 - u - v)*v0 + u*v1 + v*v2;
-
-                           Note that there are a lot of same cross products, which we can calculate just once and reuse
-                           v0, v1, v2 can be in any order
-                           */
-                        // TODO(joon): These ones don't need to be calculated as vector, we can just duplicate the result value 
-                        // This might help to not over-populate the port that has vector arithmetic function
-
-                        simd_v3 v0 = simd_v3_(triangle->v0);
-                        simd_v3 v1 = simd_v3_(triangle->v1);
-                        simd_v3 v2 = simd_v3_(triangle->v2);
-
-                        simd_v3 e1 = v1 - v0;
-                        simd_v3 e2 = v2 - v0;
-
-                        simd_v3 cross_ray_e2 = cross(ray_dir, e2);
-
-                        simd_f32_4 det = dot(cross_ray_e2, e1);
-                        simd_v3 T = ray_origin - v0;
-
-                        // if the determinant is 0, it means the ray is parallel to the triangle
-                        simd_u32 det_mask = compare_equal(det, simd_f32_0);
-                        
-                        simd_v3 a = cross(T, e1);
-
-                        simd_f32 hit_t = dot(a, e2) / det;
-                        // NOTE(joon): barycentric coordinates of u and v, the last coordinate w = (1 - u - v)
-                        simd_f32 u = dot(cross_ray_e2, T) / det;
-                        simd_f32 v = dot(a, ray_dir) / det;
-
-                        simd_u32 hit_t_mask = compare_greater_equal(hit_t, hit_t_threshold) & 
-                                                compare_greater_equal(u, simd_f32_0) & 
-                                                compare_greater_equal(v, simd_f32_0) & 
-                                                compare_less_equal(u+v, simd_f32_1);
-
-                        // NOTE(joon): clear the values that will be overwritten by the new value, or them to overwrite
-                        min_hit_t = overwrite(min_hit_t, hit_t_mask & is_ray_alive_mask, hit_t);
-                        next_ray_origin = overwrite(next_ray_origin, hit_t_mask & is_ray_alive_mask, ray_origin + (hit_t*ray_dir));
-                        next_normal = overwrite(next_normal, hit_t_mask & is_ray_alive_mask, normalize(cross(e1, e2)));
-
-                        // TODO(joon): calculate normal based on the ray dir, so that the next normal is facing the incoming ray dir
-                        // otherwise, the reflection vector will be totally busted?
-                        simd_u32 this_triangle_mat_index = simd_u32_(triangle->material_index);
-                        hit_mat_index = overwrite(hit_mat_index, hit_t_mask & is_ray_alive_mask, this_triangle_mat_index);
-                    }
-
-                    // TODO(joon): Just like from the vertex normal generation code, is loading method is rather inefficient.
-                    // Any way to speed this up?
-                    material *lane_0_hit_material = world->materials + hit_mat_index[0];
-                    material *lane_1_hit_material = world->materials + hit_mat_index[1];
-                    material *lane_2_hit_material = world->materials + hit_mat_index[2];
-                    material *lane_3_hit_material = world->materials + hit_mat_index[3];
-
-                    simd_v3 hit_mat_emit_color = simd_v3_(lane_0_hit_material->emit_color,
-                                                          lane_1_hit_material->emit_color, 
-                                                          lane_2_hit_material->emit_color, 
-                                                          lane_3_hit_material->emit_color);
-
-                    simd_v3 hit_mat_reflection_color = simd_v3_(lane_0_hit_material->reflection_color, 
-                                                                lane_1_hit_material->reflection_color, 
-                                                                lane_2_hit_material->reflection_color, 
-                                                                lane_3_hit_material->reflection_color);
-
-                    simd_f32 hit_mat_reflectivity = simd_f32_(lane_0_hit_material->reflectivity, 
-                                                                lane_1_hit_material->reflectivity, 
-                                                                lane_2_hit_material->reflectivity, 
-                                                                lane_3_hit_material->reflectivity);
-
-                    // TODO(joon): cos?
-                    // TODO(joon): make overwrite_plus function?
-                    result_color = overwrite(result_color, is_ray_alive_mask, result_color + attenuation*hit_mat_emit_color); 
-                    attenuation = overwrite(attenuation, is_ray_alive_mask, attenuation*hit_mat_reflection_color);
-
-                    ray_origin = next_ray_origin;
-
-                    next_normal = normalize(next_normal);
-                    simd_v3 perfect_reflection = normalize(ray_dir - simd_f32_2*dot(ray_dir, next_normal)*next_normal);
-
-                    simd_v3 random = {};
-                    random.x = random_between_minus_1_1(series).v;
-                    random.y = random_between_minus_1_1(series).v;
-                    random.z = random_between_minus_1_1(series).v;
-
-                    simd_v3 random_reflection = normalize(next_normal + random);
-
-                    ray_dir = lerp(random_reflection, hit_mat_reflectivity, perfect_reflection);
-
-                    //bounced_ray_count++;
-                    //ray_dir = perfect_reflection;
-
-                    // NOTE(joon): update if the ray is still alive or dead
-
-                    simd_u32 mat_mask = is_lane_non_zero(hit_mat_index);
-                    is_ray_alive_mask = is_ray_alive_mask & mat_mask;
-                }
-            }
-
-            result_color /= simd_f32_ray_per_pixel_count;
-
-            f32 result_r_f32 = linear_to_srgb(clamp01(add_all_lanes(result_color.r)));
-            f32 result_g_f32 = linear_to_srgb(clamp01(add_all_lanes(result_color.g)));
-            f32 result_b_f32 = linear_to_srgb(clamp01(add_all_lanes(result_color.b)));
-
-            u32 result_r = round_r32_u32(255.0f*result_r_f32) << 16;
-            u32 result_g = round_r32_u32(255.0f*result_g_f32) << 8;
-            u32 result_b =  round_r32_u32(255.0f*result_b_f32) << 0;
-
-            u32 result_pixel_color = 0xff << 24 |
-                                    result_r |
-                                    result_g |
-                                    result_b;
-
-            *pixel++ = result_pixel_color;
-        }
-
-        row += output_width;
-    }
-
-    result.bounced_ray_count = bounced_ray_count;
-
-    return result;
-}
-#endif
 
 internal raytracer_output
 render_raytraced_image_tile(raytracer_data *data)
@@ -1053,7 +717,6 @@ render_raytraced_image_tile(raytracer_data *data)
                     // NOTE(joon): Want to get rid of this value.. but sphere needs this to calculate the normal :(
                     v3 next_ray_origin = {};
                     v3 next_normal = {};
-#if 1
                     for(u32 plane_index = 0;
                             plane_index < world->plane_count;
                             ++plane_index)
@@ -1072,7 +735,7 @@ render_raytraced_image_tile(raytracer_data *data)
                         }
                     }
 
-#if 0
+#if 1
                     for(u32 sphere_index = 0;
                             sphere_index < world->sphere_count;
                             ++sphere_index)
@@ -1108,7 +771,6 @@ render_raytraced_image_tile(raytracer_data *data)
                             next_normal = intersect_result.next_normal;
                         }
                     }
-#endif
 #endif
                     bounced_ray_count++;
                     if(hit_mat_index)

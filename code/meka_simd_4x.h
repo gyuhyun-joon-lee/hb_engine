@@ -302,6 +302,7 @@ get_non_zero_lane_count_from_all_set_bit(simd_u32 a)
     simd_u32 simd_u32_1 = simd_u32_(1);
 
     result = add_all_lanes(a & simd_u32_1);
+    //result = get_lane(a, 0) || get_lane(a, 1) || get_lane(a, 2) || get_lane(a, 3);
 
     return result;
 }
