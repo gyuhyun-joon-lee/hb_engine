@@ -27,6 +27,7 @@
 #include "meka_mesh_loader.cpp"
 #include "meka_render.cpp"
 #include "meka_ray.cpp"
+#include "meka_image_loader.cpp"
 
 //TODO(joon) : Put input handlers inside some struct or something
 global b32 is_w_down;
@@ -57,6 +58,19 @@ internal u64
 mach_time_diff_in_nano_seconds(u64 begin, u64 end, r32 nano_seconds_per_tick)
 {
     return (u64)(((end - begin)*nano_seconds_per_tick));
+}
+
+
+PLATFORM_GET_FILE_SIZE(macos_get_file_size) 
+{
+    u64 result = 0;
+
+    int File = open(filename, O_RDONLY);
+    struct stat FileStat;
+    fstat(File , &FileStat); 
+    result = FileStat.st_size;
+
+    return result;
 }
 
 PLATFORM_READ_FILE(debug_macos_read_file)
@@ -171,7 +185,7 @@ display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_t
 
 internal void
 metal_record_render_command(id<MTLRenderCommandEncoder> render_encoder, render_mesh *mesh, 
-                            v3 scale, v3 translate, v3 color = V3(1, 1, 1))
+                            v3 scale, v3 translate, v3 color = v3_(1, 1, 1))
 {
     // TODO(joon) : I wonder if Metal copies whatever data it needs, 
     // or does it need a seperate storage that holds all the uniform buffer just like in Vulkan?
@@ -404,35 +418,6 @@ macos_handle_event(NSApplication *app, NSWindow *window)
     }
 } 
 
-
-#pragma pack(push, 1)
-struct debug_bmp_file_header
-{
-    u16 file_header;
-    u32 file_size;
-    u16 reserved_1;
-    u16 reserved_2;
-    u32 pixel_offset;
-
-    u32 header_size;
-    u32 width;
-    u32 height;
-    u16 color_plane_count;
-    u16 bits_per_pixel;
-    u32 compression;
-
-    u32 image_size;
-    u32 pixels_in_meter_x;
-    u32 pixels_in_meter_y;
-    u32 colors;
-    u32 important_color_count;
-    u32 red_mask;
-    u32 green_mask;
-    u32 blue_mask;
-    u32 alpha_mask;
-};
-#pragma pack(pop)
-
 // TODO(joon) : It seems like this combines read & write barrier, but make sure
 // TODO(joon) : mfence?(DSB)
 #define write_barrier() OSMemoryBarrier(); 
@@ -442,6 +427,10 @@ struct macos_thread
 {
     u32 ID;
     thread_work_queue *queue;
+
+    // TODO(joon): I like the idea of each thread having a random number generator that they can use throughout the whole process
+    // though what should happen to the 0th thread(which does not have this structure)?
+    simd_random_series series;
 };
 
 // NOTE(joon) : use this to add what thread should do
@@ -462,7 +451,9 @@ internal
 THREAD_WORK_CALLBACK(thread_work_callback_render_tile)
 {
     thread_work_raytrace_tile_data *raytracer_data = (thread_work_raytrace_tile_data *)data;
+
     raytracer_output output = render_raytraced_image_tile(&raytracer_data->raytracer_input);
+    //raytracer_output output = render_raytraced_image_tile_simd(&raytracer_data->raytracer_input);
 
     // TODO(joon): double check the return value of the OSAtomicIncrement32, is it really a post incremented value? 
     i32 rendered_tile_count = OSAtomicIncrement32Barrier((volatile int32_t *)&raytracer_data->raytracer_input.world->rendered_tile_count);
@@ -470,6 +461,7 @@ THREAD_WORK_CALLBACK(thread_work_callback_render_tile)
     u64 ray_count = raytracer_data->raytracer_input.ray_per_pixel_count*
                     (raytracer_data->raytracer_input.one_past_max_x - raytracer_data->raytracer_input.min_x) * 
                     (raytracer_data->raytracer_input.one_past_max_y - raytracer_data->raytracer_input.min_y);
+
     OSAtomicAdd64Barrier(ray_count, (volatile int64_t *)&raytracer_data->raytracer_input.world->total_ray_count);
     OSAtomicAdd64Barrier(output.bounced_ray_count, (volatile int64_t *)&raytracer_data->raytracer_input.world->bounced_ray_count);
 
@@ -562,6 +554,18 @@ thread_proc(void *data)
 int 
 main(void)
 {
+    simd_f32 temp0 = simd_f32_(12.1f);
+    simd_f32 temp1 = simd_f32_(1.0f);
+
+    simd_u32 greater_than_result = compare_greater_equal(temp0, temp1);
+    simd_u32 lesser_than_result = compare_less_equal(temp0, temp1);
+    
+    platform_read_file_result test_png = debug_macos_read_file("/Volumes/meka/meka_renderer/data/test.png");
+    platform_read_file_result test_bmp = debug_macos_read_file("/Volumes/meka/meka_renderer/data/test.bmp");
+    bmp_file_header *h = (bmp_file_header *)test_bmp.memory;  
+    
+    load_png(test_png);
+    
     struct mach_timebase_info mach_time_info;
     mach_timebase_info(&mach_time_info);
     r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
@@ -569,16 +573,16 @@ main(void)
     u32 output_width = 1920;
     u32 output_height = 1080;
 
-    u32 output_size = sizeof(u32)*output_width*output_height + sizeof(debug_bmp_file_header);
+    u32 output_size = sizeof(u32)*output_width*output_height + sizeof(bmp_file_header);
     u8 *output = (u8 *)malloc(output_size);
     zero_memory(output, output_size);
     
-    debug_bmp_file_header *bmp_header = (debug_bmp_file_header *)output;  
+    bmp_file_header *bmp_header = (bmp_file_header *)output;  
     bmp_header->file_header = 19778;
     bmp_header->file_size = output_size;
-    bmp_header->pixel_offset = sizeof(debug_bmp_file_header);
+    bmp_header->pixel_offset = sizeof(bmp_file_header);
 
-    bmp_header->header_size = sizeof(debug_bmp_file_header) - 14;
+    bmp_header->header_size = sizeof(bmp_file_header) - 14;
     bmp_header->width = output_width;
     bmp_header->height = output_height;
     bmp_header->color_plane_count = 1;
@@ -596,51 +600,51 @@ main(void)
     material materials[6] = {};
     // TODO(joon): objects with emit color seems like working ok only ifbthe emit color is much brighter than the limit.. 
     // are we doing something wrong ?
-    materials[0].emit_color = V3(0.1f, 0.1f, 1.0f);
+    materials[0].emit_color = v3_(0.1f, 0.1f, 1.0f);
 
-    materials[1].emit_color = V3(0.01f, 0.01f, 0.01f);
-    materials[1].reflection_color = V3(0.3f, 0.12f, 0.12f);
+    materials[1].emit_color = v3_(0.01f, 0.01f, 0.01f);
+    materials[1].reflection_color = v3_(0.3f, 0.12f, 0.12f);
     materials[1].reflectivity = 0.0f; 
 
-    materials[2].emit_color = 2*V3(1.0f, 0.1f, 0.2f);
+    materials[2].emit_color = 2*v3_(1.0f, 0.1f, 0.2f);
     materials[2].reflectivity = 0.5f;
 
-    materials[3].reflection_color = V3(0.3f, 0.7f, 0.2f);
+    materials[3].reflection_color = v3_(0.3f, 0.7f, 0.2f);
     materials[3].reflectivity = 1.0f;
 
-    materials[4].reflection_color = V3(0.3f, 0.1f, 0.7f);
+    materials[4].reflection_color = v3_(0.3f, 0.1f, 0.7f);
     materials[4].reflectivity = 0.6f;
 
-    materials[5].reflection_color = V3(0.9f, 0.7f, 0.8f);
+    materials[5].reflection_color = v3_(0.9f, 0.7f, 0.8f);
     materials[5].reflectivity = 0.9f;
 
     plane planes[1] = {};
-    planes[0].normal = V3(0, 0, 1);
+    planes[0].normal = v3_(0, 0, 1);
     planes[0].d = 0;
     planes[0].material_index = 1;
 
     sphere spheres[3] = {};
-    spheres[0].center = V3(0, 0, 0); 
-    spheres[0].r = 1; 
+    spheres[0].center = v3_(0, 0, 0); 
+    spheres[0].radius = 1; 
     spheres[0].material_index = 2;
 
-    spheres[1].center = V3(3, -2, 0.8f); 
-    spheres[1].r = 0.7f; 
+    spheres[1].center = v3_(3, -2, 0.8f); 
+    spheres[1].radius = 0.7f; 
     spheres[1].material_index = 3;
 
-    spheres[2].center = V3(-3, 0, 2); 
-    spheres[2].r = 1; 
+    spheres[2].center = v3_(-3, 0, 2); 
+    spheres[2].radius = 1; 
     spheres[2].material_index = 4;
 
     triangle triangles[2] = {};
-    triangles[0].v0 = V3(-30, 7, 0); 
-    triangles[0].v1 = V3(-20, 60, 2); 
-    triangles[0].v2 = V3(0, 4, 2); 
+    triangles[0].v0 = v3_(-30, 7, 0); 
+    triangles[0].v1 = v3_(-20, 60, 2); 
+    triangles[0].v2 = v3_(0, 4, 2); 
     triangles[0].material_index = 5;
 
-    triangles[1].v0 = V3(-3, 4, 0.5f); 
-    triangles[1].v1 = V3(3, 4, 0.5f); 
-    triangles[1].v2 = V3(0, 4, 5); 
+    triangles[1].v0 = v3_(-3, 4, 0.5f); 
+    triangles[1].v1 = v3_(3, 4, 0.5f); 
+    triangles[1].v2 = v3_(0, 4, 5); 
     triangles[1].material_index = 5;
 
     world world = {};
@@ -656,10 +660,10 @@ main(void)
     world.triangle_count = array_count(triangles);
     world.triangles = triangles;
 
-    v3 camera_p = V3(2, -10, 1);
+    v3 camera_p = v3_(2, -10, 1);
 
     v3 camera_z_axis = normalize(camera_p); // - V3(0, 0, 0), which is the center of the world
-    v3 camera_x_axis = normalize(cross(V3(0, 0, 1), camera_z_axis));
+    v3 camera_x_axis = normalize(cross(v3_(0, 0, 1), camera_z_axis));
     v3 camera_y_axis = normalize(cross(camera_z_axis, camera_x_axis));
 
     r32 film_width = 1.0f;
@@ -687,7 +691,7 @@ main(void)
     u32 core_count = 8;
 
     // NOTE(joon): If the height is a positive value, the bitmap is bottom-up
-    u32 *pixels = (u32 *)(output + sizeof(debug_bmp_file_header));
+    u32 *pixels = (u32 *)(output + sizeof(bmp_file_header));
     
     semaphore = dispatch_semaphore_create(0);
 
@@ -695,27 +699,33 @@ main(void)
     pthread_attr_init(&thread_attribute);
 
     thread_work_queue work_queue = {};
-#if 1
-    // TODO(joon) : spawn threads based on the core count
-    macos_thread threads[7] = {};
 
-    for(u32 thread_index = 0;
-            thread_index < array_count(threads);
-            ++thread_index)
+    u32 thread_count = 8; // 1;
+
+    // NOTE(joon): spawn threads
+    if(thread_count > 1)
     {
-        macos_thread *thread = threads + thread_index;
-        thread->ID = thread_index + 1; // 0th thread is the main thread
-        thread->queue = &work_queue;
-        
-        pthread_t thread_id; // we don't care about this one, we just generate our own id
-        int result = pthread_create(&thread_id, &thread_attribute, &thread_proc, (void *)(threads + thread_index));
+        // TODO(joon) : spawn threads based on the core count
+        macos_thread *threads = (macos_thread *)malloc(sizeof(macos_thread) * (thread_count - 1));
 
-        if(result != 0) // 0 is the success value in posix
+        for(u32 thread_index = 0;
+                thread_index < thread_count;
+                ++thread_index)
         {
-            assert(0);
+            macos_thread *thread = threads + thread_index;
+            thread->ID = thread_index + 1; // 0th thread is the main thread
+            thread->queue = &work_queue;
+
+            pthread_t thread_id; // we don't care about this one, we just generate our own id
+            int result = pthread_create(&thread_id, &thread_attribute, &thread_proc, (void *)(threads + thread_index));
+
+            if(result != 0) // 0 is the success value in posix
+            {
+                assert(0);
+            }
         }
     }
-#endif
+
 
     // NOTE(joon): This value should be carefully managed, as it affects to the drainout effect
     // for now, 16 by 16 seems like outputting the best(close to) result(1.57 sec)?
@@ -723,6 +733,7 @@ main(void)
     u32 tile_y_count = 16;
     u32 pixel_count_per_tile_x = output_width/tile_x_count;
     u32 pixel_count_per_tile_y = output_height/tile_y_count;
+    u32 ray_per_pixel_count = 1024;
 
     world.total_tile_count = tile_x_count * tile_y_count;
     world.rendered_tile_count = 0;
@@ -776,7 +787,10 @@ main(void)
             data->raytracer_input.min_y = min_y;
             data->raytracer_input.one_past_max_y = one_past_max_y;
 
-            data->raytracer_input.ray_per_pixel_count = 16;
+            data->raytracer_input.ray_per_pixel_count = ray_per_pixel_count;
+
+            // TODO(joon): Get rid of rand(), maybe by using rand instruction set?
+            data->raytracer_input.series = start_random_series((u32)rand(), (u32)rand(), (u32)rand(), (u32)rand());
 
             macos_add_thread_work_item(&work_queue,
                                         thread_work_callback_render_tile,
@@ -794,6 +808,7 @@ main(void)
     // 7.71052sec
     u64 nano_sec_elapsed = mach_time_diff_in_nano_seconds(begin_raytracing_time, mach_absolute_time(), nano_seconds_per_tick);
     
+    printf("Config : %u thread(s), %u lane(s), %u rays/pixel\n", thread_count, MEKA_LANE_WIDTH, ray_per_pixel_count);
     printf("Raytracing finished in : %.6fsec\n", (float)((double)nano_sec_elapsed/(double)sec_to_nano_sec));
     printf("Total Ray Count : %llu, ", world.total_ray_count);
     printf("Bounced Ray Count : %llu, ", world.bounced_ray_count);
@@ -981,11 +996,11 @@ main(void)
     raw_mesh sphere_raw_mesh = generate_sphere_mesh(100, 100);
     render_mesh sphere_mesh = metal_create_render_mesh_from_raw_mesh(device, &sphere_raw_mesh, &transient_memory_arena);
 
-    m4 bottom_rotation = QuarternionRotationM4(V3(0, 1, 0), pi_32);
-    m4 right_rotation = QuarternionRotationM4(V3(1, 0, 0), half_pi_32);
-    m4 left_rotation = QuarternionRotationM4(V3(1, 0, 0), -half_pi_32);
-    m4 front_rotation = QuarternionRotationM4(V3(0, 1, 0), half_pi_32);
-    m4 back_rotation = QuarternionRotationM4(V3(0, 1, 0), -half_pi_32);
+    m4 bottom_rotation = QuarternionRotationM4(v3_(0, 1, 0), pi_32);
+    m4 right_rotation = QuarternionRotationM4(v3_(1, 0, 0), half_pi_32);
+    m4 left_rotation = QuarternionRotationM4(v3_(1, 0, 0), -half_pi_32);
+    m4 front_rotation = QuarternionRotationM4(v3_(0, 1, 0), half_pi_32);
+    m4 back_rotation = QuarternionRotationM4(v3_(0, 1, 0), -half_pi_32);
 
     memory_arena terrain_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(32), &platform_memory.permanent_memory_used);
     raw_mesh terrains[6] = {};
@@ -1002,7 +1017,7 @@ main(void)
             ++vertex_index)
     {
         v3 *position = terrains[1].positions + vertex_index;
-        *position = (bottom_rotation*V4(*position, 1.0f)).xyz;
+        *position = (bottom_rotation*v4_(*position, 1.0f)).xyz;
     }
     generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 1);
     terrain_meshes[1] = metal_create_render_mesh_from_raw_mesh(device, terrains + 1, &transient_memory_arena);
@@ -1014,7 +1029,7 @@ main(void)
             ++vertex_index)
     {
         v3 *position = terrains[2].positions + vertex_index;
-        *position = (left_rotation*V4(*position, 1.0f)).xyz;
+        *position = (left_rotation*v4_(*position, 1.0f)).xyz;
 
         int a = 1;
     }
@@ -1028,7 +1043,7 @@ main(void)
             ++vertex_index)
     {
         v3 *position = terrains[3].positions + vertex_index;
-        *position = (right_rotation*V4(*position, 1.0f)).xyz;
+        *position = (right_rotation*v4_(*position, 1.0f)).xyz;
     }
     generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 3);
     terrain_meshes[3] = metal_create_render_mesh_from_raw_mesh(device, terrains + 3, &transient_memory_arena);
@@ -1040,7 +1055,7 @@ main(void)
             ++vertex_index)
     {
         v3 *position = terrains[4].positions + vertex_index;
-        *position = (front_rotation*V4(*position, 1.0f)).xyz;
+        *position = (front_rotation*v4_(*position, 1.0f)).xyz;
     }
     generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 4);
     terrain_meshes[4] = metal_create_render_mesh_from_raw_mesh(device, terrains + 4, &transient_memory_arena);
@@ -1052,7 +1067,7 @@ main(void)
             ++vertex_index)
     {
         v3 *position = terrains[5].positions + vertex_index;
-        *position = (back_rotation*V4(*position, 1.0f)).xyz;
+        *position = (back_rotation*v4_(*position, 1.0f)).xyz;
     }
     generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 5);
     terrain_meshes[5] = metal_create_render_mesh_from_raw_mesh(device, terrains + 5, &transient_memory_arena);
@@ -1099,13 +1114,13 @@ main(void)
         test_triangle *triangle = test_triangles + triangle_index;
 
         r32 position_range = 10.0f;
-        v3 position = V3(random_between(&series, -position_range, position_range), 
+        v3 position = v3_(random_between(&series, -position_range, position_range), 
                         random_between(&series, -position_range, position_range), 
                         random_between(&series, -position_range, position_range));
 
-        triangle->v0 = position + V3(random_between(&series, 4, 7), random_between(&series, 3, 8), random_between(&series, 3, 8));
-        triangle->v1 = position + V3(random_between(&series, 4, 7), random_between(&series, 3, 8), random_between(&series, 3, 8));
-        triangle->v2 = position + V3(random_between(&series, 4, 7), random_between(&series, 3, 9), random_between(&series, 3, 8));
+        triangle->v0 = position + v3_(random_between(&series, 4, 7), random_between(&series, 3, 8), random_between(&series, 3, 8));
+        triangle->v1 = position + v3_(random_between(&series, 4, 7), random_between(&series, 3, 8), random_between(&series, 3, 8));
+        triangle->v2 = position + v3_(random_between(&series, 4, 7), random_between(&series, 3, 9), random_between(&series, 3, 8));
 
         triangle->material_index = 0;
 
@@ -1113,9 +1128,9 @@ main(void)
 
     camera camera = {};
     r32 focal_length = 1.0f;
-    camera.p = V3(-10, 0, 0);
-    camera.initial_z_axis = V3(-1, 0, 0);
-    camera.initial_x_axis = normalize(cross(V3(0, 0, 1), camera.initial_z_axis));
+    camera.p = v3_(-10, 0, 0);
+    camera.initial_z_axis = v3_(-1, 0, 0);
+    camera.initial_x_axis = normalize(cross(v3_(0, 0, 1), camera.initial_z_axis));
     camera.initial_y_axis = normalize(cross(camera.initial_z_axis, camera.initial_x_axis));
      
     r32 light_angle = 0.f;
@@ -1125,7 +1140,7 @@ main(void)
     [app run];
 
     u64 last_time = mach_absolute_time();
-    is_game_running = false;
+    is_game_running = true;
     while(is_game_running)
     {
         macos_handle_event(app, window);
@@ -1146,7 +1161,7 @@ main(void)
 
             m4 proj = projection(focal_length, window_width_over_height, 0.1f, 10000.0f);
 
-            v4 temp = V4(0, 1, 1, 1);
+            v4 temp = v4_(0, 1, 1, 1);
             v4 view_temp = (temp_view_matrix * temp);
             v4 proj_temp = proj*view_temp;
 
@@ -1299,7 +1314,7 @@ main(void)
                 per_frame_data per_frame_data = {};
                 per_frame_data.proj = convert_m4_to_r32_4x4(proj_matrix);
                 per_frame_data.view = convert_m4_to_r32_4x4(camera_rhs_to_lhs(view_matrix));
-                v3 light_p = V3(light_radius*cosf(light_angle), light_radius*sinf(light_angle), 10.f);
+                v3 light_p = v3_(light_radius*cosf(light_angle), light_radius*sinf(light_angle), 10.f);
                 per_frame_data.light_p = convert_to_r32_3(light_p);
                 [render_encoder setVertexBytes: &per_frame_data
                                 length: sizeof(per_frame_data)
@@ -1354,7 +1369,7 @@ main(void)
                     metal_record_render_command(render_encoder, terrain_meshes + terrain_index, scale, translate);
                 }
 #endif
-                metal_record_render_command(render_encoder, &cow_mesh, V3(1, 1, 1), V3(0, 0, 0));
+                metal_record_render_command(render_encoder, &cow_mesh, v3_(1, 1, 1), v3_(0, 0, 0));
 #if 0
                 metal_record_render_command(render_encoder, &suzanne_mesh, V3(20, 20, 20), V3(0, 0, 2));
                 metal_record_render_command(render_encoder, &sphere_mesh, V3(3, 3, 3), V3(0, 0, 0));
@@ -1381,7 +1396,7 @@ main(void)
 
                 [render_encoder setRenderPipelineState:line_pipeline_state];
                 //per_object_data.model = convert_m4_to_r32_4x4(translate_m4(V3(0, 0, 0))*scale_m4(10, 10, 1000));
-                per_object_data.color = V3(0, 0.15f, 0.8f);
+                per_object_data.color = v3_(0, 0.15f, 0.8f);
 
                 [render_encoder setVertexBytes: &per_object_data
                                 length: sizeof(per_object_data)
@@ -1392,9 +1407,6 @@ main(void)
                 line_vertices[1].p = convert_to_r32_3(camera.p + 1000.0f * camera_dir);
                 //line_vertices[0].p = {0, 0, 0};
                 //line_vertices[1].p = {0, 0, 10000};
-
-                v4 temp_0 = view_matrix*V4(line_vertices[0].p.x, line_vertices[0].p.y, line_vertices[0].p.z, 1.0f);
-                v4 temp_1 = view_matrix*V4(line_vertices[1].p.x, line_vertices[1].p.y, line_vertices[1].p.z, 1.0f);
 
                 // NOTE(joon): setVertexBytes can only used for data with size up to 4kb
                 // with vertex that only has position value(16 bytes), it can draw up to 83 triangles
@@ -1470,7 +1482,6 @@ main(void)
         last_time = mach_absolute_time();
     }
 
-    int a = 1;
 
     return 0;
 }

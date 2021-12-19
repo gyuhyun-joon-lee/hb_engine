@@ -7,7 +7,7 @@
 #include <math.h>
 
 inline v2
-V2(r32 x, r32 y)
+v2_(r32 x, r32 y)
 {
     v2 result = {};
 
@@ -23,9 +23,8 @@ length(v2 a)
     return sqrtf(a.x*a.x + a.y*a.y);
 }
 
-
 inline v2
-V2i(i32 x, i32 y)
+v2i_(i32 x, i32 y)
 {
     v2 result = {};
 
@@ -115,7 +114,7 @@ operator*(r32 value, v2 &a)
 }
 
 inline v3
-V3(r32 x, r32 y, r32 z)
+v3_(r32 x, r32 y, r32 z)
 {
     v3 result = {};
 
@@ -273,11 +272,11 @@ dot(v3 a, v3 b)
 inline v3
 hadamard(v3 a, v3 b)
 {
-    return V3(a.x*b.x, a.y*b.y, a.z*b.z);
+    return v3_(a.x*b.x, a.y*b.y, a.z*b.z);
 }
 
 inline v4
-V4(r32 x, r32 y, r32 z, r32 w)
+v4_(r32 x, r32 y, r32 z, r32 w)
 {
     v4 result = {};
     result.x = x;
@@ -289,7 +288,7 @@ V4(r32 x, r32 y, r32 z, r32 w)
 }
 
 inline v4
-V4(v3 xyz, r32 w)
+v4_(v3 xyz, r32 w)
 {
     v4 result = {};
     result.xyz = xyz;
@@ -382,7 +381,7 @@ operator*=(v4 &a, r32 value)
 
 // return identity matrix
 inline m4
-M4()
+m4_()
 {
     m4 result = {};
     result.column[0].e[0] = 1.0f;
@@ -394,7 +393,7 @@ M4()
 }
 
 inline m4
-M4(r32 e00, r32 e01, r32 e02, r32 e03,
+m4_(r32 e00, r32 e01, r32 e02, r32 e03,
     r32 e10, r32 e11, r32 e12, r32 e13,
     r32 e20, r32 e21, r32 e22, r32 e23,
     r32 e30, r32 e31, r32 e32, r32 e33)
@@ -571,7 +570,7 @@ operator*(m4 m, v4 v)
 inline m4
 scale_m4(v3 scale)
 {
-    m4 result = M4();
+    m4 result = m4_();
 
     result.column[0].e[0] *= scale.x;
     result.column[1].e[1] *= scale.y;
@@ -583,13 +582,13 @@ scale_m4(v3 scale)
 inline m4
 scale_m4(r32 x, r32 y, r32 z)
 {
-    return scale_m4(V3(x, y, z));
+    return scale_m4(v3_(x, y, z));
 }
 
 inline m4
 translate_m4(v3 translate)
 {
-    m4 result = M4();
+    m4 result = m4_();
 
     result.column[3].xyz = translate;
 
@@ -599,7 +598,7 @@ translate_m4(v3 translate)
 inline m4
 translate_m4(r32 x, r32 y, r32 z)
 {
-    return translate_m4(V3(x, y, z));
+    return translate_m4(v3_(x, y, z));
 }
 
 /*
@@ -658,10 +657,10 @@ QuarternionRotationM4(v3 axisVector, r32 rad)
     r32 m21 = 2*q2*q3 + 2*q0*q1;
     r32 m22 = 1 - 2*q1*q1 - 2*q2*q2;
 
-    result.column[0] = V4(m00, m10, m20, 0);
-    result.column[1] = V4(m01, m11, m21, 0);
-    result.column[2] = V4(m02, m12, m22, 0);
-    result.column[3] = V4(0, 0, 0, 1);
+    result.column[0] = v4_(m00, m10, m20, 0);
+    result.column[1] = v4_(m01, m11, m21, 0);
+    result.column[2] = v4_(m02, m12, m22, 0);
+    result.column[3] = v4_(0, 0, 0, 1);
 
     return result;
 }
@@ -738,16 +737,16 @@ world_to_camera(v3 camera_world_p,
                     QuarternionRotationM4(initial_camera_y_axis, along_y)*
                     QuarternionRotationM4(initial_camera_x_axis, along_x);
 
-    v3 camera_x_axis = (quarternion*V4(initial_camera_x_axis, 0)).xyz;
-    v3 camera_y_axis = (quarternion*V4(initial_camera_y_axis, 0)).xyz;
-    v3 camera_z_axis = (quarternion*V4(initial_camera_z_axis, 0)).xyz;
+    v3 camera_x_axis = (quarternion*v4_(initial_camera_x_axis, 0)).xyz;
+    v3 camera_y_axis = (quarternion*v4_(initial_camera_y_axis, 0)).xyz;
+    v3 camera_z_axis = (quarternion*v4_(initial_camera_z_axis, 0)).xyz;
 
     // NOTE(joon): Identical with projecting the world space coordinate onto the camera axis vectors
     m4 rotation = {};
-    rotation.column[0] = V4(camera_x_axis.x, camera_y_axis.x, camera_z_axis.x, 0);
-    rotation.column[1] = V4(camera_x_axis.y, camera_y_axis.y, camera_z_axis.y, 0);
-    rotation.column[2] = V4(camera_x_axis.z, camera_y_axis.z, camera_z_axis.z, 0);
-    rotation.column[3] = V4(0, 0, 0, 1);
+    rotation.column[0] = v4_(camera_x_axis.x, camera_y_axis.x, camera_z_axis.x, 0);
+    rotation.column[1] = v4_(camera_x_axis.y, camera_y_axis.y, camera_z_axis.y, 0);
+    rotation.column[2] = v4_(camera_x_axis.z, camera_y_axis.z, camera_z_axis.z, 0);
+    rotation.column[3] = v4_(0, 0, 0, 1);
 
     m4 translation = translate_m4(-camera_world_p.x, -camera_world_p.y, -camera_world_p.z);
 
@@ -765,7 +764,7 @@ camera_to_world(v3 camera_v,
     m4 quarternion = QuarternionRotationM4(initial_camera_z_axis, along_z)*
                     QuarternionRotationM4(initial_camera_y_axis, along_y)*
                     QuarternionRotationM4(initial_camera_x_axis, along_x);
-    v3 world_v = (quarternion*V4(camera_v, 0)).xyz;
+    v3 world_v = (quarternion*v4_(camera_v, 0)).xyz;
 
     return world_v;
 }
@@ -801,10 +800,10 @@ projection(r32 focal_length, r32 aspect_ratio, r32 near, r32 far)
 
     r32 c = clip_space_top_is_one() ? 1.f : 0.f; 
 
-    result.column[0] = V4(focal_length, 0, 0, 0);
-    result.column[1] = V4(0, focal_length*aspect_ratio, 0, 0);
-    result.column[2] = V4(0, 0, c*(near+far)/(far-near), 1);
-    result.column[3] = V4(0, 0, (-2.0f*far*near)/(far-near), 0);
+    result.column[0] = v4_(focal_length, 0, 0, 0);
+    result.column[1] = v4_(0, focal_length*aspect_ratio, 0, 0);
+    result.column[2] = v4_(0, 0, c*(near+far)/(far-near), 1);
+    result.column[3] = v4_(0, 0, (-2.0f*far*near)/(far-near), 0);
 
     return result;
 }
@@ -822,10 +821,10 @@ symmetric_projection(r32 r, r32 t, r32 n, r32 f)
 
     // IMPORTANT : In opengl, t corresponds to 1 -> column[1][1] = n/t
     // while in vulkan, t corresponds to -1 -> columm[1][1] = -n/t
-    result.column[0] = V4(n/r, 0, 0, 0);
-    result.column[1] = V4(0, (n/t), 0, 0);
-    result.column[2] = V4(0, 0, c*(n+f)/(n-f), -1);
-    result.column[3] = V4(0, 0, (2.0f*f*n)/(n-f), 0);
+    result.column[0] = v4_(n/r, 0, 0, 0);
+    result.column[1] = v4_(0, (n/t), 0, 0);
+    result.column[2] = v4_(0, 0, c*(n+f)/(n-f), -1);
+    result.column[3] = v4_(0, 0, (2.0f*f*n)/(n-f), 0);
 
     return result;
 }

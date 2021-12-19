@@ -13,6 +13,7 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 
 typedef float r32;
+typedef float f32;
 #ifndef MEKA_METAL_SHADER
 typedef double r64;
 #endif

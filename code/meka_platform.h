@@ -64,6 +64,9 @@ struct platform_read_file_result
     u64 size; // TOOD/joon : make this to be at least 64bit
 };
 
+#define PLATFORM_GET_FILE_SIZE(name) u64 (name)(char *filename)
+typedef PLATFORM_GET_FILE_SIZE(platform_get_file_size);
+
 #define PLATFORM_READ_FILE(name) platform_read_file_result (name)(char *filename)
 typedef PLATFORM_READ_FILE(platform_read_file);
 

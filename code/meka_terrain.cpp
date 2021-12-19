@@ -5,6 +5,7 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
                                 i32 stride,
                                 r32 dim, r32 radius, r32 max_height)
 {
+    // TODO(joon): Get rid of rand()
     u32 random_seed = (u32)rand();
     random_series series = start_random_series(random_seed); 
 
@@ -28,7 +29,7 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
             x < max_x;
             x++)
         {
-            r32 distance = dim*length(V2i(center_x_i32, center_y_i32) - V2i(x, y));
+            r32 distance = dim*length(v2i_(center_x_i32, center_y_i32) - v2i_(x, y));
             if(distance <= radius)
             {
                 r32 height = (1.0f - (distance / radius))*max_height;
@@ -77,7 +78,7 @@ generate_sphere_mesh(u32 desired_column_count, u32 desired_row_count)
         {
             r32 cos_theta = cosf(column*rad_per_column);
             r32 sin_theta = sinf(column*rad_per_column);
-            v3 p = radius * cos_phi * V3(cos_theta,
+            v3 p = radius * cos_phi * v3_(cos_theta,
                                         sin_theta,
                                         0);
             p.z = z_for_this_row;
@@ -157,7 +158,7 @@ generate_plane_terrain_mesh(memory_arena *memory_arena, u32 quad_width, u32 quad
         {
             r32 random_z = dim*random_between(&series, -0.5f, 0.5f);
             
-            v3 p = V3(startingX + x*dim, startingY + y*dim, random_z);
+            v3 p = v3_(startingX + x*dim, startingY + y*dim, random_z);
             terrain.positions[y*quad_width + x] = p;
         }
     }
@@ -166,7 +167,7 @@ generate_plane_terrain_mesh(memory_arena *memory_arena, u32 quad_width, u32 quad
             mountain_index < 12;
             mountain_index++)
     {
-        v2 mountain_center = V2(random_between(&series, 0, quad_width*dim),
+        v2 mountain_center = v2_(random_between(&series, 0, quad_width*dim),
                                 random_between(&series, 0, quad_height*dim));
 
         r32 height = dim*random_between(&series, 5, 30);
