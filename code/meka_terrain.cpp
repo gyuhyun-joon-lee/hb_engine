@@ -170,8 +170,8 @@ generate_plane_terrain_mesh(memory_arena *memory_arena, u32 quad_width, u32 quad
         v2 mountain_center = v2_(random_between(&series, 0, quad_width*dim),
                                 random_between(&series, 0, quad_height*dim));
 
-        r32 height = dim*random_between(&series, 5, 30);
-        r32 radius = dim*random_between(&series, quad_width/12, quad_width/5);
+        r32 height = dim*random_between(&series, 5, 25);
+        r32 radius = dim*random_between(&series, quad_width/6, quad_width/14);
         generate_mountain_inside_terrain(&terrain, 
                 quad_width, quad_height, 
                 mountain_center, quad_width,

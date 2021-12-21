@@ -14,12 +14,12 @@
 
 #undef internal
 #undef assert
-
 #include "meka_types.h"
 #include "meka_platform.h"
 #include "meka_math.h"
 #include "meka_random.h"
 #include "meka_simd.h"
+#include "meka_font.h"
 // NOTE(joon):add platform independent codes here
 
 #include "meka_render.h"
@@ -452,8 +452,8 @@ THREAD_WORK_CALLBACK(thread_work_callback_render_tile)
 {
     thread_work_raytrace_tile_data *raytracer_data = (thread_work_raytrace_tile_data *)data;
 
-    raytracer_output output = render_raytraced_image_tile(&raytracer_data->raytracer_input);
-    //raytracer_output output = render_raytraced_image_tile_simd(&raytracer_data->raytracer_input);
+    //raytracer_output output = render_raytraced_image_tile(&raytracer_data->raytracer_input);
+    raytracer_output output = render_raytraced_image_tile_simd(&raytracer_data->raytracer_input);
 
     // TODO(joon): double check the return value of the OSAtomicIncrement32, is it really a post incremented value? 
     i32 rendered_tile_count = OSAtomicIncrement32Barrier((volatile int32_t *)&raytracer_data->raytracer_input.world->rendered_tile_count);
@@ -550,21 +550,152 @@ thread_proc(void *data)
 
     return 0;
 }
+
+
+
+// NOTE(joon): *(u32 *)c == "stri" does not work because of the endianess issues
+#define convert_cc(string) (((string[0] & 0xff) << 0) | ((string[1] & 0xff) << 8) | ((string[2] & 0xff) << 16) | ((string[3] & 0xff) << 24))
     
 int 
 main(void)
-{
-    simd_f32 temp0 = simd_f32_(12.1f);
-    simd_f32 temp1 = simd_f32_(1.0f);
+{ 
+    //platform_read_file_result font = debug_macos_read_file("/Users/mekalopo/Library/Fonts/InputMonoCompressed-Light.ttf");
+    platform_read_file_result font = debug_macos_read_file("/System/Library/Fonts/Supplemental/Courier New.ttf");
 
-    simd_u32 greater_than_result = compare_greater_equal(temp0, temp1);
-    simd_u32 lesser_than_result = compare_less_equal(temp0, temp1);
-    
-    platform_read_file_result test_png = debug_macos_read_file("/Volumes/meka/meka_renderer/data/test.png");
-    platform_read_file_result test_bmp = debug_macos_read_file("/Volumes/meka/meka_renderer/data/test.bmp");
-    bmp_file_header *h = (bmp_file_header *)test_bmp.memory;  
-    
-    load_png(test_png);
+    u32 temp = big_to_little_endian((u32)0x11223344);
+
+    u8 *c = font.memory;
+    otf_header *header = (otf_header *)c;
+    u32 version = big_to_little_endian(header->version);
+    u32 table_count = big_to_little_endian(header->table_count);
+    u32 search_range = big_to_little_endian(header->search_range);
+    u32 entry_selector = big_to_little_endian(header->entry_selector);
+    u32 range_shift = big_to_little_endian(header->range_shift);
+
+    c += sizeof(otf_header);
+
+    font_info font_info = {};
+
+    for(u32 table_record_index = 0;
+            table_record_index < table_count;
+            ++table_record_index)
+    {
+        otf_table_record *table_record = (otf_table_record *)c + table_record_index;
+        u32	table_tag = table_record->table_tag; // NOTE(joon): Not converted to little endian for direct string comparison
+        u32	check_sum = big_to_little_endian(table_record->check_sum);
+        u32	offset = big_to_little_endian(table_record->offset);
+        u32	length = big_to_little_endian(table_record->length);
+
+        if(table_tag == convert_cc("head"))
+        {
+            otf_head_block_header *header = (otf_head_block_header *)(font.memory + offset);
+            i16 major_version = big_to_little_endian(header->major_version);
+            i16 minor_version = big_to_little_endian(header->minor_version);
+            i16 font_revision = big_to_little_endian(header->font_revision);
+
+            u32 check_sum_adjustment = big_to_little_endian(header->check_sum_adjustment);
+            u32 magic_number = header->magic_number; // should be 0x5f0f3cf5
+            u16 flags = big_to_little_endian(header->check_sum_adjustment);
+            font_info.resolution = (u32)big_to_little_endian(header->unit_per_em);
+            //i64 time_created = big_to_little_endian(header->time_created);
+            //i64 time_modified = big_to_little_endian(header->time_modified);
+            i16 x_min = big_to_little_endian(header->x_min);
+            i16 y_min = big_to_little_endian(header->y_min);
+            i16 x_max = big_to_little_endian(header->x_max);
+            i16 y_max = big_to_little_endian(header->y_max);
+            u16 style = big_to_little_endian(header->style);
+            u16 min_resolution_in_pixel = big_to_little_endian(header->min_resolution_in_pixel);
+            i16 glyph_data_format = big_to_little_endian(header->glyph_data_format);
+            font_info.glyph_offset_type = big_to_little_endian(header->glyph_offset_type); // 0 for u16, 1 for u32 for the loca block
+
+            int a = 1;
+        }
+        else if(table_tag == convert_cc("cmap"))
+        {
+            otf_cmap_block_header *header = (otf_cmap_block_header *)(font.memory + offset);
+            otf_encoding *encodings = (otf_encoding *)((u8 *)header + sizeof(*header));
+
+            u16 encoding_type = big_to_little_endian(encodings->type);
+            u16 encoding_subtype = big_to_little_endian(encodings->subtype);
+            u32 subtable_offset = big_to_little_endian(encodings->subtable_offset);
+        }
+        else if(table_tag == convert_cc("EBLC"))
+        {
+            otf_EBLC_block_header *header = (otf_EBLC_block_header *)(font.memory + offset);
+
+            u16 major_version = big_to_little_endian(header->major_version);
+            u16 minor_version = big_to_little_endian(header->minor_version);
+            u32 bitmap_size_record_count = big_to_little_endian(header->bitmap_size_record_count);
+
+            font_info.bitmap_sizes = (otf_bitmap_size *)((u8 *)header + sizeof(otf_EBLC_block_header));
+        }
+        else if(table_tag == convert_cc("EBDT"))
+        {
+            // embedded Bitmap Data Table
+        }
+        else if(table_tag == convert_cc("maxp"))
+        {
+            otf_maxp_block_header *header = (otf_maxp_block_header *)(font.memory + offset);
+
+            font_info.glyph_count = big_to_little_endian(header->glyph_count);
+        }
+        else if(table_tag == convert_cc("loca"))
+        {
+            font_info.glyph_offsets = (void *)(font.memory + offset);
+        }
+        else if(table_tag == convert_cc("glyf"))
+        {
+            font_info.glyph_data = (font.memory + offset);
+        }
+    }
+
+#if 0
+    // TODO(joon): Support more than ascii codes?
+    for(u32 glyph_index = 0;
+            glyph_index < 256;
+            ++glyph_index)
+    {
+        u32 offset = 0;
+        if(font_info.glyph_offset_type == 0)
+        {
+            offset = *((u16 *)font_info.glyph_offsets + glyph_index);
+        }
+        if(font_info.glyph_offset_type == 1)
+        {
+            offset = big_to_little_endian(*((u32 *)font_info.glyph_offsets + glyph_index));
+        }
+
+        glyph_info *info = glyph_infos + glyph_index;
+
+        otf_glyf_header *glyph_header = (otf_glyf_header *)(font_info.glyph_data + offset);
+        // NOTE(joon): positive - simple glyph, negative - composite glyph
+        // https://docs.microsoft.com/en-us/typography/opentype/spec/glyf
+        i16 number_of_contours = big_to_little_endian(glyph_header->number_of_contours); 
+
+        i16 x_min = big_to_little_endian(glyph_header->x_min);
+        i16 y_min = big_to_little_endian(glyph_header->y_min);
+
+        i16 x_max = big_to_little_endian(glyph_header->x_max);
+        i16 y_max = big_to_little_endian(glyph_header->x_max);
+
+        int a = 1;
+    }
+#endif
+
+    // TODO(joon): Actually use this brdf tables
+    platform_read_file_result brdf_files[5] = {};
+    brdf_files[0] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/chrome-steel.binary");
+    brdf_files[1] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/fruitwood-241.binary");
+    brdf_files[2] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/light-brown-fabric.binary");
+    brdf_files[3] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/pure-rubber.binary");
+    brdf_files[4] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/special-walnut-224.binary");
+
+    f32 *brdf_lookup_tables[5] = {};
+    brdf_lookup_tables[0] = load_merl_brdf(brdf_files[0]);
+    brdf_lookup_tables[1] = load_merl_brdf(brdf_files[1]);
+    brdf_lookup_tables[2] = load_merl_brdf(brdf_files[2]);
+    brdf_lookup_tables[3] = load_merl_brdf(brdf_files[3]);
+brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     
     struct mach_timebase_info mach_time_info;
     mach_timebase_info(&mach_time_info);
@@ -597,38 +728,53 @@ main(void)
     bmp_header->blue_mask = 0x000000ff;
     bmp_header->alpha_mask = 0xff000000;
 
-    material materials[6] = {};
+    material materials[9] = {};
     // TODO(joon): objects with emit color seems like working ok only ifbthe emit color is much brighter than the limit.. 
     // are we doing something wrong ?
-    materials[0].emit_color = v3_(0.1f, 0.1f, 1.0f);
+    materials[0].emit_color = v3_(0.7f, 0.7f, 1.0f);
 
-    materials[1].emit_color = v3_(0.01f, 0.01f, 0.01f);
+    materials[1].brdf_table = brdf_lookup_tables[0];
     materials[1].reflection_color = v3_(0.3f, 0.12f, 0.12f);
     materials[1].reflectivity = 0.0f; 
 
-    materials[2].emit_color = 2*v3_(1.0f, 0.1f, 0.2f);
+    materials[2].emit_color = 9*v3_(1.0f, 0.1f, 0.2f);
     materials[2].reflectivity = 0.5f;
 
+    materials[3].brdf_table = brdf_lookup_tables[1];
     materials[3].reflection_color = v3_(0.3f, 0.7f, 0.2f);
     materials[3].reflectivity = 1.0f;
 
+    materials[4].brdf_table = brdf_lookup_tables[2];
     materials[4].reflection_color = v3_(0.3f, 0.1f, 0.7f);
-    materials[4].reflectivity = 0.6f;
+    materials[4].reflectivity = 0.8f;
 
+    materials[5].brdf_table = brdf_lookup_tables[3];
     materials[5].reflection_color = v3_(0.9f, 0.7f, 0.8f);
     materials[5].reflectivity = 0.9f;
+
+    materials[6].brdf_table = brdf_lookup_tables[3];
+    materials[6].reflection_color = v3_(1.0f, 1.0f, 1.0f);
+    materials[6].reflectivity = 1.0f;
+
+    materials[7].brdf_table = brdf_lookup_tables[3];
+    materials[7].reflection_color = v3_(0.7f, 0.7f, 0.7f);
+    materials[7].reflectivity = 1.0f;
+
+    materials[8].brdf_table = brdf_lookup_tables[3];
+    materials[8].reflection_color = v3_(0.1f, 0.1f, 0.1f);
+    materials[8].reflectivity = 1.0f;
 
     plane planes[1] = {};
     planes[0].normal = v3_(0, 0, 1);
     planes[0].d = 0;
     planes[0].material_index = 1;
 
-    sphere spheres[3] = {};
+    sphere spheres[5] = {};
     spheres[0].center = v3_(0, 0, 0); 
     spheres[0].radius = 1; 
     spheres[0].material_index = 2;
 
-    spheres[1].center = v3_(3, -2, 0.8f); 
+    spheres[1].center = v3_(3, 1.5f, 0.8f); 
     spheres[1].radius = 0.7f; 
     spheres[1].material_index = 3;
 
@@ -636,7 +782,21 @@ main(void)
     spheres[2].radius = 1; 
     spheres[2].material_index = 4;
 
-    triangle triangles[2] = {};
+    spheres[3].center = v3_(-8, 15, 5); 
+    spheres[3].radius = 4; 
+    spheres[3].material_index = 6;
+
+    spheres[4].center = v3_(5, 10, 1); 
+    spheres[4].radius = 3; 
+    spheres[4].material_index = 8;
+
+    triangle triangles[1] = {};
+    triangles[0].v0 = v3_(-3, 4, 0.5f); 
+    triangles[0].v1 = v3_(3, 4, 0.5f); 
+    triangles[0].v2 = v3_(0, 4, 5); 
+    triangles[0].material_index = 7;
+
+#if 0
     triangles[0].v0 = v3_(-30, 7, 0); 
     triangles[0].v1 = v3_(-20, 60, 2); 
     triangles[0].v2 = v3_(0, 4, 2); 
@@ -646,6 +806,7 @@ main(void)
     triangles[1].v1 = v3_(3, 4, 0.5f); 
     triangles[1].v2 = v3_(0, 4, 5); 
     triangles[1].material_index = 5;
+#endif
 
     world world = {};
     world.material_count = array_count(materials);
@@ -727,13 +888,14 @@ main(void)
     }
 
 
+#if 1
     // NOTE(joon): This value should be carefully managed, as it affects to the drainout effect
     // for now, 16 by 16 seems like outputting the best(close to) result(1.57 sec)?
     u32 tile_x_count = 16;
     u32 tile_y_count = 16;
     u32 pixel_count_per_tile_x = output_width/tile_x_count;
     u32 pixel_count_per_tile_y = output_height/tile_y_count;
-    u32 ray_per_pixel_count = 1024;
+    u32 ray_per_pixel_count = 4096*2;
 
     world.total_tile_count = tile_x_count * tile_y_count;
     world.rendered_tile_count = 0;
@@ -797,6 +959,7 @@ main(void)
                                         (void *)data);
         }
     }
+
     macos_complete_all_thread_work_queue_items(&work_queue);
 
     // complete all thread work only gurantee that all the works are fired up, 
@@ -813,6 +976,7 @@ main(void)
     printf("Total Ray Count : %llu, ", world.total_ray_count);
     printf("Bounced Ray Count : %llu, ", world.bounced_ray_count);
     printf("%0.6fns/ray\n", ((double)nano_sec_elapsed/world.bounced_ray_count));
+#endif
 
     //usleep(1000000);
 
@@ -882,7 +1046,8 @@ main(void)
 
     // TODO(joon): when connected to the external display, this should be window_width and window_height
     // but if not, this should be window_width/2 and window_height/2. Why?
-    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width, (r32)window_height);
+    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width, (r32)window_height);
+    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width/2.0f, (r32)window_height/2.0f);
 
     NSWindow *window = [[NSWindow alloc] initWithContentRect : window_rect
                                         // Apple window styles : https://developer.apple.com/documentation/appkit/nswindow/stylemask
@@ -1196,66 +1361,6 @@ main(void)
             }
         }
 
-#if 0
-        // NOTE(joon): This weird convention comes from the fact that the camera lookat direction is always (1, 0, 0) in camera space.
-        // TODO(joon): Maybe change this to be more understandable value?
-        v3 camera_space_left_bottom_corner = V3(focal_length, 0.5f, -0.5f*window_width_over_height);
-        r32 film_y = 0.0f;
-        for(u32 y = 0;
-                y < window_height;
-                ++y)
-        {
-            r32 film_x = 0.0f;
-            for(u32 x = 0;
-                    x < window_width;
-                    ++x)
-            {
-                v3 result = V3(0, 0, 0);
-                u32 ray_count = 8;
-
-                for(u32 ray_index = 0;
-                        ray_index < ray_count;
-                        ++ray_index)
-                {
-                    // TODO(joon): Test this code
-                    v3 camera_space_pixel_p = camera_space_left_bottom_corner + V3(0, -film_x, film_y);
-                    v3 world_space_camera_dir = camera_to_world(camera_space_pixel_p, camera.along_x, camera.along_y, camera.along_z);
-
-                    v3 attenuation = V3(1, 1, 1);
-
-                    v3 ray_origin = camera.p;
-                    v3 ray_dir = world_space_camera_dir;
-                    for(u32 triangle_index = 0;
-                            triangle_index < test_triangle_count;
-                            ++triangle_index)
-                    {
-                        triangle *triangle = test_triangles + triangle_index;
-                        v3 *triangle_color = test_triangle_colors + triangle_index;
-                        *triangle_color = V3(0, 0, 1);
-                        
-                        ray_intersect_result ray_intersect_result = ray_intersect_with_triangle(triangle->v0, triangle->v1, triangle->v2, 
-                                                                                ray_origin, ray_dir);
-
-                        if(ray_intersect_result.hit)
-                        {
-                            material *material = materials + triangle_index;
-                            result += hadamard(material->emit_color, attenuation);
-                            attenuation = hadamard(attenuation, material->reflection_color);
-
-                            ray_origin = ray_intersect_result.next_ray_origin;
-                            // TODO(joon) : pure bounce vs random bounce, based on the reflectivity
-                            ray_dir = ray_intersect_result.ray_reflection;
-                        }
-                    }
-                }
-
-                film_x += 1.0f;
-                result /= ray_count;
-            }
-            film_y += window_width_over_height;
-        }
-#endif
-
         /*
             TODO(joon) : For more precisely timed rendering, the operations should be done in this order
             1. Update the game based on the input
@@ -1322,7 +1427,7 @@ main(void)
 
                 // NOTE/joon : make sure you update the non-vertex information first
                 per_object_data per_object_data = {};
-#if 0
+#if 1
                 for(u32 terrain_index = 0;
                         terrain_index < array_count(terrain_meshes);
                         terrain_index++)
@@ -1330,49 +1435,50 @@ main(void)
                     r32 distance = 4.9f;
 
                     v3 translate = {};
-                    v3 scale = V3(0.1f, 0.1f, 0.1f);
+                    v3 scale = v3_(0.1f, 0.1f, 0.1f);
 
                     switch(terrain_index)
                     {
                         case 0:
                         {
                             // top
-                            translate = V3(0, 0, distance);
+                            translate = v3_(0, 0, distance);
                         }break;
                         case 1:
                         {
                             // bottom
-                            translate = V3(0, 0, -distance);
+                            translate = v3_(0, 0, -distance);
                         }break;
                         case 2:
                         {
                             // left
-                            translate = V3(0, distance, 0);
+                            translate = v3_(0, distance, 0);
                         }break;
                         case 3:
                         {
                             // right
-                            translate = V3(0, -distance, 0);
+                            translate = v3_(0, -distance, 0);
                         }break;
                         case 4:
                         {
                             // front
-                            translate = V3(distance, 0, 0);
+                            translate = v3_(distance, 0, 0);
                         }break;
                         case 5:
                         {
                             // back
-                            translate = V3(-distance, 0, 0);
+                            translate = v3_(-distance, 0, 0);
                         }break;
                     }
 
                     metal_record_render_command(render_encoder, terrain_meshes + terrain_index, scale, translate);
                 }
+
 #endif
                 metal_record_render_command(render_encoder, &cow_mesh, v3_(1, 1, 1), v3_(0, 0, 0));
-#if 0
-                metal_record_render_command(render_encoder, &suzanne_mesh, V3(20, 20, 20), V3(0, 0, 2));
-                metal_record_render_command(render_encoder, &sphere_mesh, V3(3, 3, 3), V3(0, 0, 0));
+#if 1
+                metal_record_render_command(render_encoder, &suzanne_mesh, v3_(20, 20, 20), v3_(3, 3, 3));
+                metal_record_render_command(render_encoder, &sphere_mesh, v3_(3, 3, 3), v3_(0, 5, 0));
 
                 [render_encoder setRenderPipelineState:raytracing_pipline_state];
 
@@ -1381,7 +1487,7 @@ main(void)
                         ++triangle_index)
                 {
                     // NOTE(joon): Draw test triangles one by one, to change each colors
-                    per_object_data.color = V3(1, 0, 0);
+                    per_object_data.color = v3_(1, 0, 0);
                     [render_encoder setVertexBytes: &per_object_data
                                     length: sizeof(per_object_data)
                                     atIndex: 2]; 

@@ -1527,3 +1527,118 @@ parse_obj_slow(memory_arena *memory_arena, memory_arena *transient_memory_arena,
     return mesh;
 }
 #endif
+
+internal f32 *
+load_merl_brdf(platform_read_file_result file)
+{
+    // NOTE(joon): merl brdf file = 3 ints at the start + 3(r, g, b) * 90 * 90 * 180 * sizeof(double), without any whitespace
+    // So if we want to load r32 numbers instead of r64,
+    // we need to make the parser ourselves
+    u8 *memory = file.memory;
+
+    i32 dim_0 = *(i32 *)(memory);
+    i32 dim_1 = *(i32 *)(memory + sizeof(i32));
+    i32 dim_2 = *(i32 *)(memory + 2*sizeof(i32));
+    assert(dim_0 == 90 && dim_1 == 90 && dim_2 == 180);
+
+    u32 brdf_table_element_count = 3 * 90 * 90 * 180;
+    f32 *brdf_table = (f32 *)malloc(brdf_table_element_count * sizeof(f32));
+
+    memory += 3*sizeof(i32);
+    for(u32 element_index = 0;
+            element_index < brdf_table_element_count;
+            ++element_index)
+    {
+        brdf_table[element_index] = *((float *)memory);
+
+        memory += sizeof(double);
+    }
+
+    return brdf_table;
+}
+
+#if 0
+internal void
+standard_coords_to_half_diff_coords(f32 theta_in, f32 phi_in, f32 theta_out, f32 phi_out)
+{
+    v3 in = normalize(v3_(cos(theta_in)*cos(phi_in), cos(theta_in)*sin(phi_in), sin(theta_in)));
+    v3 out = normalize(v3_(cos(theta_out)*cos(phi_out), cos(theta_out)*sin(phi_out), sin(theta_out)));
+
+    v3 halfway = normalize(0.5f*(in + out));
+
+    f32 halfway_theta = acos(halfway.z);
+    f32 halfway_phi = atan2(halfway.y, halfway.x);
+
+    v3 bi_normal = v3(0.0f, 1.0f, 0.0f);
+    v3 normal = v3(0.0f, 0.0f, 1.0f);
+
+    v3 temp =QuarternionRotation(normal, -halfway_phi, in);
+    v3 diff = QuarternionRotation(bi_normal, -halfway_theta, temp);
+
+    theta_diff = acos(diff.z);
+    phi_diff = atan2(diff.y, diff.x);
+}
+#endif
+
+internal v3
+lookup_from_merl_brdf_table(f32 *brdf_table, v3 in, v3 out)
+{
+    v3 result = {};
+
+    // NOTE(joon): standard_coords_to_half_diff_coords
+    //v3 in = normalize(v3_(cos(theta_in)*cos(phi_in), cos(theta_in)*sin(phi_in), sin(theta_in)));
+    //v3 out = normalize(v3_(cos(theta_out)*cos(phi_out), cos(theta_out)*sin(phi_out), sin(theta_out)));
+
+    v3 halfway = normalize(0.5f*(in + out));
+
+    f32 halfway_theta = acos(halfway.z);
+    f32 halfway_phi = atan2(halfway.y, halfway.x);
+
+    v3 bi_normal = v3(0.0f, 1.0f, 0.0f);
+    v3 normal = v3(0.0f, 0.0f, 1.0f);
+
+    v3 temp =QuarternionRotation(normal, -halfway_phi, in);
+    v3 diff = QuarternionRotation(bi_normal, -halfway_theta, temp);
+
+    f32 theta_diff = acos(diff.z);
+    f32 phi_diff = atan2(diff.y, diff.x);
+    if(phi_diff < 0.0f)
+    {
+        phi_diff += pi_32;
+    }
+
+    // turns 0 to pi range into 0 to 179 range
+    i32 phi_diff_index = (i32)((phi_diff/pi_32) * 179);
+    assert(phi_diff_index >= 0 && phi_diff_index < 180);
+
+    // turns 0 to half_pi range into 0 to 89 range
+    i32 theta_diff_index = (i32)((theta_diff/half_pi_32) * 89);
+    assert(theta_diff_index >= 0 && theta_diff_index < 90);
+
+    // turns 0 to half_pi range into 0 to 89 range
+    i32 halfway_theta_index = (i32)((halfway_theta_index/half_pi_32) * 89);
+    assert(halfway_theta_index >= 0 && halfway_theta_index < 90);
+
+    // TODO(joon): What's the math here?
+    i32 lookup_index = phi_diff_index + theta_diff_index*90 + halfway_theta_index*90*180;
+
+    // TODO(joon): Check what's the resulting range here
+    result.r = brdf_table[lookup_index] * (1.0f/1500.0f);
+    result.g = brdf_table[lookup_index + 90*90*180/2] * (1.15f/1500.0f);
+    result.b = brdf_table[lookup_index + 90*90*180] * (1.66f/1500.0f);
+
+    assert(result.r >= 0.0f && result.g >= 0.0f && result.b >= 0.0f);
+
+    return result;
+}
+
+
+
+
+
+
+
+
+
+
+

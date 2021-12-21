@@ -16,10 +16,10 @@ Fow now, Meka Renderer is _not_ meant to be used professionally in any means. Th
 Feel free to explore, and if you want to keep track of the progress, you can visit _mekalopo.com_
 
 # Sample Images
-4096rays/pixel, 104.837008ns/ray
-![Sample 4](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/4.png)
-256rays/pixel, 104.837008ns/ray
-![Sample 5](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/5.png)
+8 threads, 4 SIMD lanes, 8192 rays/pixel, 58.267376sec elapsed with 1.501098ns/ray
+![Sample 4](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/4.bmp)
+8 threads, 4 SIMD lanes, 1024 rays/pixel, 6.835223sec elapsed with 1.508075ns/ray
+![Sample 5](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/5.bmp)
 ![Sample 1](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/1.png)
 ![Sample 2](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/2.png)
 ![Sample 3](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/3.png)

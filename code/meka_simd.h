@@ -321,6 +321,9 @@ start_random_series(u32 seed0, u32 seed1, u32 seed2, u32 seed3)
 
 #endif
 
+///////////// codes that are common across different simd lane size should come here
+
+
 // TODO(joon) : lane vs non-lane ARM SIMD
 // TODO(joon) : load simd aligned vs unaligned
 #define dup_u32_128(value)  vdupq_n_u32(value)

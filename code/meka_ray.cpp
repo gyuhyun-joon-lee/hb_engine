@@ -14,7 +14,9 @@ struct material
 {
     r32 reflectivity; // 0.0f being very rough like a chalk, and 1 being really relfective(like mirror)
     v3 emit_color; // things like sky, lightbulb have this value
-    v3 reflection_color; // most of the other things in real life, that does not have enough energy to emit themselves
+    v3 reflection_color;
+
+    r32 *brdf_table;
 };
 
 // TODO(joon): SIMD these!
@@ -220,11 +222,6 @@ linear_to_srgb(r32 linear_value)
     }
 
     return result;
-}
-
-internal void
-raytrace_per_pixel()
-{
 }
 
 struct raytracer_data
@@ -480,7 +477,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                         simd_v3 v0 = simd_v3_(triangle->v0);
                         simd_v3 v1 = simd_v3_(triangle->v1);
                         simd_v3 v2 = simd_v3_(triangle->v2);
-
+                        
                         simd_v3 e1 = v1 - v0;
                         simd_v3 e2 = v2 - v0;
 

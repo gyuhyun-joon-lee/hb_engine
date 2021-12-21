@@ -58,6 +58,7 @@ struct simd_v3u
     uint32x4_t z;
 };
 
+
 force_inline u32
 add_all_lanes(uint32x4_t a)
 {
@@ -299,6 +300,7 @@ force_inline u32
 get_non_zero_lane_count_from_all_set_bit(simd_u32 a)
 {
     u32 result = 0;
+
     simd_u32 simd_u32_1 = simd_u32_(1);
 
     result = add_all_lanes(a & simd_u32_1);
@@ -324,8 +326,7 @@ get_non_zero_lane_count(simd_u32 a)
 force_inline b32
 all_lanes_zero(simd_u32 a)
 {
-    simd_u32 simd_u32_0 = simd_u32_(0);
-    b32 result = !(add_all_lanes(a | simd_u32_0));
+    b32 result = !(add_all_lanes(a));
 
     return result;
 }
@@ -346,7 +347,6 @@ simd_f32_(r32 value0, r32 value1, r32 value2, r32 value3)
 {
     // TODO(joon): I assume that instead of using this path, it's much better to structure some kind of SOA
     simd_f32 result = {};
-    // TODO(joon): actually make this to load 4 values per lane..
     result.v = {value0, value1, value2, value3};
 
     return result;
@@ -605,15 +605,7 @@ add_all_lanes(simd_f32 a)
 force_inline b32
 all_lanes_zero(simd_f32 a)
 {
-    b32 result = true;
-    //b32 result = !(add_all_lanes(a);
-
-    u64 *masked_u64 = (u64 *)&a;
-
-    if(*(masked_u64) || *(masked_u64+1))
-    {
-        result = false;
-    }
+    b32 result = !(add_all_lanes(a));
 
     return result;
 }

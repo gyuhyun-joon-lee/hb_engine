@@ -3,7 +3,6 @@
 
 // NOTE(joon) : This file contains functions that requires math.h
 // TODO(joon) : Someday we will get remove of math.h, too :)
-
 #include <math.h>
 
 inline v2
@@ -113,6 +112,7 @@ operator*(r32 value, v2 &a)
     return result;
 }
 
+#define v3(x, y, z) v3_(x, y, z)
 inline v3
 v3_(r32 x, r32 y, r32 z)
 {
@@ -665,64 +665,6 @@ QuarternionRotationM4(v3 axisVector, r32 rad)
     return result;
 }
 
-
-// calculate  quarternion along x axis(1,0,0)
-inline v3
-QuarternionRotationV100(r32 rad, v3 vectorToRotate)
-{
-    v3 result = {};
-
-    r32 cos = cosf(rad/2);
-    r32 sin = sinf(rad/2);
-
-    r32 a = 1-2.0f*sin*sin;
-    r32 b = 2*cos*sin;
-
-    result.x = vectorToRotate.x;
-    result.y = a*vectorToRotate.y - b*vectorToRotate.z;
-    result.z = b*vectorToRotate.y + a*vectorToRotate.z;
-
-    return result;
-}
-
-// calculate  quarternion along yaxis(0,1,0)
-inline v3
-QuarternionRotationV010(r32 rad, v3 vectorToRotate)
-{
-    v3 result = {};
-
-    r32 cos = cosf(rad/2);
-    r32 sin = sinf(rad/2);
-
-    r32 a = 1 - 2.0f*sin*sin;
-    r32 b = 2*cos*sin;
-
-    result.x = a*vectorToRotate.x + b*vectorToRotate.z;
-    result.y = vectorToRotate.y;
-    result.z = -b*vectorToRotate.x + a*vectorToRotate.z;
-
-    return result;
-}
-
-// calculate  quarternion along yaxis(0,0,-1)
-inline v3
-QuarternionRotationV001(r32 rad, v3 vectorToRotate)
-{
-    v3 result = {};
-
-    r32 cos = cosf(rad/2);
-    r32 sin = sinf(rad/2);
-
-    r32 a = 1 - 2.0f*sin*sin;
-    r32 b = 2*cos*sin;
-
-    result.x = a*vectorToRotate.x - b*vectorToRotate.y;
-    result.y = b*vectorToRotate.x + a*vectorToRotate.y;
-    result.z = vectorToRotate.z;
-
-    return result;
-}
-
 // NOTE(joon): RHS/initial view direction is 1, 0, 0(in world space)
 inline m4
 world_to_camera(v3 camera_world_p, 
@@ -883,18 +825,35 @@ clamp(i32 min, i32 value, i32 max)
     return result;
 }
 
+#define sin(value) sin_(value)
+#define cos(value) cos_(value)
+#define acos(value) acos_(value)
+#define atan2(y, x) atan2_(y, x)
+
 inline r32
-Sin(r32 rad)
+sin_(r32 rad)
 {
     // TODO(joon) : intrinsic?
     return sinf(rad);
 }
 
 inline r32
-Cos(r32 rad)
+cos_(r32 rad)
 {
     // TODO(joon) : intrinsic?
     return cosf(rad);
+}
+
+inline r32
+acos_(r32 rad)
+{
+    return acosf(rad);
+}
+
+inline r32
+atan2_(r32 y, r32 x)
+{
+    return atan2f(y, x);
 }
 
 inline i32
@@ -926,6 +885,54 @@ lerp(v3 min, r32 t, v3 max)
     result.y = lerp(min.y, t, max.y);
     result.z = lerp(min.z, t, max.z);
 
+    return result;
+}
+
+// 0x11 22 33 44
+//    3  2  1  0 - little endian
+//    0  1  2  3 - big endian
+inline u32
+big_to_little_endian(u32 big)
+{
+    u32 a = ((u8 *)&big)[0];
+    u32 b = ((u8 *)&big)[1];
+    u32 c = ((u8 *)&big)[2];
+    u32 d = ((u8 *)&big)[3];
+
+    // TODO(joon): should be a way to optimize this...
+    u32 result = (((u8 *)&big)[0] << 24) | (((u8 *)&big)[1] << 16) | (((u8 *)&big)[2] << 8) | (((u8 *)&big)[3] << 0);
+
+    return result;
+}
+
+inline u16
+big_to_little_endian(u16 big)
+{
+    u16 result = (((u8 *)&big)[0] << 8) | (((u8 *)&big)[1] << 0);
+
+    return result;
+}
+
+inline i16 
+big_to_little_endian(i16 big)
+{
+    i16 result = (((i8 *)&big)[0] << 8) | (((i8 *)&big)[1] << 0);
+
+    return result;
+}
+
+inline i32 
+big_to_little_endian(i32 big)
+{
+    i32 result = (((i8 *)&big)[0] << 8) | (((i8 *)&big)[1] << 0);
+
+    return result;
+}
+
+inline u64
+big_to_little_endian(u64 byte_count)
+{
+    u64 result = 0;
     return result;
 }
 
