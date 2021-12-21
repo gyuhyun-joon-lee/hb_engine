@@ -16,10 +16,21 @@ Fow now, Meka Renderer is _not_ meant to be used professionally in any means. Th
 Feel free to explore, and if you want to keep track of the progress, you can visit _mekalopo.com_
 
 # Sample Images
-8 threads, 4 SIMD lanes, 8192 rays/pixel, 58.267376sec elapsed with 1.501098ns/ray
-![Sample 4](https://github.com/meka-lopo/meka_renderer/blob/b48461d689c8a9e85a22ed508e422a67b5c0994a/sample_images/4.bmp)
-8 threads, 4 SIMD lanes, 1024 rays/pixel, 6.835223sec elapsed with 1.508075ns/ray
-![Sample 5](https://github.com/meka-lopo/meka_renderer/blob/b48461d689c8a9e85a22ed508e422a67b5c0994a/sample_images/5.bmp)
+Config : 8 thread(s), 4 lane(s), 3840px*2160px, 8192 rays/pixel
+Raytracing finished in : 217.437683sec
+Total Ray Count : 67947724800, Bounced Ray Count : 145755594614, 1.491796ns/ray
+![Sample 6](sample_images/6.bmp)
+
+Config : 8 thread(s), 4 lane(s), 1920px*1080px, 2048 rays/pixel
+Raytracing finished in : 13.601717sec
+Total Ray Count : 4215275520, Bounced Ray Count : 9064849427, 1.500490ns/ray
+![Sample 4](sample_images/4.bmp)
+
+Config : 8 thread(s), 4 lane(s), 1920px*1080px, 256 rays/pixel
+Raytracing finished in : 1.728225sec
+Total Ray Count : 526909440, Bounced Ray Count : 1133122329, 1.525189ns/ray
+![Sample 5](sample_images/5.bmp)
+
 ![Sample 1](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/1.png)
 ![Sample 2](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/2.png)
 ![Sample 3](https://github.com/meka-lopo/meka_renderer/blob/3b7d13e3a3aeed71930319cd2c23be8bb024ff03/sample_images/3.png)

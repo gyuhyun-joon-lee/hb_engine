@@ -701,6 +701,9 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     mach_timebase_info(&mach_time_info);
     r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
 
+    //u32 output_width = 2*1920;
+    //u32 output_height = 2*1080;
+
     u32 output_width = 1920;
     u32 output_height = 1080;
 
@@ -895,7 +898,7 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     u32 tile_y_count = 16;
     u32 pixel_count_per_tile_x = output_width/tile_x_count;
     u32 pixel_count_per_tile_y = output_height/tile_y_count;
-    u32 ray_per_pixel_count = 4096*2;
+    u32 ray_per_pixel_count = 256;
 
     world.total_tile_count = tile_x_count * tile_y_count;
     world.rendered_tile_count = 0;
