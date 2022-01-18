@@ -1,10 +1,8 @@
 #ifndef MEKA_RENDER_H
 #define MEKA_RENDER_H
 
-#if 1
 // NOTE(joon) : This forces us to copy these datas again to the actual 'usable' vertex buffer,
 // but even with more than 100000 vertices, the size of it isn't too big 
-// TODO(joon) : loaded_raw_mesh is independent from any graphics api, put this in other places? or maybe not...
 struct raw_mesh
 {
     v3 *positions;
@@ -42,7 +40,7 @@ struct render_mesh
 };
 
 /*
-   NOTE(joon): So here's how we construct the camera
+   NOTE(joon): Here's how we construct the camera
    Initial camera axis : 
     camera_x : (0, -1, 0)
     camera_y : (0, 0, 1)
@@ -88,7 +86,6 @@ struct uniform_buffer
     alignas(16) m4 projView;
     alignas(16) v3 lightP;
 };
-#endif
 #endif
 
 #endif

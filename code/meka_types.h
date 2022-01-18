@@ -18,24 +18,26 @@ typedef float f32;
 typedef double r64;
 #endif
 
-#define flt_min FLT_MIN
-#define flt_max FLT_MAX
-#define u32_max UINT32_MAX
-#define u16_max UINT16_MAX
-#define u8_max UINT8_MAX
+#define Flt_Min FLT_MIN
+#define Flt_Max FLT_MAX
+#define U32_Max UINT32_MAX
+#define U16_Max UINT16_MAX
+#define U8_Max UINT8_MAX
 
-#define i32_min INT32_MIN
-#define i32_max INT32_MAX
-#define i16_min INT16_MIN
-#define i16_max INT16_MAX
-#define i8_min INT8_MIN
-#define i8_max INT8_MAX
+#define I32_Min INT32_MIN
+#define I32_Max INT32_MAX
+#define I16_Min INT16_MIN
+#define I16_Max INT16_MAX
+#define I8_Min INT8_MIN
+#define I8_Max INT8_MAX
 
 struct v2
 {
     r32 x;
     r32 y;
 };
+
+
 
 struct v3
 {
@@ -61,6 +63,13 @@ struct v3
 
         r32 e[3];
     };
+};
+
+struct v3u
+{
+    u32 x;
+    u32 y;
+    u32 z;
 };
 
 struct v4

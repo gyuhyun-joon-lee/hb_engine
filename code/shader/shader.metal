@@ -33,8 +33,7 @@ vertex_function(uint vertexID [[vertex_id]],
 
     r32_3 world_p = (per_object_data->model*convert_to_r32_4(model_p, 1.0f)).xyz;
 
-    r32_4 view_p = per_frame_data->view*convert_to_r32_4(world_p, 1.0f);
-    output.clip_position = per_frame_data->proj*view_p;
+    output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
 
     output.p = world_p;
     output.normal = normalize((per_object_data->model * convert_to_r32_4(normal, 0.0f)).xyz);
@@ -92,7 +91,6 @@ struct line_vertex_output
 {
     r32_4 clip_position [[position]];
 
-    r32_3 p;
     r32_3 color;
 };
 
@@ -108,6 +106,8 @@ line_vertex_function(uint vertexID [[vertex_id]],
     r32_3 world_p = vertices[vertexID].p;
 
     output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
+    //output.clip_position = convert_to_r32_4(world_p, 1.0f);
+    //output.clip_position = {10, 0, 0, 1};
 
     output.color = per_object_data->color;
 
@@ -118,5 +118,37 @@ fragment r32_4
 line_frag_function(vertex_output vertex_output [[stage_in]])
 {
     return convert_to_r32_4(vertex_output.color, 1.0f);
+}
+
+
+struct voxel_vertex_output
+{
+    r32_4 clip_position [[position]];
+};
+
+// NOTE(joon) : vertex is a prefix for vertex shader
+vertex voxel_vertex_output
+voxel_vertex_function(uint vertexID [[vertex_id]],
+             constant r32_3 *vertices [[buffer(0)]], 
+             constant per_frame_data *per_frame_data [[buffer(1)]],
+             constant per_object_data *per_object_data [[buffer(2)]])
+{
+    voxel_vertex_output output = {};
+
+    r32_3 model_p = vertices[vertexID];
+
+    r32_3 world_p = (per_object_data->model*convert_to_r32_4(model_p, 1.0f)).xyz;
+
+    output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
+
+    return output;
+}
+
+fragment r32_4 
+voxel_frag_function(voxel_vertex_output vertex_output [[stage_in]])
+{
+    r32_4 out_color = 2.f*R32_4(48/255.0f, 10/255.0f, 36/255.0f, 1);
+
+    return out_color;
 }
 

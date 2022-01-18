@@ -49,10 +49,13 @@ typedef struct
 
 typedef struct
 {
+#ifdef MEKA_METAL_SHADER
     alignas(16) r32_4x4 proj_view;
-    alignas(16) r32_4x4 proj;
-    alignas(16) r32_4x4 view;
     alignas(16) r32_3 light_p;
+#else
+    alignas(16) m4 proj_view;
+    alignas(16) v3 light_p;
+#endif
 }per_frame_data;
 
 typedef struct

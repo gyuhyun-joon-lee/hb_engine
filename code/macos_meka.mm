@@ -19,6 +19,7 @@
 #include "meka_math.h"
 #include "meka_random.h"
 #include "meka_simd.h"
+#include "meka_intrinsic.h"
 #include "meka_font.h"
 // NOTE(joon):add platform independent codes here
 
@@ -28,6 +29,18 @@
 #include "meka_render.cpp"
 #include "meka_ray.cpp"
 #include "meka_image_loader.cpp"
+#include "meka_voxel.cpp"
+#include "meka_metal.cpp"
+
+/*
+   TODO(joon)
+   metal
+   - use indirect command buffer for drawing voxels
+
+   macos
+   - 
+
+ */
 
 //TODO(joon) : Put input handlers inside some struct or something
 global b32 is_w_down;
@@ -69,6 +82,7 @@ PLATFORM_GET_FILE_SIZE(macos_get_file_size)
     struct stat FileStat;
     fstat(File , &FileStat); 
     result = FileStat.st_size;
+    close(File);
 
     return result;
 }
@@ -210,59 +224,39 @@ metal_record_render_command(id<MTLRenderCommandEncoder> render_encoder, render_m
                     instanceCount: 1]; 
 }
 
-internal render_mesh
-metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh, memory_arena *memory_arena)
+// NOTE(joon) p0, p1 should be in world position, so will not be multiplied by the the model matrix
+// Also, the pipeline should be line_pipeline!
+// TODO(joon) We don't need to set vertices every time we draw the line!
+internal void
+metal_draw_line(id<MTLRenderCommandEncoder> render_encoder, v3 p0, v3 p1, v3 color)
 {
-    assert(raw_mesh->normals);
-    assert(raw_mesh->position_count == raw_mesh->normal_count);
-    // TODO(joon) : Does not allow certain vertex to have different normal index per face
-    if(raw_mesh->normal_indices)
-    {
-        assert(raw_mesh->indices[0] == raw_mesh->normal_indices[0]);
-    }
+    per_object_data per_object_data = {};
+    per_object_data.color = {color.r, color.g, color.b};
 
-    // TODO(joon) : not super important, but what should be the size of this
-    temp_memory mesh_temp_memory = start_temp_memory(memory_arena, megabytes(16));
+    r32_3 line_vertices[2] = {};
+    line_vertices[0].x = p0.x;
+    line_vertices[0].y = p0.y;
+    line_vertices[0].z = p0.z;
 
-    render_mesh result = {};
-    temp_vertex *vertices = push_array(&mesh_temp_memory, temp_vertex, raw_mesh->position_count);
-    for(u32 vertex_index = 0;
-            vertex_index < raw_mesh->position_count;
-            ++vertex_index)
-    {
-        temp_vertex *vertex = vertices + vertex_index;
+    line_vertices[1].x = p1.x;
+    line_vertices[1].y = p1.y;
+    line_vertices[1].z = p1.z;
 
-        // TODO(joon): does vf3 = v3 work just fine?
-        vertex->p.x = raw_mesh->positions[vertex_index].x;
-        vertex->p.y = raw_mesh->positions[vertex_index].y;
-        vertex->p.z = raw_mesh->positions[vertex_index].z;
+    [render_encoder setVertexBytes: &per_object_data
+                    length: sizeof(per_object_data)
+                    atIndex: 2]; 
 
-        assert(is_normalized(raw_mesh->normals[vertex_index]));
+    // NOTE(joon): setVertexBytes can only used for data with size up to 4kb
+    [render_encoder setVertexBytes: line_vertices
+                    length: sizeof(r32_3) * 2 
+                    atIndex: 0]; 
 
-        vertex->normal.x = raw_mesh->normals[vertex_index].x;
-        vertex->normal.y = raw_mesh->normals[vertex_index].y;
-        vertex->normal.z = raw_mesh->normals[vertex_index].z;
-    }
-
-    // NOTE/joon : MTLResourceStorageModeManaged requires the memory to be explictly synchronized
-    u32 vertex_buffer_size = sizeof(temp_vertex)*raw_mesh->position_count;
-    result.vertex_buffer = [device newBufferWithBytes: vertices
-                                        length: vertex_buffer_size 
-                                        options: MTLResourceStorageModeManaged];
-    [result.vertex_buffer didModifyRange:NSMakeRange(0, vertex_buffer_size)];
-
-    u32 index_buffer_size = sizeof(raw_mesh->indices[0])*raw_mesh->index_count;
-    result.index_buffer = [device newBufferWithBytes: raw_mesh->indices
-                                        length: index_buffer_size
-                                        options: MTLResourceStorageModeManaged];
-    [result.index_buffer didModifyRange:NSMakeRange(0, index_buffer_size)];
-
-    result.index_count = raw_mesh->index_count;
-
-    end_temp_memory(&mesh_temp_memory);
-
-    return result;
+    [render_encoder drawPrimitives:MTLPrimitiveTypeLine
+                    vertexStart:0 
+                    vertexCount:2];
 }
+
+
 
 internal void
 macos_handle_event(NSApplication *app, NSWindow *window)
@@ -441,6 +435,7 @@ THREAD_WORK_CALLBACK(print_string)
     printf("%s\n", stringToPrint);
 }
 
+#if 0
 struct thread_work_raytrace_tile_data
 {
     raytracer_data raytracer_input;
@@ -466,14 +461,6 @@ THREAD_WORK_CALLBACK(thread_work_callback_render_tile)
     OSAtomicAdd64Barrier(output.bounced_ray_count, (volatile int64_t *)&raytracer_data->raytracer_input.world->bounced_ray_count);
 
     printf("%dth tile finished with %llu rays\n", rendered_tile_count, raytracer_data->raytracer_input.world->total_ray_count);
-}
-
-// TODO(joon) : With current memory arena, we cannot multi-thread the parsing obj
-// Make an atomic version(with thread safey) of memory arena?
-#if 0
-internal
-THREAD_WORK_CALLBACK(load_and_parse_obj)
-{
 }
 #endif
 
@@ -533,6 +520,7 @@ PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_que
     }
 }
 
+
 internal void*
 thread_proc(void *data)
 {
@@ -544,6 +532,7 @@ thread_proc(void *data)
         }
         else
         {
+            // dispatch semaphore puts the thread into sleep until the semaphore is signaled
             dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
         }
     }
@@ -551,137 +540,59 @@ thread_proc(void *data)
     return 0;
 }
 
+#if 0
+internal v3
+minimum(v3 a, v3 b)
+{
+    v3 result = {};
 
+    return result;
+}
 
-// NOTE(joon): *(u32 *)c == "stri" does not work because of the endianess issues
-#define convert_cc(string) (((string[0] & 0xff) << 0) | ((string[1] & 0xff) << 8) | ((string[2] & 0xff) << 16) | ((string[3] & 0xff) << 24))
-    
+internal v3
+maximum(v3 a, v3 b)
+{
+    v3 result = {};
+
+    return result;
+}
+#endif
+
 int 
 main(void)
 { 
-    //platform_read_file_result font = debug_macos_read_file("/Users/mekalopo/Library/Fonts/InputMonoCompressed-Light.ttf");
-    platform_read_file_result font = debug_macos_read_file("/System/Library/Fonts/Supplemental/Courier New.ttf");
+    // TODO(joon): Get rid of rand()
+    srand((u32)time(NULL));
+    u32 random_seed = (u32)rand();
+    random_series series = start_random_series(random_seed); 
 
-    u32 temp = big_to_little_endian((u32)0x11223344);
+    //TODO : writefile?
+    platform_api platform_api = {};
+    platform_api.read_file = debug_macos_read_file;
+    platform_api.write_entire_file = debug_macos_write_entire_file;
+    platform_api.free_file_memory = debug_macos_free_file_memory;
 
-    u8 *c = font.memory;
-    otf_header *header = (otf_header *)c;
-    u32 version = big_to_little_endian(header->version);
-    u32 table_count = big_to_little_endian(header->table_count);
-    u32 search_range = big_to_little_endian(header->search_range);
-    u32 entry_selector = big_to_little_endian(header->entry_selector);
-    u32 range_shift = big_to_little_endian(header->range_shift);
+    platform_memory platform_memory = {};
 
-    c += sizeof(otf_header);
+    platform_memory.permanent_memory_size = gigabytes(1);
+    platform_memory.transient_memory_size = gigabytes(3);
+    u64 total_size = platform_memory.permanent_memory_size + platform_memory.transient_memory_size;
+    vm_allocate(mach_task_self(), 
+                (vm_address_t *)&platform_memory.permanent_memory,
+                total_size, 
+                VM_FLAGS_ANYWHERE);
+    platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
 
-    font_info font_info = {};
+    platform_read_file_result font = debug_macos_read_file("/Users/mekalopo/Library/Fonts/InputMonoCompressed-Light.ttf");
 
-    for(u32 table_record_index = 0;
-            table_record_index < table_count;
-            ++table_record_index)
-    {
-        otf_table_record *table_record = (otf_table_record *)c + table_record_index;
-        u32	table_tag = table_record->table_tag; // NOTE(joon): Not converted to little endian for direct string comparison
-        u32	check_sum = big_to_little_endian(table_record->check_sum);
-        u32	offset = big_to_little_endian(table_record->offset);
-        u32	length = big_to_little_endian(table_record->length);
+    struct mach_timebase_info mach_time_info;
+    mach_timebase_info(&mach_time_info);
+    r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
 
-        if(table_tag == convert_cc("head"))
-        {
-            otf_head_block_header *header = (otf_head_block_header *)(font.memory + offset);
-            i16 major_version = big_to_little_endian(header->major_version);
-            i16 minor_version = big_to_little_endian(header->minor_version);
-            i16 font_revision = big_to_little_endian(header->font_revision);
-
-            u32 check_sum_adjustment = big_to_little_endian(header->check_sum_adjustment);
-            u32 magic_number = header->magic_number; // should be 0x5f0f3cf5
-            u16 flags = big_to_little_endian(header->check_sum_adjustment);
-            font_info.resolution = (u32)big_to_little_endian(header->unit_per_em);
-            //i64 time_created = big_to_little_endian(header->time_created);
-            //i64 time_modified = big_to_little_endian(header->time_modified);
-            i16 x_min = big_to_little_endian(header->x_min);
-            i16 y_min = big_to_little_endian(header->y_min);
-            i16 x_max = big_to_little_endian(header->x_max);
-            i16 y_max = big_to_little_endian(header->y_max);
-            u16 style = big_to_little_endian(header->style);
-            u16 min_resolution_in_pixel = big_to_little_endian(header->min_resolution_in_pixel);
-            i16 glyph_data_format = big_to_little_endian(header->glyph_data_format);
-            font_info.glyph_offset_type = big_to_little_endian(header->glyph_offset_type); // 0 for u16, 1 for u32 for the loca block
-
-            int a = 1;
-        }
-        else if(table_tag == convert_cc("cmap"))
-        {
-            otf_cmap_block_header *header = (otf_cmap_block_header *)(font.memory + offset);
-            otf_encoding *encodings = (otf_encoding *)((u8 *)header + sizeof(*header));
-
-            u16 encoding_type = big_to_little_endian(encodings->type);
-            u16 encoding_subtype = big_to_little_endian(encodings->subtype);
-            u32 subtable_offset = big_to_little_endian(encodings->subtable_offset);
-        }
-        else if(table_tag == convert_cc("EBLC"))
-        {
-            otf_EBLC_block_header *header = (otf_EBLC_block_header *)(font.memory + offset);
-
-            u16 major_version = big_to_little_endian(header->major_version);
-            u16 minor_version = big_to_little_endian(header->minor_version);
-            u32 bitmap_size_record_count = big_to_little_endian(header->bitmap_size_record_count);
-
-            font_info.bitmap_sizes = (otf_bitmap_size *)((u8 *)header + sizeof(otf_EBLC_block_header));
-        }
-        else if(table_tag == convert_cc("EBDT"))
-        {
-            // embedded Bitmap Data Table
-        }
-        else if(table_tag == convert_cc("maxp"))
-        {
-            otf_maxp_block_header *header = (otf_maxp_block_header *)(font.memory + offset);
-
-            font_info.glyph_count = big_to_little_endian(header->glyph_count);
-        }
-        else if(table_tag == convert_cc("loca"))
-        {
-            font_info.glyph_offsets = (void *)(font.memory + offset);
-        }
-        else if(table_tag == convert_cc("glyf"))
-        {
-            font_info.glyph_data = (font.memory + offset);
-        }
-    }
+    platform_read_file_result vox_file = debug_macos_read_file("/Volumes/meka/meka_renderer/data/vox/chr_knight.vox");
+    load_vox_result loaded_vox = load_vox(vox_file.memory, vox_file.size);
 
 #if 0
-    // TODO(joon): Support more than ascii codes?
-    for(u32 glyph_index = 0;
-            glyph_index < 256;
-            ++glyph_index)
-    {
-        u32 offset = 0;
-        if(font_info.glyph_offset_type == 0)
-        {
-            offset = *((u16 *)font_info.glyph_offsets + glyph_index);
-        }
-        if(font_info.glyph_offset_type == 1)
-        {
-            offset = big_to_little_endian(*((u32 *)font_info.glyph_offsets + glyph_index));
-        }
-
-        glyph_info *info = glyph_infos + glyph_index;
-
-        otf_glyf_header *glyph_header = (otf_glyf_header *)(font_info.glyph_data + offset);
-        // NOTE(joon): positive - simple glyph, negative - composite glyph
-        // https://docs.microsoft.com/en-us/typography/opentype/spec/glyf
-        i16 number_of_contours = big_to_little_endian(glyph_header->number_of_contours); 
-
-        i16 x_min = big_to_little_endian(glyph_header->x_min);
-        i16 y_min = big_to_little_endian(glyph_header->y_min);
-
-        i16 x_max = big_to_little_endian(glyph_header->x_max);
-        i16 y_max = big_to_little_endian(glyph_header->x_max);
-
-        int a = 1;
-    }
-#endif
-
     // TODO(joon): Actually use this brdf tables
     platform_read_file_result brdf_files[5] = {};
     brdf_files[0] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/chrome-steel.binary");
@@ -697,9 +608,6 @@ main(void)
     brdf_lookup_tables[3] = load_merl_brdf(brdf_files[3]);
 brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     
-    struct mach_timebase_info mach_time_info;
-    mach_timebase_info(&mach_time_info);
-    r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
 
     //u32 output_width = 2*1920;
     //u32 output_height = 2*1080;
@@ -734,14 +642,14 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     material materials[9] = {};
     // TODO(joon): objects with emit color seems like working ok only ifbthe emit color is much brighter than the limit.. 
     // are we doing something wrong ?
-    materials[0].emit_color = v3_(0.7f, 0.7f, 1.0f);
+    materials[0].emit_color = 2.0f*v3_(0.7f, 0.7f, 1.0f);
 
     materials[1].brdf_table = brdf_lookup_tables[0];
     materials[1].reflection_color = v3_(0.3f, 0.12f, 0.12f);
     materials[1].reflectivity = 0.0f; 
 
     materials[2].emit_color = 9*v3_(1.0f, 0.1f, 0.2f);
-    materials[2].reflectivity = 0.5f;
+    //materials[2].reflectivity = 0.5f;
 
     materials[3].brdf_table = brdf_lookup_tables[1];
     materials[3].reflection_color = v3_(0.3f, 0.7f, 0.2f);
@@ -793,24 +701,117 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     spheres[4].radius = 3; 
     spheres[4].material_index = 8;
 
-    triangle triangles[1] = {};
+    triangle triangles[2] = {};
     triangles[0].v0 = v3_(-3, 4, 0.5f); 
     triangles[0].v1 = v3_(3, 4, 0.5f); 
     triangles[0].v2 = v3_(0, 4, 5); 
     triangles[0].material_index = 7;
 
-#if 0
-    triangles[0].v0 = v3_(-30, 7, 0); 
-    triangles[0].v1 = v3_(-20, 60, 2); 
-    triangles[0].v2 = v3_(0, 4, 2); 
-    triangles[0].material_index = 5;
-
-    triangles[1].v0 = v3_(-3, 4, 0.5f); 
-    triangles[1].v1 = v3_(3, 4, 0.5f); 
-    triangles[1].v2 = v3_(0, 4, 5); 
+    triangles[1].v0 = v3_(-30, 7, 0); 
+    triangles[1].v1 = v3_(-20, 60, 2); 
+    triangles[1].v2 = v3_(0, 4, 2); 
     triangles[1].material_index = 5;
 #endif
 
+#if 0
+    // TODO(joon) hash should not be fixed size, allocate more when we hit the limit & increase the hash count
+    voxel_chunk_hash voxel_chunk_hashes[1024] = {};
+    // NOTE(joon) allocate all the hashes at the head up
+    for(u32 hash_index = 0;
+            hash_index < array_count(voxel_chunk_hashes);
+            ++hash_index)
+    {
+        voxel_chunk_hash *hash = voxel_chunk_hashes + hash_index;
+        hash->x = Empty_Hash;
+    }
+
+    memory_arena voxel_memory_arena = start_memory_arena(platform_memory.transient_memory, megabytes(512), &platform_memory.transient_memory_used);
+
+    u32 voxel_range = 64;
+
+    u32 fill_chunk_count = 20;
+
+    for(u32 chunk_index = 0;
+            chunk_index < )
+    u32 x = random_between_u32(&series, 0, voxel_range);
+    u32 y = random_between_u32(&series, 0, voxel_range);
+    u32 z = random_between_u32(&series, 0, voxel_range);
+
+    u32 chunk_lod = 3; // chunk dim = 2^(n-1)(n = 1, 2,...)
+    u32 chunk_dim = power((u32)2, chunk_lod - 1);
+    u32 chunk_x = x / chunk_dim;
+    u32 chunk_y = y / chunk_dim;
+    u32 chunk_z = z / chunk_dim;
+
+    voxel_chunk_hash *chunk = get_voxel_chunk_hash(voxel_chunk_hashes, array_count(voxel_chunk_hashes), chunk_x, chunk_y, chunk_z);
+    chunk->first_child_offset = voxel_memory_arena.used;
+
+    u32 next_child_node_count = 1;
+
+    for(u32 chunk_lod_index = 0;
+            chunk_lod_index < chunk_lod;
+            ++chunk_lod_index)
+    {
+        u32 *first_child_node = push_array(&voxel_memory_arena, u32, next_child_node_count);
+
+        u32 child_node_count = next_child_node_count;
+        next_child_node_count = 0;
+
+        for(u32 child_node_index = 0;
+                child_node_index < child_node_count;
+                ++child_node_index)
+        {
+            // TODO(joon) get this value from the map data
+            u8 child_bit = (u8)random_between_u32(&series, 1, 255);
+            u32 child_node_count = count_set_bit(child_bit, sizeof(child_bit));
+
+            u32 child_offset = (u32)pointer_diff((u8 *)voxel_memory_arena.base + voxel_memory_arena.used, first_child_node);
+            if(chunk_lod_index == chunk_lod - 1) // we don't need to store the leaf nodes!
+            {
+                child_offset = 0; // If the offset is 0, we assume that the bit mask represents the child nodes
+            }
+            assert(child_offset < 16777216); // 2^24
+            *first_child_node = (child_offset << 8) | child_bit;
+
+            next_child_node_count += child_node_count;
+            first_child_node++;
+        }
+    }
+#endif
+    // NOTE(joon) As we store every voxels, we can just store the child bit mask - 
+    // TODO(joon) this helps when we simulate the voxels, but we can use SVO or DAG when we 'store' the voxels as a map!
+    // or, we can just store the leaf nodes sparsely, as the leaf nodes takes the most of the space
+
+    u32 total_node_count = 0;
+    for(u32 i = 0;
+            i < 8;
+            ++i)
+    {
+        total_node_count += power((u32)8, (u32)i);
+    }
+
+    u8 *nodes = (u8 *)malloc(total_node_count);
+    u32 dim = 256;
+
+    for(u32 voxel_index = 0;
+            voxel_index < loaded_vox.voxel_count;
+            ++voxel_index)
+    {
+        // TODO(joon) we also need to take account of the chunk pos?
+        u8 x = loaded_vox.xs[voxel_index];
+        u8 y = loaded_vox.ys[voxel_index];
+        u8 z = loaded_vox.zs[voxel_index];
+
+        if(x == 123 && y == 2 && z == 0)
+        {
+            int brekahere = 0;
+        }
+
+        insert_voxel(nodes, 0, x, y, z, 256, 0);
+    }
+    validate_voxels_with_vox_file(loaded_vox, nodes);
+
+#if 0
     world world = {};
     world.material_count = array_count(materials);
     world.materials = materials;
@@ -818,13 +819,13 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     world.plane_count = array_count(planes);
     world.planes = planes;
 
-    world.sphere_count = array_count(spheres);
-    world.spheres = spheres;
+    //world.sphere_count = array_count(spheres);
+    //world.spheres = spheres;
 
-    world.triangle_count = array_count(triangles);
-    world.triangles = triangles;
+    //world.triangle_count = array_count(triangles);
+    //world.triangles = triangles;
 
-    v3 camera_p = v3_(2, -10, 1);
+    v3 camera_p = v3_(0, -10, 1);
 
     v3 camera_z_axis = normalize(camera_p); // - V3(0, 0, 0), which is the center of the world
     v3 camera_x_axis = normalize(cross(v3_(0, 0, 1), camera_z_axis));
@@ -856,6 +857,24 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
 
     // NOTE(joon): If the height is a positive value, the bitmap is bottom-up
     u32 *pixels = (u32 *)(output + sizeof(bmp_file_header));
+
+#if 0
+    u8 *row = (u8 *)pixels;
+    for(u32 y = 0;
+            y < output_height;
+            ++y)
+    {
+        u32 *p = (u32 *)row;
+        for(u32 x = 0;
+                x < output_width;
+                ++x)
+        {
+            *p++ = 0xffff0000;
+        }
+
+        row += sizeof(u32) * output_width;
+    }
+#endif
     
     semaphore = dispatch_semaphore_create(0);
 
@@ -889,9 +908,10 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
             }
         }
     }
+#endif
 
 
-#if 1
+#if 0
     // NOTE(joon): This value should be carefully managed, as it affects to the drainout effect
     // for now, 16 by 16 seems like outputting the best(close to) result(1.57 sec)?
     u32 tile_x_count = 16;
@@ -963,6 +983,7 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
         }
     }
 
+#if 0
     macos_complete_all_thread_work_queue_items(&work_queue);
 
     // complete all thread work only gurantee that all the works are fired up, 
@@ -984,43 +1005,29 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     //usleep(1000000);
 
     debug_macos_write_entire_file("/Volumes/meka/meka_renderer/data/test.bmp", (void *)output, output_size);
+#endif
 
-    srand((u32)time(NULL));
 
 	i32 window_width = 1920;
 	i32 window_height = 1080;
     r32 window_width_over_height = (r32)window_width/(r32)window_height;
 
-    //TODO : writefile?
-    platform_api platform_api = {};
-    platform_api.read_file = debug_macos_read_file;
-    platform_api.write_entire_file = debug_macos_write_entire_file;
-    platform_api.free_file_memory = debug_macos_free_file_memory;
 
-    platform_memory platform_memory = {};
-
-    platform_memory.permanent_memory_size = gigabytes(1);
-    platform_memory.transient_memory_size = gigabytes(3);
-    u64 total_size = platform_memory.permanent_memory_size + platform_memory.transient_memory_size;
-    vm_allocate(mach_task_self(), 
-                (vm_address_t *)&platform_memory.permanent_memory,
-                total_size, 
-                VM_FLAGS_ANYWHERE);
-
-    u32 target_frames_per_second = 120;
+    u32 target_frames_per_second = 60;
     r32 target_seconds_per_frame = 1.0f/(r32)target_frames_per_second;
     u32 target_nano_seconds_per_frame = (u32)(target_seconds_per_frame*sec_to_nano_sec);
 
-    platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
 
     // TODO/joon: clean this memory managing stuffs...
     memory_arena mesh_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(16), &platform_memory.permanent_memory_used);
     memory_arena transient_memory_arena = start_memory_arena(platform_memory.transient_memory, gigabytes(1), &platform_memory.transient_memory_used);
 
     platform_read_file_result cow_obj_file = platform_api.read_file("/Volumes/meka/meka_renderer/data/cow.obj");
-    raw_mesh raw_cow_mesh = parse_obj_tokens(&mesh_memory_arena, cow_obj_file.memory, cow_obj_file.size);
+    raw_mesh cow_raw_mesh = parse_obj_tokens(&mesh_memory_arena, cow_obj_file.memory, cow_obj_file.size);
+
+
     //generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &raw_cow_mesh);
-    generate_vertex_normals_simd(&mesh_memory_arena, &transient_memory_arena, &raw_cow_mesh);
+    generate_vertex_normals_simd(&mesh_memory_arena, &transient_memory_arena, &cow_raw_mesh);
     platform_api.free_file_memory(cow_obj_file.memory);
 
 #if 1
@@ -1049,8 +1056,8 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
 
     // TODO(joon): when connected to the external display, this should be window_width and window_height
     // but if not, this should be window_width/2 and window_height/2. Why?
-    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width, (r32)window_height);
-    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width/2.0f, (r32)window_height/2.0f);
+    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width, (r32)window_height);
+    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width/2.0f, (r32)window_height/2.0f);
 
     NSWindow *window = [[NSWindow alloc] initWithContentRect : window_rect
                                         // Apple window styles : https://developer.apple.com/documentation/appkit/nswindow/stylemask
@@ -1150,6 +1157,23 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     id<MTLRenderPipelineState> line_pipeline_state = [device newRenderPipelineStateWithDescriptor:line_pipeline_descriptor
                                                                 error:&error];
 
+    id<MTLFunction> voxel_vertex_function = [shader_library newFunctionWithName:@"voxel_vertex_function"];
+    id<MTLFunction> voxel_frag_function = [shader_library newFunctionWithName:@"voxel_frag_function"];
+    MTLRenderPipelineDescriptor *voxel_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
+    voxel_pipeline_descriptor.label = @"Voxel Pipeline";
+    voxel_pipeline_descriptor.vertexFunction = voxel_vertex_function;
+    voxel_pipeline_descriptor.fragmentFunction = voxel_frag_function;
+    voxel_pipeline_descriptor.sampleCount = 1;
+    voxel_pipeline_descriptor.rasterSampleCount = voxel_pipeline_descriptor.sampleCount;
+    voxel_pipeline_descriptor.rasterizationEnabled = true;
+    voxel_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+    voxel_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    voxel_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+    voxel_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+
+    id<MTLRenderPipelineState> voxel_pipeline_state = [device newRenderPipelineStateWithDescriptor:voxel_pipeline_descriptor
+                                                                error:&error];
+
     check_ns_error(error);
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
@@ -1240,59 +1264,9 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 5);
     terrain_meshes[5] = metal_create_render_mesh_from_raw_mesh(device, terrains + 5, &transient_memory_arena);
 
-    render_mesh cow_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_cow_mesh, &transient_memory_arena);
+    render_mesh cow_mesh = metal_create_render_mesh_from_raw_mesh(device, &cow_raw_mesh, &transient_memory_arena);
     render_mesh suzanne_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_suzanne_mesh, &transient_memory_arena);
 
-    u32 test_triangle_count = 64;
-    test_triangle *test_triangles = push_array(&mesh_memory_arena, test_triangle, test_triangle_count);
-
-#if 0
-    material materials[5] = {};
-    materials[0].reflectiveness = 1.0f;
-    materials[0].emit_color = V3(0, 0, 0);
-    materials[0].reflection_color = V3(random_between_0_1(), random_between_0_1(), random_between_0_1());
-
-    materials[1].reflectiveness = 0.0f;
-    materials[1].emit_color = V3(0, 0, 0);
-    materials[1].reflection_color = V3(random_between_0_1(), random_between_0_1(), random_between_0_1());
-
-    materials[2].reflectiveness = 0.2f;
-    materials[2].emit_color = V3(0, 0, 0);
-    materials[2].reflection_color = V3(random_between_0_1(), random_between_0_1(), random_between_0_1());
-    
-    materials[3].reflectiveness = 0.4f;
-    materials[3].emit_color = V3(0, 0, 0);
-    materials[3].reflection_color = V3(random_between_0_1(), random_between_0_1(), random_between_0_1());
-
-    materials[4].reflectiveness = 0.0f;
-    materials[4].emit_color = V3(1, 0, 0);
-    materials[4].reflection_color = V3(0, 0, 0);
-#endif
-
-    // TODO(joon): Get rid of rand()
-    u32 random_seed = (u32)rand();
-    random_series series = start_random_series(random_seed); 
-
-    // NOTE(joon) : creating test triangles for raytracing
-    // setVertexBytes can draw up to 85(4kb / 16 / 3) triangles without the index buffer
-    for(u32 triangle_index = 0;
-            triangle_index < test_triangle_count;
-            triangle_index++)
-    {
-        test_triangle *triangle = test_triangles + triangle_index;
-
-        r32 position_range = 10.0f;
-        v3 position = v3_(random_between(&series, -position_range, position_range), 
-                        random_between(&series, -position_range, position_range), 
-                        random_between(&series, -position_range, position_range));
-
-        triangle->v0 = position + v3_(random_between(&series, 4, 7), random_between(&series, 3, 8), random_between(&series, 3, 8));
-        triangle->v1 = position + v3_(random_between(&series, 4, 7), random_between(&series, 3, 8), random_between(&series, 3, 8));
-        triangle->v2 = position + v3_(random_between(&series, 4, 7), random_between(&series, 3, 9), random_between(&series, 3, 8));
-
-        triangle->material_index = 0;
-
-    }
 
     camera camera = {};
     r32 focal_length = 1.0f;
@@ -1375,13 +1349,7 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
         {
             id<MTLCommandBuffer> command_buffer = [command_queue commandBuffer];
 
-            MTLViewport viewport = {};
-            viewport.originX = 0;
-            viewport.originY = 0;
-            viewport.width = (r32)window_width;
-            viewport.height = (r32)window_height;
-            viewport.znear = 0.0;
-            viewport.zfar = 1.0;
+            MTLViewport viewport = metal_set_viewport(0, 0, (f32)window_width, (f32)window_height);
 
             // NOTE(joon): renderpass descriptor is already configured for this frame, obtain it as late as possible
             MTLRenderPassDescriptor *this_frame_descriptor = view.currentRenderPassDescriptor;
@@ -1418,115 +1386,146 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
                                                  camera.initial_y_axis, camera.along_y, 
                                                  camera.initial_z_axis, camera.along_z);
 
-                m4 proj_view = proj_matrix*camera_rhs_to_lhs(view_matrix);
                 per_frame_data per_frame_data = {};
-                per_frame_data.proj = convert_m4_to_r32_4x4(proj_matrix);
-                per_frame_data.view = convert_m4_to_r32_4x4(camera_rhs_to_lhs(view_matrix));
+                per_frame_data.proj_view = proj_matrix*camera_rhs_to_lhs(view_matrix);
                 v3 light_p = v3_(light_radius*cosf(light_angle), light_radius*sinf(light_angle), 10.f);
-                per_frame_data.light_p = convert_to_r32_3(light_p);
+                per_frame_data.light_p = light_p;
                 [render_encoder setVertexBytes: &per_frame_data
                                 length: sizeof(per_frame_data)
                                 atIndex: 1]; 
 
                 // NOTE/joon : make sure you update the non-vertex information first
                 per_object_data per_object_data = {};
-#if 1
-                for(u32 terrain_index = 0;
-                        terrain_index < array_count(terrain_meshes);
-                        terrain_index++)
-                {
-                    r32 distance = 4.9f;
 
-                    v3 translate = {};
-                    v3 scale = v3_(0.1f, 0.1f, 0.1f);
+#if 0
+                temp_memory voxel_temp_memory = start_temp_memory(&voxel_memory_arena, megabytes(256));
+                get_all_voxels_inside_chunk((u32 *)voxel_memory_arena.base, &voxel_temp_memory, 0, 0, 0, chunk_dim);
 
-                    switch(terrain_index)
-                    {
-                        case 0:
-                        {
-                            // top
-                            translate = v3_(0, 0, distance);
-                        }break;
-                        case 1:
-                        {
-                            // bottom
-                            translate = v3_(0, 0, -distance);
-                        }break;
-                        case 2:
-                        {
-                            // left
-                            translate = v3_(0, distance, 0);
-                        }break;
-                        case 3:
-                        {
-                            // right
-                            translate = v3_(0, -distance, 0);
-                        }break;
-                        case 4:
-                        {
-                            // front
-                            translate = v3_(distance, 0, 0);
-                        }break;
-                        case 5:
-                        {
-                            // back
-                            translate = v3_(-distance, 0, 0);
-                        }break;
-                    }
-
-                    metal_record_render_command(render_encoder, terrain_meshes + terrain_index, scale, translate);
-                }
-
+                u32 voxel_count = voxel_temp_memory.used / sizeof(voxel);
+                assert((voxel_temp_memory.used % sizeof(voxel)) == 0);
 #endif
-                metal_record_render_command(render_encoder, &cow_mesh, v3_(1, 1, 1), v3_(0, 0, 0));
-#if 1
-                metal_record_render_command(render_encoder, &suzanne_mesh, v3_(20, 20, 20), v3_(3, 3, 3));
-                metal_record_render_command(render_encoder, &sphere_mesh, v3_(3, 3, 3), v3_(0, 5, 0));
 
-                [render_encoder setRenderPipelineState:raytracing_pipline_state];
-
-                for(u32 triangle_index = 0;
-                        triangle_index < test_triangle_count;
-                        ++triangle_index)
+                r32_3 cube_vertices[] = 
                 {
-                    // NOTE(joon): Draw test triangles one by one, to change each colors
-                    per_object_data.color = v3_(1, 0, 0);
-                    [render_encoder setVertexBytes: &per_object_data
-                                    length: sizeof(per_object_data)
-                                    atIndex: 2]; 
-                    [render_encoder setVertexBytes: test_triangles + triangle_index
-                                    length: sizeof(triangle) 
+                    {-1.0f,-1.0f,-1.0f}, // triangle 1 : begin
+                    {-1.0f,-1.0f, 1.0f},
+                    {-1.0f, 1.0f, 1.0f}, // triangle 1 : end
+                    {1.0f, 1.0f,-1.0f}, // triangle 2 : begin
+                    {-1.0f,-1.0f,-1.0f},
+                    {-1.0f, 1.0f,-1.0f}, // triangle 2 : end
+                    {1.0f,-1.0f, 1.0f},
+                    {-1.0f,-1.0f,-1.0f},
+                    {1.0f,-1.0f,-1.0f},
+                    {1.0f, 1.0f,-1.0f},
+                    {1.0f,-1.0f,-1.0f},
+                    {-1.0f,-1.0f,-1.0f},
+                    {-1.0f,-1.0f,-1.0f},
+                    {-1.0f, 1.0f, 1.0f},
+                    {-1.0f, 1.0f,-1.0f},
+                    {1.0f,-1.0f, 1.0f},
+                    {-1.0f,-1.0f, 1.0f},
+                    {-1.0f,-1.0f,-1.0f},
+                    {-1.0f, 1.0f, 1.0f},
+                    {-1.0f,-1.0f, 1.0f},
+                    {1.0f,-1.0f, 1.0f},
+                    {1.0f, 1.0f, 1.0f},
+                    {1.0f,-1.0f,-1.0f},
+                    {1.0f, 1.0f,-1.0f},
+                    {1.0f,-1.0f,-1.0f},
+                    {1.0f, 1.0f, 1.0f},
+                    {1.0f,-1.0f, 1.0f},
+                    {1.0f, 1.0f, 1.0f},
+                    {1.0f, 1.0f,-1.0f},
+                    {-1.0f, 1.0f,-1.0f},
+                    {1.0f, 1.0f, 1.0f},
+                    {-1.0f, 1.0f,-1.0f},
+                    {-1.0f, 1.0f, 1.0f},
+                    {1.0f, 1.0f, 1.0f},
+                    {-1.0f, 1.0f, 1.0f},
+                    {1.0f,-1.0f, 1.0f}
+                };
+
+                [render_encoder setRenderPipelineState:voxel_pipeline_state];
+
+                [render_encoder setVertexBytes: cube_vertices 
+                                    length: sizeof(r32_3) * array_count(cube_vertices) 
                                     atIndex: 0]; 
-                    [render_encoder drawPrimitives:MTLPrimitiveTypeTriangle
-                                    vertexStart:0 
-                                    vertexCount:3];
-                }
+
+#if 0
+                v3 voxel_dim = v3(1.f, 1.f, 1.f);
+                                v3 center = get_voxel_center_in_meter(x, y, z, voxel_dim);
+                                per_object_data.model = translate_m4(x, y, z)*scale_m4(1, 1, 1);
+                                [render_encoder setVertexBytes: &per_object_data
+                                                length: sizeof(per_object_data)
+                                                atIndex: 2]; 
+                                [render_encoder drawPrimitives:MTLPrimitiveTypeTriangle
+                                                vertexStart:0 
+                                                vertexCount:array_count(cube_vertices)];                               
+                                debug_rendered_voxel_count++;
+#endif
+                render_all_voxels(render_encoder, &per_object_data, nodes, 0, 0, 0, 0, 256, 0);
+
+#if 0
+                [render_encoder setVertexBytes: cube_vertices 
+                                    length: sizeof(r32_3) * array_count(cube_vertices) 
+                                    atIndex: 0]; 
+                
+                per_object_data.model = translate_m4(center.x, center.y, center.z)*scale_m4(1, 1, 1);
+
+
+                [render_encoder drawPrimitives:MTLPrimitiveTypeTriangle
+                                vertexStart:0 
+                                vertexCount:array_count(cube_vertices)];
 #endif
 
                 [render_encoder setRenderPipelineState:line_pipeline_state];
-                //per_object_data.model = convert_m4_to_r32_4x4(translate_m4(V3(0, 0, 0))*scale_m4(10, 10, 1000));
-                per_object_data.color = v3_(0, 0.15f, 0.8f);
+#if 0
+                for(u32 voxel_index = 0;
+                        voxel_index < loaded_vox.voxel_count;
+                        ++voxel_index)
+                {
+                    u32 x = loaded_vox.x[voxel_index];
+                    u32 y = loaded_vox.y[voxel_index];
+                    u32 z = loaded_vox.z[voxel_index];
 
-                [render_encoder setVertexBytes: &per_object_data
-                                length: sizeof(per_object_data)
-                                atIndex: 2]; 
+                    v3 center = get_voxel_center_in_meter(x, y, z, 2.0f * voxel_half_dim); 
 
-                line_vertex line_vertices[2];
-                line_vertices[0].p = convert_to_r32_3(camera.p + 100.0f*camera_dir);
-                line_vertices[1].p = convert_to_r32_3(camera.p + 1000.0f * camera_dir);
-                //line_vertices[0].p = {0, 0, 0};
-                //line_vertices[1].p = {0, 0, 10000};
+                    v3 bottom[4] = {};
+                    bottom[0] = center - voxel_half_dim;
+                    bottom[1] = bottom[0] + v3_(1, 0, 0);
+                    bottom[2] = bottom[0] + v3_(1, 1, 0);
+                    bottom[3] = bottom[0] + v3_(0, 1, 0);
 
-                // NOTE(joon): setVertexBytes can only used for data with size up to 4kb
-                // with vertex that only has position value(16 bytes), it can draw up to 83 triangles
-                // without using the index buffer
-                [render_encoder setVertexBytes: line_vertices
-                                length: sizeof(line_vertex) * array_count(line_vertices) 
-                                atIndex: 0]; 
+                    v3 top[4] = {};
+                    top[0] = center + voxel_half_dim;
+                    top[1] = top[0] - v3_(1, 0, 0);
+                    top[2] = top[0] - v3_(1, 1, 0);
+                    top[3] = top[0] - v3_(0, 1, 0);
 
-                [render_encoder drawPrimitives:MTLPrimitiveTypeLine
-                                vertexStart:0 
-                                vertexCount:2];
+                    // NOTE(joon) draw voxel outline
+                    metal_draw_line(render_encoder, bottom[0], bottom[1], v3_(1, 1, 1));
+                    metal_draw_line(render_encoder, bottom[1], bottom[2], v3_(1, 1, 1));
+                    metal_draw_line(render_encoder, bottom[2], bottom[3], v3_(1, 1, 1));
+                    metal_draw_line(render_encoder, bottom[3], bottom[0], v3_(1, 1, 1));
+
+                    metal_draw_line(render_encoder, top[0], top[1], v3_(1, 1, 1));
+                    metal_draw_line(render_encoder, top[1], top[2], v3_(1, 1, 1));
+                    metal_draw_line(render_encoder, top[2], top[3], v3_(1, 1, 1));
+                    metal_draw_line(render_encoder, top[3], top[0], v3_(1, 1, 1));
+
+                    metal_draw_line(render_encoder, bottom[0], top[2], v3_(1, 1, 1));
+                    metal_draw_line(render_encoder, bottom[1], top[3], v3_(1, 1, 1));
+                    metal_draw_line(render_encoder, bottom[2], top[0], v3_(1, 1, 1));
+                    metal_draw_line(render_encoder, bottom[3], top[1], v3_(1, 1, 1));
+                }
+#endif
+
+                // x axis
+                metal_draw_line(render_encoder, v3_(), v3_(100, 0, 0), v3_(0, 0, 1));
+                // y axis
+                metal_draw_line(render_encoder, v3_(), v3_(0, 100, 0), v3_(1, 0, 0));
+                // z axis
+                metal_draw_line(render_encoder, v3_(), v3_(0, 0, 100), v3_(0, 1, 0));
 
                 [render_encoder endEncoding];
             
@@ -1541,19 +1540,21 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
                 [command_buffer presentDrawable: view.currentDrawable];
                 //[command_buffer presentDrawable:view.currentDrawable
                                 //atTime:time_left_until_present_in_sec];
+
             }
 
             // NOTE : equivalent to vkQueueSubmit,
             // TODO(joon): Sync with the swap buffer!
             [command_buffer commit];
+
         }
         light_angle += 0.01f;
 
         u64 time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
 
         // NOTE(joon): Because nanosleep is such a high resolution sleep method, for precise timing,
-        // we need to undersleep and spend time in a loop for the precise page flip
-        u64 undersleep_nano_seconds = 1000000;
+        // we need to undersleep and spend time in a loop
+        u64 undersleep_nano_seconds = 10000000;
         if(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
         {
             timespec time_spec = {};
@@ -1573,6 +1574,9 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
         {
             time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
         }
+        u32 time_passed_in_micro_sec = (u32)(time_passed_in_nano_seconds / 1000);
+        f32 time_passed_in_sec = (f32)time_passed_in_micro_sec / 1000000.0f;
+        printf("%dms elapsed, fps : %.6f\n", time_passed_in_micro_sec, 1.0f/time_passed_in_sec);
 
 #if 0
         // NOTE(joon) : debug_printf_all_cycle_counters
@@ -1591,6 +1595,16 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
         last_time = mach_absolute_time();
     }
 
-
     return 0;
 }
+
+
+
+
+
+
+
+
+
+
+

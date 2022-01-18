@@ -1,4 +1,3 @@
-
 #if 0
 #include <limits.h>
 #include <stdint.h>
@@ -10,6 +9,7 @@
 #include "meka_random.h"
 #endif
 
+#if 0
 struct material
 {
     r32 reflectivity; // 0.0f being very rough like a chalk, and 1 being really relfective(like mirror)
@@ -65,6 +65,7 @@ struct world
     volatile u64 total_ray_count;
     volatile u64 bounced_ray_count;
 };
+#endif
 
 struct ray_intersect_result
 {
@@ -224,6 +225,7 @@ linear_to_srgb(r32 linear_value)
     return result;
 }
 
+#if 0
 struct raytracer_data
 {
     world *world;
@@ -263,8 +265,9 @@ render_raytraced_image_tile_simd(raytracer_data *data)
     simd_f32 simd_f32_2 = simd_f32_(2.0f);
     simd_f32 simd_f32_0 = simd_f32_(0.0f);
     simd_f32 simd_f32_1 = simd_f32_(1.0f);
+    simd_f32 simd_f32_minus_1 = simd_f32_(-1.0f);
     simd_u32 simd_u32_0 = simd_u32_(0);
-    simd_u32 simd_u32_max = simd_u32_(u32_max);
+    simd_u32 simd_u32_max = simd_u32_(U32_Max);
 
     simd_v3 simd_v3_0 = simd_v3_(v3_(0.0f, 0.0f, 0.0f));
 
@@ -353,7 +356,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                         bounce_index < 8;
                         ++bounce_index)
                 {
-                    simd_f32 min_hit_t = simd_f32_(flt_max);
+                    simd_f32 min_hit_t = simd_f32_(Flt_Max);
 
                     simd_u32 hit_mat_index = simd_u32_0;
 
@@ -397,7 +400,6 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                         }
                     }
 
-#if 1
                     for(u32 sphere_index = 0;
                             sphere_index < world->sphere_count;
                             ++sphere_index)
@@ -447,7 +449,6 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                         }
                     }
 
-#if 1
                     for(u32 triangle_index = 0;
                             triangle_index < world->triangle_count;
                             ++triangle_index)
@@ -517,8 +518,8 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                             }
                         }
                     }
-#endif
-#endif
+
+
                     // TODO(joon): gatter / scatter?
                     material *lane_0_hit_material = world->materials + get_lane(hit_mat_index, 0);
                     material *lane_1_hit_material = world->materials + get_lane(hit_mat_index, 1);
@@ -625,6 +626,33 @@ render_raytraced_image_tile_simd(raytracer_data *data)
     return result;
 }
 
+/*
+    NOTE(joon) voxel should be axis aligned!
+    Normal plane can be expressed in : N * P = d, where N being a normal and P being any point in plane.
+
+    Because the planes are axis aligned, we can also simplify the typical ray - plane intersection code.
+    For example, when we solve the equation above with a ray, we get t = (d - dot(N, O)) / dot(N, V).
+    Because the planes are axis aligned, the normals should be (1, 0, 0), (0, 1, 0), (0, 0, 1).
+    So tx = (Px - Ox) / Vx;
+    So ty = (Py - Oy) / Vy;
+    So tz = (Pz - Oz) / Vz;
+
+    to only get the 
+*/
+
+internal b32
+ray_intersect_with_slab(v3 p0, v3 p1, v3 ray_origin, v3 inv_ray_dir)
+{
+    b32 result = false;
+
+    v3 t0 = hadamard((p0 - ray_origin), inv_ray_dir); // each component represents t against the slab that is aligned for each axis
+    v3 t1 = hadamard((p1 - ray_origin), inv_ray_dir); // each component represents t against the slab that is aligned for each axis
+
+    //result = max_component(t0) <= min_component(t1);
+
+    return result;
+}
+ 
 internal raytracer_output
 render_raytraced_image_tile(raytracer_data *data)
 {
@@ -707,7 +735,7 @@ render_raytraced_image_tile(raytracer_data *data)
                         bounce_index < 8;
                         ++bounce_index)
                 {
-                    r32 min_hit_t = flt_max;
+                    r32 min_hit_t = Flt_Max;
 
                     u32 hit_mat_index = 0;
 
@@ -849,6 +877,7 @@ render_raytraced_image_tile(raytracer_data *data)
 
     return result;
 }
+#endif
 
 
 

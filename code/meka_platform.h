@@ -5,6 +5,10 @@
 #ifndef MEKA_PLATFORM_H
 #define MEKA_PLATFORM_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <limits.h>
 #include <float.h>
 #include "meka_types.h" 
@@ -28,6 +32,7 @@ typedef double r64;
 
 #define assert(Expression) if(!(Expression)) {int *a = 0; *a = 0;}
 #define array_count(Array) (sizeof(Array) / sizeof(Array[0]))
+#define invalid_code_path assert(0)
 
 #define global static
 #define local_persist static
@@ -44,6 +49,9 @@ typedef double r64;
 
 #define maximum(a, b) ((a>b)? a:b) 
 #define minimum(a, b) ((a<b)? a:b) 
+
+// NOTE(joon): *(u32 *)c == "stri" does not work because of the endianess issues
+#define four_cc(string) (((string[0] & 0xff) << 0) | ((string[1] & 0xff) << 8) | ((string[2] & 0xff) << 16) | ((string[3] & 0xff) << 24))
 
 #define pi_32 3.14159265358979323846264338327950288419716939937510582097494459230f
 #define half_pi_32 (pi_32/2.0f)
@@ -160,6 +168,25 @@ zero_memory(void *memory, u64 size)
 #endif
 }
 
+// TODO(joon): Intrinsic?
+inline u8
+reverse_bits(u8 value)
+{
+    u8 result = 0;
+
+    for(u32 i = 0;
+            i < 8;
+            ++i)
+    {
+        if(((value >> i) & 1) == 0)
+        {
+            result |= (1 << i);
+        }
+    }
+
+    return result;
+}
+
 struct platform_memory
 {
     void *permanent_memory;
@@ -263,6 +290,7 @@ start_temp_memory(memory_arena *memory_arena, size_t size, b32 should_be_zero = 
     return result;
 }
 
+// TODO(joon) no need to pass the pointer
 internal void
 end_temp_memory(temp_memory *temp_memory)
 {
@@ -338,5 +366,9 @@ struct thread_work_queue
     platform_add_thread_work_queue_item *add_thread_work_queue_item;
     platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

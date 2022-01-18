@@ -1632,6 +1632,80 @@ lookup_from_merl_brdf_table(f32 *brdf_table, v3 in, v3 out)
     return result;
 }
 
+struct load_vox_result
+{
+    // NOTE(joon) : in voxel
+    i32 x_count; 
+    i32 y_count;
+    i32 z_count;
+
+    i32 voxel_count;
+    u8 *xs;
+    u8 *ys;
+    u8 *zs;
+};
+
+internal load_vox_result
+load_vox(u8 *file, u32 file_size)
+{
+    load_vox_result result = {};
+
+    u8 *current = file;
+    u8 *end = file + file_size;
+    while(current != end)
+    {
+        if(*current == 'S' &&
+            *(current + 1) == 'I' &&
+            *(current + 2) == 'Z' &&
+            *(current + 3) == 'E')
+        {
+            i32 *internal_current = (i32 *)(current + 4); 
+            i32 chunk_content_size = *(internal_current++);
+            i32 children_chunk_content_size = *(internal_current++);
+            assert(children_chunk_content_size == 0);
+
+            result.x_count = *(internal_current++);
+            result.y_count = *(internal_current++);
+            result.z_count = *(internal_current++);
+        }
+        else if(*current == 'X' &&
+                *(current + 1) == 'Y' &&
+                *(current + 2) == 'Z' &&
+                *(current + 3) == 'I')
+        {
+            i32 *internal_current = (i32 *)(current + 4); 
+            i32 chunk_content_size = *(internal_current++);
+            i32 children_chunk_content_size = *(internal_current++);
+            assert(children_chunk_content_size == 0);
+
+            result.voxel_count = *(internal_current++);
+            result.xs = (u8 *)malloc(result.voxel_count);
+            result.ys = (u8 *)malloc(result.voxel_count);
+            result.zs = (u8 *)malloc(result.voxel_count);
+            for(u32 voxel_index = 0;
+                    voxel_index < result.voxel_count;
+                    ++voxel_index)
+            {
+                i32 xyzi = *internal_current++;
+                result.xs[voxel_index] = ((xyzi >> 16) & 0xff);
+                result.ys[voxel_index] = ((xyzi >> 8) & 0xff);
+                result.zs[voxel_index] = ((xyzi >> 0) & 0xff);
+            }
+        }
+        else if(*current == 'P' &&
+                *(current + 1) == 'A' &&
+                *(current + 2) == 'C' &&
+                *(current + 3) == 'K')
+        {
+            invalid_code_path;
+        }
+
+        current++;
+    }
+    return result;
+}
+
+
 
 
 

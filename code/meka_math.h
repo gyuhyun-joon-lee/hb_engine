@@ -112,6 +112,14 @@ operator*(r32 value, v2 &a)
     return result;
 }
 
+inline v3
+v3_()
+{
+    v3 result = {};
+
+    return result;
+}
+
 #define v3(x, y, z) v3_(x, y, z)
 inline v3
 v3_(r32 x, r32 y, r32 z)
@@ -823,51 +831,6 @@ clamp(i32 min, i32 value, i32 max)
     }
 
     return result;
-}
-
-#define sin(value) sin_(value)
-#define cos(value) cos_(value)
-#define acos(value) acos_(value)
-#define atan2(y, x) atan2_(y, x)
-
-inline r32
-sin_(r32 rad)
-{
-    // TODO(joon) : intrinsic?
-    return sinf(rad);
-}
-
-inline r32
-cos_(r32 rad)
-{
-    // TODO(joon) : intrinsic?
-    return cosf(rad);
-}
-
-inline r32
-acos_(r32 rad)
-{
-    return acosf(rad);
-}
-
-inline r32
-atan2_(r32 y, r32 x)
-{
-    return atan2f(y, x);
-}
-
-inline i32
-round_r32_i32(r32 value)
-{
-    // TODO(joon) : intrinsic?
-    return (i32)roundf(value);
-}
-
-inline u32
-round_r32_u32(r32 value)
-{
-    // TODO(joon) : intrinsic?
-    return (u32)roundf(value);
 }
 
 inline r32

@@ -2,10 +2,6 @@
 
 #include <arm_neon.h>
 
-#define simd_f32_4 float32x4_t
-#define simd_u32_4 uint32x4_t
-#define simd_i32_4 int32x4_t
-
 // TODO(note): Doing simd operations this way makes it easier for us to see and examine the code,
 // but has a chance to make the performance worse as the compiler is not that smart :(
 struct simd_f32
@@ -578,6 +574,44 @@ lerp(simd_f32 min, simd_f32 t, simd_f32 max)
     return min + t*(max-min);
 }
 
+force_inline simd_f32
+min(simd_f32 a, simd_f32 b)
+{
+    simd_f32 result = {};
+
+    result.v = vminq_f32(a.v, b.v);
+
+    return result;
+}
+
+force_inline f32
+min_component(simd_f32 a)
+{
+    f32 result = vminvq_f32(a.v);
+
+    return result;
+}
+
+force_inline f32
+max_component(simd_f32 a)
+{
+    f32 result = vmaxvq_f32(a.v);
+
+    return result;
+}
+
+force_inline simd_f32
+max(simd_f32 a, simd_f32 b)
+{
+    simd_f32 result = {};
+
+    result.v = vmaxq_f32(a.v, b.v);
+
+    return result;
+}
+
+
+
 #if 0
 // NOTE(joon): Fills the mask lane with 1 if the lane has non-zero value
 // if not, fills with 0
@@ -858,6 +892,49 @@ cross(simd_v3 a, simd_v3 b)
     return result;
 }
 
+force_inline simd_v3
+min(simd_v3 a, simd_v3 b)
+{
+    simd_v3 result = {};
+
+    result.x = vminq_f32(a.x, b.x);
+    result.y = vminq_f32(a.y, b.y);
+    result.z = vminq_f32(a.z, b.z);
+
+    return result;
+}
+
+force_inline simd_v3
+max(simd_v3 a, simd_v3 b)
+{
+    simd_v3 result = {};
+
+    result.x = vmaxq_f32(a.x, b.x);
+    result.y = vmaxq_f32(a.y, b.y);
+    result.z = vmaxq_f32(a.z, b.z);
+
+    return result;
+}
+
+force_inline simd_f32
+min_component(simd_v3 a)
+{
+    simd_f32 result = {};
+    result.v = vminq_f32(vminq_f32(a.x, a.y), a.z);
+
+    return result;
+}
+
+force_inline simd_f32
+max_component(simd_v3 a)
+{
+    simd_f32 result = {};
+    result.v = vmaxq_f32(vmaxq_f32(a.x, a.y), a.z);
+
+    return result;
+}
+
+
 force_inline v3
 add_all_lanes(simd_v3 a)
 {
@@ -866,6 +943,67 @@ add_all_lanes(simd_v3 a)
     result.x = vaddvq_f32(a.x);
     result.y = vaddvq_f32(a.y);
     result.z = vaddvq_f32(a.z);
+
+    return result;
+}
+
+// TODO(joon): Not sure how accurate this floating point comparison is
+force_inline simd_u32
+compare_equal(simd_v3 a, simd_v3 b)
+{
+    simd_u32 result = {};
+
+    result.v = vceqq_f32(a.x, b.x) & vceqq_f32(a.y, b.y) & vceqq_f32(a.z, b.z);
+
+    return result;
+}
+
+force_inline simd_u32
+compare_greater_equal(simd_v3 a, simd_v3 b)
+{
+    simd_u32 result = {};
+
+    result.v = vcgeq_f32(a.x, b.x) & vcgeq_f32(a.y, b.y) & vcgeq_f32(a.z, b.z);
+
+    return result;
+}
+
+force_inline simd_u32
+compare_greater(simd_v3 a, simd_v3 b)
+{
+    simd_u32 result = {};
+
+    result.v = vcgtq_f32(a.x, b.x) & vcgtq_f32(a.y, b.y) & vcgtq_f32(a.z, b.z);
+
+    return result;
+}
+
+force_inline simd_u32
+compare_less_equal(simd_v3 a, simd_v3 b)
+{
+    simd_u32 result = {};
+
+    result.v = vcleq_f32(a.x, b.x) & vcleq_f32(a.y, b.y) & vcleq_f32(a.z, b.z);
+
+    return result;
+}
+
+force_inline simd_u32
+compare_less(simd_v3 a, simd_v3 b)
+{
+    simd_u32 result = {};
+
+    result.v = vcltq_f32(a.x, b.x) & vcltq_f32(a.y, b.y) & vcltq_f32(a.z, b.z);
+
+    return result;
+}
+
+force_inline simd_u32
+compare_not_equal(simd_v3 a, simd_v3 b)
+{
+    simd_u32 result = {};
+
+    result = ~compare_equal(a, b);
 
     return result;
 }
@@ -905,7 +1043,7 @@ random_between_0_1(simd_random_series *series)
 {
     xor_shift_32(&series->next_random);
 
-    simd_f32 max = simd_f32_((r32)u32_max);
+    simd_f32 max = simd_f32_((r32)U32_Max);
 
     simd_f32 result = convert_f32_from_u32(series->next_random)/max;
 

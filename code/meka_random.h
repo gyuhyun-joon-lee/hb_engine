@@ -33,7 +33,7 @@ random_between_0_1(random_series *series)
 {
     xor_shift_32(&series->next_random);
 
-    r32 result = (r32)series->next_random/(r32)u32_max;
+    r32 result = (r32)series->next_random/(r32)U32_Max;
     return result;
 }
 
@@ -50,7 +50,7 @@ random_between_minus_1_1(random_series *series)
 {
     xor_shift_32(&series->next_random);
 
-    r32 result = 2.0f*((r32)series->next_random/(r32)u32_max) - 1.0f;
+    r32 result = 2.0f*((r32)series->next_random/(r32)U32_Max) - 1.0f;
     return result;
 }
 
@@ -69,7 +69,23 @@ random_between_u32(random_series *series, u32 min, u32 max)
 {
     xor_shift_32(&series->next_random);
     
-    return series->next_random%(max-min) + min;
+    return (u32)(series->next_random%(max-min) + min);
+}
+
+inline u32
+random_u32(random_series *series)
+{
+    xor_shift_32(&series->next_random);
+
+    return series->next_random;
+}
+
+inline i32
+random_between_i32(random_series *series, i32 min, i32 max)
+{
+    xor_shift_32(&series->next_random);
+    
+    return (i32)series->next_random%(max-min) + min;
 }
 
 

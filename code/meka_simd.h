@@ -24,6 +24,7 @@
 
 typedef v3 simd_v3;
 typedef r32 simd_f32;
+typedef r32 simd_r32;
 typedef u32 simd_u32;
 typedef i32 simd_i32;
 
@@ -228,7 +229,7 @@ force_inline simd_u32
 compare_less_equal(simd_f32 a, simd_f32 b)
 {
     simd_u32 result = 0;
-    if(a < b || compare_equal(a, b))
+    if(a <= b)
     {
         result = 0xffffffff;
     }
@@ -257,6 +258,13 @@ add_all_lanes(simd_f32 a)
 }
 
 //////////////////// simd_v3 //////////////////// 
+
+force_inline simd_v3
+simd_v3_()
+{
+    simd_v3 result = {};
+    return result;
+}
 
 force_inline simd_v3
 simd_v3_(v3 value)
@@ -292,6 +300,57 @@ operator*(simd_v3 a, simd_v3 b)
     result.x = a.x * b.x;
     result.y = a.y * b.y;
     result.z = a.z * b.z;
+
+    return result;
+}
+
+force_inline simd_v3
+operator/(simd_v3 a, simd_v3 b)
+{
+    simd_v3 result = {};
+
+    result.x = a.x / b.x;
+    result.y = a.y / b.y;
+    result.z = a.z / b.z;
+
+    return result;
+}
+
+force_inline simd_v3
+min(simd_v3 a, simd_v3 b)
+{
+    simd_v3 result = {};
+    result.x = minimum(a.x, b.x);
+    result.y = minimum(a.y, b.y);
+    result.z = minimum(a.z, b.z);
+
+    return result;
+}
+
+force_inline simd_v3
+max(simd_v3 a, simd_v3 b)
+{
+    simd_v3 result = {};
+
+    result.x = maximum(a.x, b.x);
+    result.y = maximum(a.y, b.y);
+    result.z = maximum(a.z, b.z);
+
+    return result;
+}
+
+force_inline simd_f32
+min_component(simd_v3 a)
+{
+    simd_f32 result = minimum(minimum(a.x, a.y), a.z);
+
+    return result;
+}
+
+force_inline simd_f32
+max_component(simd_v3 a)
+{
+    simd_f32 result = maximum(maximum(a.x, a.y), a.z);
 
     return result;
 }
