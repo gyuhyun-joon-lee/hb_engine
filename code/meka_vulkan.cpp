@@ -2,6 +2,8 @@
  * Written by Gyuhyun 'Joon' Lee
  * https://github.com/meka-lopo/
  */
+#include "meka_vulkan.h"
+
 #include <stdio.h>
 #define CheckVkResult(expression)                                             \
 {                                                                             \
@@ -9,65 +11,12 @@
     if(vkResult != VK_SUCCESS)                                                  \
     {                                                                           \
         printf("CheckVkResult Failed with vkResult : %i\n", vkResult);                               \
-        Assert(0);                                                              \
+        assert(0);                                                              \
     }                                                                           \
 }                                                                               \
 
-struct vk_queue_families
-{
-    u32 graphicsQueueFamilyIndex;
-    u32 graphicsQueueCount;
-    u32 presentQueueFamilyIndex;
-    u32 presentQueueCount;
-    u32 transferQueueFamilyIndex;
-    u32 transferQueueCount;
-};
-
-// TODO(joon) : Make this cross-graphics api
-struct renderer
-{
-    // TODO(joon) : Make my own allocator so that we don't need to store the things that are not 
-    // needed for the actual rendering
-    VkInstance instance;
-    VkPhysicalDevice physicalDevice;
-    VkDevice device;
-
-    VkSurfaceKHR surface;
-    v2 surfaceExtent;
-
-    vk_queue_families queueFamilies;
-    VkQueue graphicsQueue;
-    VkQueue transferQueue;
-    VkQueue presentQueue;
-
-    VkSwapchainKHR swapchain;
-    VkImage *swapchainImages;
-    u32 swapchainImageCount;
-    VkImageView *swapchainImageViews; // count = swap chain image count 
-
-    VkRenderPass renderPass;
-    VkPipeline pipeline;
-    VkPipelineLayout pipelineLayout;
-
-    VkImage depthImage;
-    VkImageView depthImageView;
-    VkDeviceMemory depthImageMemory;
-
-    VkFramebuffer *framebuffers;  // count = swap chain image count 
-    VkCommandPool graphicsCommandPool;
-    VkCommandBuffer *graphicsCommandBuffers; // count = swap chain image count 
-
-    VkSemaphore *imageReadyToRenderSemaphores;// count = swap chain image count 
-    VkSemaphore *imageReadyToPresentSemaphores;// count = swap chain image count 
-
-    VkFence *imageReadyToRenderFences;// count = swap chain image count 
-    VkFence *imageReadyToPresentFences;// count = swap chain image count 
-
-    u64 uniform_buffer_offset_alignment;
-};
-
 internal VkPhysicalDevice
-FindPhysicalDevice(VkInstance instance)
+find_physical_device(VkInstance instance)
 {
     VkPhysicalDevice result = {};
     u32 physicalDeviceCount = 0;
@@ -94,7 +43,191 @@ FindPhysicalDevice(VkInstance instance)
     return result;
 }
 
+internal void
+vk_check_desired_layers_support(char **desired_layers, u32 desired_layer_count)
+{
+    u32 layer_count = 0;
+    vkEnumerateInstanceLayerProperties(&layer_count, 0);
+    VkLayerProperties layers[64]; // TODO(joon) use variable legnth array for this
+    vkEnumerateInstanceLayerProperties(&layer_count, layers);
 
+    for(u32 desired_layer_index = 0;
+            desired_layer_index < array_count(desired_layers);
+            ++desired_layer_index)
+    {
+        char **desired_layer = desired_layers + desired_layer_index;
+
+        b32 found = false;
+        for(u32 layer_index = 0;
+                layer_index < layer_count;
+                ++layer_index)
+        {
+            if(strcmp(*desired_layer, layers[layer_index].layerName) == 0)
+            {
+                found = true;
+                break;
+            }
+        }
+
+        if(!found)
+        {
+            printf("%s not found", *desired_layer);
+            assert(0);
+        }
+    }
+}
+
+internal void
+vk_check_desired_extensions_support(char **desired_extensions, u32 desired_extension_count)
+{
+    u32 extension_count;
+    vkEnumerateInstanceExtensionProperties(0, &extension_count, 0);
+    VkExtensionProperties extensions[64];
+    vkEnumerateInstanceExtensionProperties(0, &extension_count, extensions);
+
+    for(u32 desired_extension_index = 0;
+        desired_extension_index < desired_extension_count;
+        ++desired_extension_index)
+    {
+        char **desired_extension = desired_extensions + desired_extension_index;
+        
+        b32 found = false;
+        for(u32 extension_index = 0;
+                extension_index < extension_count;
+                ++extension_index)
+        {
+            if(strcmp(*desired_extension, extensions[extension_index].extensionName) == 0)
+            {
+                found = true;
+                break;
+            }
+        }
+
+        if(!found)
+        {
+            printf("%s not found", *desired_extension);
+            assert(0);
+        }
+    }
+}
+
+// TODO(joon) Do we want to check more than one present mode?
+internal void
+vk_check_desired_present_mode_support(VkPhysicalDevice physical_device, VkSurfaceKHR surface, VkPresentModeKHR desired_present_mode)
+{
+    u32 presentModeCount;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &presentModeCount, 0);
+    VkPresentModeKHR presentModes[16];
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &presentModeCount, presentModes);
+
+    b32 found = false;
+    for(u32 presentModeIndex = 0;
+        presentModeIndex < presentModeCount;
+        ++presentModeIndex)
+    {
+        if(presentModes[presentModeIndex] == VK_PRESENT_MODE_FIFO_KHR)
+        {
+            found = true;
+            break;
+        }
+
+        if(!found)
+        {
+            printf("present mode not avilable");
+            assert(0);
+        }
+    }
+}
+
+// returns an 'usable' index to the physical_device_memory_properties.memoryTypes
+// that supports the desired memory properties
+internal u32
+vk_get_usable_memory_index(VkPhysicalDevice physical_device, VkDevice device, 
+                            VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags desired_memory_properties)
+{
+    u32 result = u32_max;
+
+    // TODO(joon) As long as we don't change the physical device, we can store this value
+    VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties);
+
+    u32 possible_memory_types = memory_requirements.memoryTypeBits;
+
+    // TODO(joon) can we pull this out into a seperate function?
+    u32 memory_type_index = 0;
+
+    while(possible_memory_types)
+    {
+        if(possible_memory_types & (1 << memory_type_index)) // if the least significant bit was set, 
+        {
+            if((physical_device_memory_properties.memoryTypes[memory_type_index].propertyFlags & desired_memory_properties) == desired_memory_properties)
+            {
+                result = memory_type_index;
+                break;
+            }
+        }
+
+        memory_type_index++;
+    }
+    assert(result != u32_max);
+
+    return result;
+}
+
+internal VkSurfaceFormatKHR
+vk_select_surface_format(VkPhysicalDevice physical_device, VkSurfaceKHR surface, 
+                        VkFormat *format_candidates, u32 format_candidate_count)
+{
+    u32 format_count;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, 0);
+    VkSurfaceFormatKHR formats[16]; // HACK
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, formats);
+    assert(formats[0].format != VK_FORMAT_UNDEFINED); // Unlike the past, entry value cannot have VK_FORMAT_UNDEFINED format
+
+    VkSurfaceFormatKHR result = {};
+    for(u32 formatIndex = 0;
+            formatIndex < format_count;
+            ++formatIndex)
+    {
+        for(u32 candidate_format_index = 0;
+                candidate_format_index < format_candidate_count;
+                ++candidate_format_index)
+        {
+            if(formats[formatIndex].format == format_candidates[candidate_format_index] && 
+                formats[formatIndex].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            {
+                result = formats[formatIndex];
+                break;
+            }
+        }
+    }
+    
+    if(!result.format)
+    {
+        printf("Could not find the surface with desired format!\n");
+        assert(0);
+    }
+
+    return result;
+}
+
+internal VkInstance
+vk_create_instance(char **layers, u32 layer_count, char **extensions, u32 extension_count)
+{
+    VkInstanceCreateInfo instance_create_info = {};
+    instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instance_create_info.pNext = 0;
+    instance_create_info.flags = 0;
+    instance_create_info.enabledLayerCount = layer_count;
+    instance_create_info.ppEnabledLayerNames = layers;
+    instance_create_info.enabledExtensionCount = extension_count;
+    instance_create_info.ppEnabledExtensionNames = extensions;
+
+    VkInstance instance;
+    CheckVkResult(vkCreateInstance(&instance_create_info, 0, &instance));
+    
+    return instance;
+}
 
 internal VKAPI_ATTR VkBool32 VKAPI_CALL 
 DebugMessengerCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, 
@@ -102,7 +235,8 @@ DebugMessengerCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                         const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
                         void* userData)
 {
-    printf(callbackData->pMessage);
+    // TODO(joon) put this back
+    printf("%s", (char *)callbackData->pMessage);
 
     return true;
 }
@@ -128,7 +262,7 @@ CreateDebugMessenger(VkInstance instance)
 
 
 internal vk_queue_families
-GetSupportedQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
+get_supported_queue_familes(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 {
     vk_queue_families result = {};
     result.graphicsQueueFamilyIndex = UINT_MAX;
@@ -186,7 +320,7 @@ GetSupportedQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 }
 
 internal VkDevice
-CreateDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, vk_queue_families *queueFamilies)
+vk_create_device(VkPhysicalDevice physical_device, VkSurfaceKHR surface, vk_queue_families *queueFamilies)
 {
     // NOTE(joon) : Max queue infos we need are three, one for each graphics/present/transfer
     // TODO(joon) : If we add compute queue later, change this too!
@@ -220,23 +354,21 @@ CreateDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, vk_queue_fam
     char *deviceExtensionNames[] =  
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+#if 0
         VK_KHR_8BIT_STORAGE_EXTENSION_NAME, // TODO(joon) : This is not supported on every devices
         VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
+#endif
+        //VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
+        "VK_KHR_portability_subset",
         VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
-        //"VK_NV_mesh_shader", // TODO(joon) : Does not work with renderdoc?
     };
 
     u32 propertyCount = 0;
-    CheckVkResult(vkEnumerateDeviceExtensionProperties(physicalDevice, 0, &propertyCount, 0));
+    CheckVkResult(vkEnumerateDeviceExtensionProperties(physical_device, 0, &propertyCount, 0));
     VkExtensionProperties availableDeviceExtensions[256]; // HACK
-    CheckVkResult(vkEnumerateDeviceExtensionProperties(physicalDevice, 0, &propertyCount, availableDeviceExtensions));
+    CheckVkResult(vkEnumerateDeviceExtensionProperties(physical_device, 0, &propertyCount, availableDeviceExtensions));
 
-    VkPhysicalDeviceMeshShaderFeaturesNV featureMeshShader = {};
-    featureMeshShader.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV;
-    featureMeshShader.pNext = 0;
-    featureMeshShader.taskShader = false; // TODO(joon) : Enable this when we need task shader!
-    featureMeshShader.meshShader = true; 
-
+#if 0
     VkPhysicalDevice16BitStorageFeatures feature16BitStorage = {};
     feature16BitStorage.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
     feature16BitStorage.pNext = &featureMeshShader;
@@ -251,10 +383,11 @@ CreateDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, vk_queue_fam
     feature8BitStorage.storageBuffer8BitAccess = true;
     feature8BitStorage.uniformAndStorageBuffer8BitAccess = false;
     feature8BitStorage.storagePushConstant8 = false;
+#endif
 
     VkPhysicalDeviceFeatures2 feature2 = {};
     feature2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    feature2.pNext = &feature8BitStorage;
+    feature2.pNext = 0;
 
     // NOTE(joon) : device layers are deprecated
     VkDeviceCreateInfo deviceCreateInfo = {};
@@ -262,50 +395,31 @@ CreateDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, vk_queue_fam
     deviceCreateInfo.pNext = &feature2;
     deviceCreateInfo.queueCreateInfoCount = validQueueCreateInfoCount;
     deviceCreateInfo.pQueueCreateInfos = queueCreateInfos;
-    deviceCreateInfo.enabledExtensionCount = ArrayCount(deviceExtensionNames);
+    deviceCreateInfo.enabledExtensionCount = array_count(deviceExtensionNames);
     deviceCreateInfo.ppEnabledExtensionNames = deviceExtensionNames;
 
     VkDevice device;
-    CheckVkResult(vkCreateDevice(physicalDevice, &deviceCreateInfo, 0, &device));
+    CheckVkResult(vkCreateDevice(physical_device, &deviceCreateInfo, 0, &device));
 
     return device;
 }
 
+#if 1
 internal VkDeviceMemory
-VkBufferAllocateMemory(VkPhysicalDevice physicalDevice, VkDevice device, 
+VkBufferAllocateMemory(VkPhysicalDevice physical_device, VkDevice device, 
                     VkBuffer buffer, VkMemoryPropertyFlags flags)
 {
-    VkMemoryRequirements memoryRequirements;
-    vkGetBufferMemoryRequirements(device, buffer, &memoryRequirements);
+    VkMemoryRequirements memory_requirements;
+    vkGetBufferMemoryRequirements(device, buffer, &memory_requirements);
 
-    // TODO(joon) : Store this value!
-    VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &physicalDeviceMemoryProperties);
-
-    u32 memoryTypeBits = memoryRequirements.memoryTypeBits;
-    u32 memoryTypeIndex = 0;
-    b32 isMemoryTypeSupported = false;
-    while(memoryTypeBits)
-    {
-        if(memoryTypeBits & 1)
-        {
-            if((physicalDeviceMemoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & flags) == flags)
-            {
-                isMemoryTypeSupported = true;
-                break;
-            }
-        }
-
-        memoryTypeBits = memoryTypeBits >> 1;
-        memoryTypeIndex++;
-    }
-    Assert(isMemoryTypeSupported);
+    u32 usable_memory_index = vk_get_usable_memory_index(physical_device, device, 
+                                memory_requirements, flags);
 
     // TODO(joon) : check whether the physical device actually supports the memory type or not
     VkMemoryAllocateInfo memoryAllocInfo = {};
     memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memoryAllocInfo.allocationSize = memoryRequirements.size;
-    memoryAllocInfo.memoryTypeIndex = memoryTypeIndex;
+    memoryAllocInfo.allocationSize = memory_requirements.size;
+    memoryAllocInfo.memoryTypeIndex = usable_memory_index;
 
     VkDeviceMemory bufferMemory;
     CheckVkResult(vkAllocateMemory(device, &memoryAllocInfo, 0, &bufferMemory));
@@ -313,697 +427,73 @@ VkBufferAllocateMemory(VkPhysicalDevice physicalDevice, VkDevice device,
 
     return bufferMemory;
 }
+#endif
 
-struct vk_host_visible_coherent_buffer
+internal vk_uniform_buffer
+vk_create_uniform_buffer(VkPhysicalDevice physical_device, VkDevice device, 
+                        u32 element_size, u32 element_count, u32 alignment)
 {
-    VkBuffer buffer;
-    VkDeviceMemory deviceMemory;
+    vk_uniform_buffer result = {};
 
-    void *memory; // memory that we can directly write into
-    u64 size;
-};
+    result.element_size = ((element_size / alignment) + 1) * alignment;;
+    result.element_count = element_count;
 
-internal vk_host_visible_coherent_buffer
-VkCreateHostVisibleCoherentBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkBufferUsageFlags usage, u64 size)
-{
-    vk_host_visible_coherent_buffer result = {};
-    result.memory = VK_NULL_HANDLE;
-    result.size = size;
+    u32 total_size = result.element_size * result.element_count;
 
     VkBufferCreateInfo bufferCreateInfo = {};
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.size = result.size;
-    bufferCreateInfo.usage = usage;
-    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    bufferCreateInfo.size = total_size;
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; // NOTE(joon) exculsive to this family
 
     CheckVkResult(vkCreateBuffer(device, &bufferCreateInfo, 0, &result.buffer));
-    result.deviceMemory = VkBufferAllocateMemory(physicalDevice, device, result.buffer, 
-                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    result.device_memory = VkBufferAllocateMemory(physical_device, device, result.buffer, 
+                                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-    // This pointer minus offset must be aligned to at least VkPhysicalDeviceLimits::minMemoryMapAlignment.
-    CheckVkResult(vkMapMemory(device, result.deviceMemory, 0, result.size, 0, &result.memory));
+    CheckVkResult(vkMapMemory(device, result.device_memory, 0, total_size, 0, &result.memory));
 
     return result;
 }
 
 internal void
-VkCopyMemoryToHostVisibleCoherentBuffer(vk_host_visible_coherent_buffer *buffer, u64 offset, void *source, u64 sourceSize)
+vk_update_uniform_buffer(vk_uniform_buffer *uniform_buffer, u32 index, void *source, u32 source_size)
 {
-    // TODO(joon) : maybe copying one by one is a bad idea, put it inside the queue and flush it at once?
-    // In that case, the memory doesnt need to be host_visible or host_coherent
-    memcpy((u8 *)buffer->memory+offset, source, sourceSize);
+    assert(index < uniform_buffer->element_count);
+    memcpy((u8 *)uniform_buffer->memory + uniform_buffer->element_size * index, source, source_size);
 }
 
 internal void
-Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle, i32 screenWidth, i32 screenHeight,
-                platform_api *platformApi, platform_memory *platformMemory)
+vk_update_host_visible_coherent_buffer_entirely(vk_host_visible_coherent_buffer *buffer, void *source, u32 source_size)
 {
-#if !MEKA_VULKAN
-    Assert(0);
-#endif
-
-    ResolvePreInstanceLevelFunctions();
-
-    u32 layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, 0);
-    VkLayerProperties layers[64]; // HACK
-    vkEnumerateInstanceLayerProperties(&layerCount, layers);
-    // NOTE(joon) : VK_LAYER_LUNARG_standard_validation is deprecated
-    char *instanceLayerNames[] = 
-    {
-#if MEKA_DEBUG
-        "VK_LAYER_KHRONOS_validation"
-#endif
-    };
-
-    for(u32 desiredLayerIndex = 0;
-            desiredLayerIndex < ArrayCount(instanceLayerNames);
-            ++desiredLayerIndex)
-    {
-        b32 found = false;
-        for(u32 layerIndex = 0;
-            layerIndex < layerCount;
-            ++layerIndex)
-        {
-            if(strcmp(instanceLayerNames[desiredLayerIndex], layers[layerIndex].layerName))
-            {
-                found = true;
-                //WriteConsoleInfo->writt
-                break;
-            }
-        }
-
-        if(!found)
-        {
-            printf(instanceLayerNames[desiredLayerIndex]);
-            printf("not found\n");
-        }
-        Assert(found);
-    }
-    
-
-    u32 extensionCount;
-    vkEnumerateInstanceExtensionProperties(0, &extensionCount, 0);
-    VkExtensionProperties extensions[64];
-    vkEnumerateInstanceExtensionProperties(0, &extensionCount, extensions);
-    char *instanceLevelExtensions[] =
-    {
-#if MEKA_DEBUG
-        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-#endif
-        VK_KHR_SURFACE_EXTENSION_NAME,
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-        "VK_KHR_win32_surface",
-#endif
-        "VK_KHR_get_physical_device_properties2",
-    };
-    for(u32 desiredExtensionIndex = 0;
-            desiredExtensionIndex < ArrayCount(instanceLevelExtensions);
-            ++desiredExtensionIndex)
-    {
-        b32 found = false;
-        for(u32 extensionIndex = 0;
-            extensionIndex < extensionCount;
-            ++extensionIndex)
-        {
-            if(StringCompare(instanceLevelExtensions[desiredExtensionIndex], extensions[extensionIndex].extensionName))
-            {
-                found = true;
-                break;
-            }
-        }
-
-        Assert(found);
-    }
-
-    VkInstanceCreateInfo instanceCreateInfo = {};
-    instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instanceCreateInfo.pNext = 0;
-    instanceCreateInfo.flags = 0;
-    instanceCreateInfo.enabledLayerCount = ArrayCount(instanceLayerNames);
-    instanceCreateInfo.ppEnabledLayerNames = instanceLayerNames;
-    instanceCreateInfo.enabledExtensionCount = ArrayCount(instanceLevelExtensions);
-    instanceCreateInfo.ppEnabledExtensionNames = instanceLevelExtensions;
-
-    CheckVkResult(vkCreateInstance(&instanceCreateInfo, 0, &renderer->instance));
-
-    ResolveInstanceLevelFunctions(renderer->instance);
-
-#if MEKA_DEBUG
-    CreateDebugMessenger(renderer->instance);
-#endif
-
-    renderer->physicalDevice = FindPhysicalDevice(renderer->instance);
-    VkPhysicalDeviceProperties property;
-    vkGetPhysicalDeviceProperties(renderer->physicalDevice, &property);
-    renderer->uniform_buffer_offset_alignment = property.limits.minUniformBufferOffsetAlignment;
-
-    VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
-    surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    surfaceCreateInfo.hinstance = instanceHandle;
-    surfaceCreateInfo.hwnd = windowHandle;
-    CheckVkResult(vkCreateWin32SurfaceKHR(renderer->instance, &surfaceCreateInfo, 0, &renderer->surface));
-
-    renderer->queueFamilies = GetSupportedQueueFamilies(renderer->physicalDevice, renderer->surface);
-    renderer->device = CreateDevice(renderer->physicalDevice, renderer->surface, &renderer->queueFamilies);
-    ResolveDeviceLevelFunctions(renderer->device);
-
-    vkGetDeviceQueue(renderer->device, renderer->queueFamilies.graphicsQueueFamilyIndex, 0, &renderer->graphicsQueue);
-    vkGetDeviceQueue(renderer->device, renderer->queueFamilies.presentQueueFamilyIndex, 0, &renderer->presentQueue);
-    vkGetDeviceQueue(renderer->device, renderer->queueFamilies.transferQueueFamilyIndex, 0, &renderer->transferQueue);
-
-    VkFormat desiredFormats[] = {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_SRGB};
-
-    u32 formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(renderer->physicalDevice, renderer->surface, &formatCount, 0);
-    VkSurfaceFormatKHR formats[16]; // HACK
-    vkGetPhysicalDeviceSurfaceFormatsKHR(renderer->physicalDevice, renderer->surface, &formatCount, formats);
-    Assert(formats[0].format != VK_FORMAT_UNDEFINED); // Unlike the past, entry value cannot have VK_FORMAT_UNDEFINED format
-
-
-    VkSurfaceFormatKHR selectedFormat;
-    b32 formatAvailable = false;
-    for(u32 formatIndex = 0;
-        formatIndex < formatCount;
-        ++formatIndex)
-    {
-        for(u32 desiredFormatIndex = 0;
-            desiredFormatIndex < ArrayCount(desiredFormats);
-            ++desiredFormatIndex)
-        {
-            if(formats[formatIndex].format == desiredFormats[desiredFormatIndex] && 
-                formats[formatIndex].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-            {
-                selectedFormat = formats[formatIndex];
-                formatAvailable = true;
-                break;
-            }
-        }
-    }
-
-    u32 presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(renderer->physicalDevice, renderer->surface, &presentModeCount, 0);
-    VkPresentModeKHR presentModes[16];
-    vkGetPhysicalDeviceSurfacePresentModesKHR(renderer->physicalDevice, renderer->surface, &presentModeCount, presentModes);
-
-    b32 presentModeAvailable = false;
-    for(u32 presentModeIndex = 0;
-        presentModeIndex < presentModeCount;
-        ++presentModeIndex)
-    {
-        if(presentModes[presentModeIndex] == VK_PRESENT_MODE_FIFO_KHR)
-        {
-            presentModeAvailable = true;
-            break;
-        }
-    }
-
-    // TODO(joon) : This should not be an assert, maybe find the most similiar format or present mode?
-    Assert(formatAvailable && presentModeAvailable);
-
-    VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(renderer->physicalDevice, renderer->surface, &surfaceCapabilities));
-
-    renderer->surfaceExtent.x = (r32)surfaceCapabilities.currentExtent.width;
-    renderer->surfaceExtent.y = (r32)surfaceCapabilities.currentExtent.height;
-
-    VkSwapchainCreateInfoKHR swapchainCreateInfo = {};
-    swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    //swapchainCreateInfo.flags; // TODO(joon) : might be worth looking into protected image?
-    swapchainCreateInfo.surface = renderer->surface;
-    swapchainCreateInfo.minImageCount = surfaceCapabilities.minImageCount + 1;
-    if(swapchainCreateInfo.minImageCount > surfaceCapabilities.maxImageCount)
-    {
-        swapchainCreateInfo.minImageCount = surfaceCapabilities.maxImageCount;
-    }
-    if(surfaceCapabilities.maxImageCount == 0)
-    {
-        // NOTE(joon) ; If the maxImageCount is 0, means there is no limit for the maximum image count
-        swapchainCreateInfo.minImageCount = 3;
-    }
-    swapchainCreateInfo.imageFormat = selectedFormat.format;
-    swapchainCreateInfo.imageColorSpace = selectedFormat.colorSpace;
-    swapchainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    swapchainCreateInfo.imageExtent = surfaceCapabilities.currentExtent;
-    swapchainCreateInfo.imageArrayLayers = 1; // non-stereoscopic
-    swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchainCreateInfo.queueFamilyIndexCount = 1;
-    swapchainCreateInfo.pQueueFamilyIndices = &renderer->queueFamilies.graphicsQueueFamilyIndex;
-    swapchainCreateInfo.preTransform = surfaceCapabilities.currentTransform;
-    // TODO(joon) : surfaceCapabilities also return supported alpha composite, so we should check that one too
-    swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; 
-    swapchainCreateInfo.clipped = VK_TRUE;
-
-    vkCreateSwapchainKHR(renderer->device, &swapchainCreateInfo, 0, &renderer->swapchain);
-
-    // NOTE(joon) : You _have to_ query first and then get the images, otherwise vulkan always returns VK_INCOMPLETE
-    CheckVkResult(vkGetSwapchainImagesKHR(renderer->device, renderer->swapchain, &renderer->swapchainImageCount, 0));
-    renderer->swapchainImages = PushArray(platformMemory, VkImage, renderer->swapchainImageCount);
-    CheckVkResult(vkGetSwapchainImagesKHR(renderer->device, renderer->swapchain, &renderer->swapchainImageCount, renderer->swapchainImages));
-
-    renderer->swapchainImageViews = PushArray(platformMemory, VkImageView, renderer->swapchainImageCount);
-    for(u32 swapchainImageIndex = 0;
-        swapchainImageIndex < renderer->swapchainImageCount;
-        ++swapchainImageIndex)
-    {
-        VkImageViewCreateInfo imageViewCreateInfo = {};
-        imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        imageViewCreateInfo.image = renderer->swapchainImages[swapchainImageIndex];
-        imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCreateInfo.format = selectedFormat.format;
-        imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-        imageViewCreateInfo.subresourceRange.levelCount = 1;
-        imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-        imageViewCreateInfo.subresourceRange.layerCount = 1;
-
-        CheckVkResult(vkCreateImageView(renderer->device, &imageViewCreateInfo, 0, renderer->swapchainImageViews + swapchainImageIndex));
-    }
-
-    VkAttachmentDescription renderpassAttachments[2] = {};
-    renderpassAttachments[0].format = selectedFormat.format;
-    renderpassAttachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    renderpassAttachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // This will enable the renderpass clear value
-    renderpassAttachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // If we are not recording the command buffer every single time, OP_STORE should be specified
-    renderpassAttachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    renderpassAttachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    renderpassAttachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    renderpassAttachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentDescription depthStencilAttachment = {};
-    renderpassAttachments[1].format = VK_FORMAT_D32_SFLOAT;
-    renderpassAttachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-    renderpassAttachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // This will enable the renderpass clear value
-    renderpassAttachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE; // If we are not recording the command buffer every single time, OP_STORE should be specified
-    renderpassAttachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    renderpassAttachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    renderpassAttachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    renderpassAttachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference colorAttachmentReference = {};
-    colorAttachmentReference.attachment = 0;
-    colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // TODO(joon) : Check this value!
-
-    VkAttachmentReference depthStencilReference = {};
-    depthStencilReference.attachment = 1;
-    depthStencilReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpassDescription = {};
-    subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpassDescription.colorAttachmentCount = 1;
-    subpassDescription.pColorAttachments = &colorAttachmentReference;// Why do we need to specify this twice...
-    subpassDescription.pDepthStencilAttachment = &depthStencilReference;
-
-    // TODO(joon) : Add dependency when we need to
-#if 0
-    VkSubpassDependency dependency = {};
-    // NOTE(joon) : if the srcSubpass == dstSubpass, this dependency only defines memory barriers inside the subpass
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.srcStageMask = vk_subpass_;
-    dependency.dstStageMask;
-    dependency.srcAccessMask;
-    dependency.dstAccessMask;
-    dependency.dependencyFlags;
-#endif
-
-    // NOTE(joon): Not an official information, but pipeline is always optimized
-    // for using specific subpass with specific renderpass, not for using 
-    // multiple subpasses
-    VkRenderPassCreateInfo renderPassCreateInfo = {};
-    renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassCreateInfo.attachmentCount = ArrayCount(renderpassAttachments);
-    renderPassCreateInfo.pAttachments = renderpassAttachments;
-    renderPassCreateInfo.subpassCount = 1;
-    renderPassCreateInfo.pSubpasses = &subpassDescription;
-    //renderPassCreateInfo.dependencyCount = 0;
-    //renderPassCreateInfo.pDependencies = ;
-    
-    CheckVkResult(vkCreateRenderPass(renderer->device, &renderPassCreateInfo, 0, &renderer->renderPass));
-
-    platform_read_file_result vertexShaderCode = platformApi->ReadFile("../meka_renderer/code/shader/shader.vert.spv");
-    VkShaderModuleCreateInfo vertexShaderModuleCreateInfo = {};
-    vertexShaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    vertexShaderModuleCreateInfo.codeSize = vertexShaderCode.size;
-    vertexShaderModuleCreateInfo.pCode = (u32 *)vertexShaderCode.memory;
-
-    VkShaderModule vertexShaderModule;
-    CheckVkResult(vkCreateShaderModule(renderer->device, &vertexShaderModuleCreateInfo, 0, &vertexShaderModule));
-    //platformApi->FreeFileMemory(vertexShaderCode.memory);
-
-    platform_read_file_result fragmentShaderCode = platformApi->ReadFile("../meka_renderer/code/shader/shader.frag.spv");
-    VkShaderModuleCreateInfo fragmentShaderModuleCreateInfo = {};
-    fragmentShaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    fragmentShaderModuleCreateInfo.codeSize = fragmentShaderCode.size;
-    fragmentShaderModuleCreateInfo.pCode = (u32 *)fragmentShaderCode.memory;
-
-    VkShaderModule fragmentShaderModule;
-    CheckVkResult(vkCreateShaderModule(renderer->device, &fragmentShaderModuleCreateInfo, 0, &fragmentShaderModule));
-    //platformApi->FreeFileMemory(fragmentShaderCode.memory);
-
-    VkPipelineShaderStageCreateInfo stageCreateInfo[2] = {};
-    stageCreateInfo[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stageCreateInfo[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stageCreateInfo[0].module = vertexShaderModule;
-    stageCreateInfo[0].pName = "main";
-
-    stageCreateInfo[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stageCreateInfo[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    stageCreateInfo[1].module = fragmentShaderModule;
-    stageCreateInfo[1].pName = "main";
-
-#if 0
-    VkVertexInputBindingDescription vertexBindingDesc = {};
-    vertexBindingDesc.binding = 0;
-    vertexBindingDesc.stride = sizeof(vertex);
-    vertexBindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    VkVertexInputAttributeDescription vertexInputAttribDesc[3] = {};
-    vertexInputAttribDesc[0].location = 0;
-    vertexInputAttribDesc[0].binding = 0;
-    vertexInputAttribDesc[0].format = VK_FORMAT_R32_SFLOAT;
-    vertexInputAttribDesc[0].offset = offsetof(vertex, x);
-
-    vertexInputAttribDesc[1].location = 1;
-    vertexInputAttribDesc[1].binding = 0;
-    vertexInputAttribDesc[1].format = VK_FORMAT_R32_SFLOAT;
-    vertexInputAttribDesc[1].offset = offsetof(vertex, y);
-
-    vertexInputAttribDesc[2].location = 2;
-    vertexInputAttribDesc[2].binding = 0;
-    vertexInputAttribDesc[2].format = VK_FORMAT_R32_SFLOAT;
-    vertexInputAttribDesc[2].offset = offsetof(vertex, z);
-
-    VkPipelineVertexInputStateCreateInfo vertexInputState = {};
-    vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputState.vertexBindingDescriptionCount = 1;
-    vertexInputState.pVertexBindingDescriptions = &vertexBindingDesc;
-    vertexInputState.vertexAttributeDescriptionCount = ArrayCount(vertexInputAttribDesc);
-    vertexInputState.pVertexAttributeDescriptions = vertexInputAttribDesc;
-#endif
-    VkPipelineVertexInputStateCreateInfo vertexInputState = {};
-    vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = {};
-    inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-    VkViewport viewport = {};
-    viewport.width = (r32)surfaceCapabilities.currentExtent.width;
-    viewport.height = (r32)surfaceCapabilities.currentExtent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissor = {};
-    scissor.extent.width = surfaceCapabilities.currentExtent.width;
-    scissor.extent.height = surfaceCapabilities.currentExtent.height;
-
-    VkPipelineViewportStateCreateInfo viewportState = {};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.pViewports = &viewport;
-    viewportState.scissorCount = 1;
-    viewportState.pScissors = &scissor;
-
-    VkPipelineRasterizationStateCreateInfo rasterizationState = {};
-    rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizationState.depthClampEnable = false;
-    rasterizationState.rasterizerDiscardEnable = false; // TODO(joon) :If enabled, the rasterizer will discard some vertices, but don't know what's the policy for that
-    rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT; // which triangle should be discarded
-    rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterizationState.depthBiasEnable = false;
-    rasterizationState.lineWidth = 1.0f;
-
-    VkPipelineMultisampleStateCreateInfo multisampleState = {};
-    multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT ;
-
-    VkPipelineDepthStencilStateCreateInfo depthStencilState = {};
-    depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencilState.depthTestEnable = true;
-    depthStencilState.depthWriteEnable = true;
-    depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
-    depthStencilState.depthBoundsTestEnable = false;
-    VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-    colorBlendAttachment.blendEnable = false;
-    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-    colorBlendAttachment.colorWriteMask =   VK_COLOR_COMPONENT_R_BIT |
-                                            VK_COLOR_COMPONENT_G_BIT |
-                                            VK_COLOR_COMPONENT_B_BIT |
-                                            VK_COLOR_COMPONENT_A_BIT;
-
-    VkPipelineColorBlendStateCreateInfo colorBlendState = {};
-    colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlendState.logicOpEnable = false;
-    colorBlendState.logicOp = VK_LOGIC_OP_COPY;
-    colorBlendState.attachmentCount = 1;
-    colorBlendState.pAttachments = &colorBlendAttachment;
-    
-#if 1
-    VkDescriptorSetLayoutBinding layoutBinding[2] = {};
-    layoutBinding[0].binding = 0;
-    layoutBinding[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    layoutBinding[0].descriptorCount = 1;
-    layoutBinding[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    layoutBinding[1].binding = 1;
-    layoutBinding[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    layoutBinding[1].descriptorCount = 1;
-    layoutBinding[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
-
-
-    VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {};
-    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; // descriptor sets must not be allocated with this layout
-    layoutCreateInfo.bindingCount = ArrayCount(layoutBinding);
-    layoutCreateInfo.pBindings = layoutBinding;
-
-    VkDescriptorSetLayout setLayout;
-    vkCreateDescriptorSetLayout(renderer->device, &layoutCreateInfo, 0, &setLayout);
-#endif
-    VkPushConstantRange pushConstantRange[1] = {};
-    pushConstantRange[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    pushConstantRange[0].offset = 0;
-    pushConstantRange[0].size = sizeof(m4);
-
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
-    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
-    pipelineLayoutCreateInfo.pSetLayouts = &setLayout;
-    pipelineLayoutCreateInfo.pushConstantRangeCount = ArrayCount(pushConstantRange);  // TODO(joon) : Look into this more to use push constant
-    pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRange;
-
-    CheckVkResult(vkCreatePipelineLayout(renderer->device, &pipelineLayoutCreateInfo, 0, &renderer->pipelineLayout));
-
-    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }; 
-    VkPipelineDynamicStateCreateInfo dynamicState = {};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO; 
-    dynamicState.dynamicStateCount = ArrayCount(dynamicStates);
-    dynamicState.pDynamicStates = dynamicStates;
-
-
-    VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo = {};
-    graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    graphicsPipelineCreateInfo.stageCount = 2;
-    graphicsPipelineCreateInfo.pStages = stageCreateInfo;
-    graphicsPipelineCreateInfo.pVertexInputState = &vertexInputState; // vertices are pushed using pushDescriptorSet
-    graphicsPipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
-    graphicsPipelineCreateInfo.pViewportState = &viewportState;
-    graphicsPipelineCreateInfo.pRasterizationState = &rasterizationState;
-    graphicsPipelineCreateInfo.pMultisampleState = &multisampleState;
-    graphicsPipelineCreateInfo.pDepthStencilState = &depthStencilState;
-    graphicsPipelineCreateInfo.pColorBlendState = &colorBlendState;
-    graphicsPipelineCreateInfo.pDynamicState = &dynamicState;
-    graphicsPipelineCreateInfo.layout = renderer->pipelineLayout;
-    graphicsPipelineCreateInfo.renderPass = renderer->renderPass;
-    graphicsPipelineCreateInfo.subpass = 0;
-
-    CheckVkResult(vkCreateGraphicsPipelines(renderer->device, 0, 1, &graphicsPipelineCreateInfo, 0, &renderer->pipeline));
-
-    vkDestroyShaderModule(renderer->device, vertexShaderModule, 0);
-    vkDestroyShaderModule(renderer->device, fragmentShaderModule, 0);
-
-    VkImageCreateInfo imageCreateInfo = {};
-    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format = VK_FORMAT_D32_SFLOAT;
-    imageCreateInfo.extent.width = surfaceCapabilities.currentExtent.width;
-    imageCreateInfo.extent.height = surfaceCapabilities.currentExtent.height;
-    imageCreateInfo.extent.depth = 1;
-    imageCreateInfo.mipLevels = 1;
-    imageCreateInfo.arrayLayers = 1;
-    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    CheckVkResult(vkCreateImage(renderer->device, &imageCreateInfo, 0, &renderer->depthImage));
-
-    VkMemoryRequirements memoryRequirements;
-    vkGetImageMemoryRequirements(renderer->device, renderer->depthImage, &memoryRequirements);
-
-    // TODO(joon) : Store this value!
-    VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(renderer->physicalDevice, &physicalDeviceMemoryProperties);
-
-    u32 memoryTypeBits = memoryRequirements.memoryTypeBits;
-    u32 memoryTypeIndex = 0;
-    b32 isMemoryTypeSupported = false;
-    while(memoryTypeBits)
-    {
-        if(memoryTypeBits & 1)
-        {
-            if((physicalDeviceMemoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-            {
-                isMemoryTypeSupported = true;
-                break;
-            }
-        }
-
-        memoryTypeBits = memoryTypeBits >> 1;
-        memoryTypeIndex++;
-    }
-    Assert(isMemoryTypeSupported);
-
-    VkMemoryAllocateInfo memoryAllocInfo = {};
-    memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memoryAllocInfo.allocationSize = memoryRequirements.size;
-    memoryAllocInfo.memoryTypeIndex = memoryTypeIndex;
-    CheckVkResult(vkAllocateMemory(renderer->device, &memoryAllocInfo, 0, &renderer->depthImageMemory));
-
-    CheckVkResult(vkBindImageMemory(renderer->device, renderer->depthImage, renderer->depthImageMemory, 0));
-
-    VkImageViewCreateInfo imageViewCreateInfo = {};
-    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    imageViewCreateInfo.image = renderer->depthImage;
-    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewCreateInfo.format = VK_FORMAT_D32_SFLOAT;
-    imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    imageViewCreateInfo.subresourceRange.levelCount = 1;
-    imageViewCreateInfo.subresourceRange.layerCount = 1;
-
-    CheckVkResult(vkCreateImageView(renderer->device, &imageViewCreateInfo, 0, &renderer->depthImageView));
-
-    renderer->framebuffers = PushArray(platformMemory, VkFramebuffer, renderer->swapchainImageCount);
-    for(u32 framebufferIndex = 0;
-        framebufferIndex < renderer->swapchainImageCount;
-        ++framebufferIndex)
-    {
-        VkImageView attachments[2] = {};
-        attachments[0] = renderer->swapchainImageViews[framebufferIndex];
-        attachments[1] = renderer->depthImageView;
-
-        VkFramebufferCreateInfo framebufferCreateInfo = {};
-        framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferCreateInfo.renderPass = renderer->renderPass;
-        framebufferCreateInfo.attachmentCount = ArrayCount(attachments);
-        framebufferCreateInfo.pAttachments = attachments;
-        framebufferCreateInfo.width = surfaceCapabilities.currentExtent.width;
-        framebufferCreateInfo.height = surfaceCapabilities.currentExtent.height;
-        framebufferCreateInfo.layers = 1;
-
-        CheckVkResult(vkCreateFramebuffer(renderer->device, &framebufferCreateInfo, 0, renderer->framebuffers + framebufferIndex));
-    }
-    
-    // NOTE(joon) : command buffers inside the pool can only be submitted to the specified queue
-    // graphics related command buffers -> graphics queue
-    // transfer related command buffers -> transfer queue
-    VkCommandPoolCreateInfo commandPoolCreateInfo = {};
-    commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    //commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    commandPoolCreateInfo.queueFamilyIndex = renderer->queueFamilies.graphicsQueueFamilyIndex;
-
-    CheckVkResult(vkCreateCommandPool(renderer->device, &commandPoolCreateInfo, 0, &renderer->graphicsCommandPool));
-
-    u32 commandBufferCount = renderer->swapchainImageCount;
-    renderer->graphicsCommandBuffers = PushArray(platformMemory, VkCommandBuffer, renderer->swapchainImageCount);
-
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.commandPool = renderer->graphicsCommandPool;
-    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAllocateInfo.commandBufferCount = commandBufferCount;
-
-    CheckVkResult(vkAllocateCommandBuffers(renderer->device, &commandBufferAllocateInfo, renderer->graphicsCommandBuffers));
-
-    // TODO(joon) : If possible, make this to use transfer queue(and command pool)!
-    VkCommandBuffer transferCommandBuffer;
-    commandBufferAllocateInfo = {};
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.commandPool = renderer->graphicsCommandPool;
-    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAllocateInfo.commandBufferCount = 1;
-    CheckVkResult(vkAllocateCommandBuffers(renderer->device, &commandBufferAllocateInfo, &transferCommandBuffer));
-    
-    renderer->imageReadyToRenderSemaphores = PushArray(platformMemory, VkSemaphore, 2*renderer->swapchainImageCount);
-    renderer->imageReadyToPresentSemaphores = renderer->imageReadyToRenderSemaphores + renderer->swapchainImageCount;
-    for(u32 semaphoreIndex = 0;
-        semaphoreIndex < renderer->swapchainImageCount;
-        ++semaphoreIndex)
-    {
-        VkSemaphoreCreateInfo semaphoreCreateInfo = {};
-        semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        CheckVkResult(vkCreateSemaphore(renderer->device, &semaphoreCreateInfo, 0, renderer->imageReadyToRenderSemaphores + semaphoreIndex));
-        CheckVkResult(vkCreateSemaphore(renderer->device, &semaphoreCreateInfo, 0, renderer->imageReadyToPresentSemaphores + semaphoreIndex));
-    }
-
-    renderer->imageReadyToRenderFences = PushArray(platformMemory, VkFence, 2*renderer->swapchainImageCount);
-    renderer->imageReadyToPresentFences = renderer->imageReadyToRenderFences + renderer->swapchainImageCount;
-    for(u32 fenceIndex = 0;
-        fenceIndex < renderer->swapchainImageCount;
-        ++fenceIndex)
-    {
-        VkFenceCreateInfo  fenceCreateInfo = {};
-        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        
-        CheckVkResult(vkCreateFence(renderer->device, &fenceCreateInfo, 0, renderer->imageReadyToRenderFences + fenceIndex));
-        CheckVkResult(vkCreateFence(renderer->device, &fenceCreateInfo, 0, renderer->imageReadyToPresentFences + fenceIndex));
-    }
-
-    // TODO(joon) : Correct this image memory barrier, and also find out what pipeline stage we should be using
-#if 0
-    for(u32 swapchainImageIndex = 0;
-        swapchainImageIndex < renderer->swapchainImageCount;
-        ++swapchainImageIndex)
-    {
-        VkImageMemoryBarrier imageMemoryBarrier = {};
-        imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE_KHR;
-        imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // No queue transfer occurs
-        imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imageMemoryBarrier.image = swapchainImages[swapchainImageIndex];
-        imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-        imageMemoryBarrier.subresourceRange.levelCount = 1; // vk_remaining_mip_levels?
-        imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-        imageMemoryBarrier.subresourceRange.layerCount = 1; // vk_remaining_array_levels?
-        
-        vkCmdPipelineBarrier(transferCommandBuffer,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    1,
-                                    &imageMemoryBarrier);
-
-    }
-#endif
+    memcpy((u8 *)buffer->memory, source, source_size);
 }
 
+internal vk_host_visible_coherent_buffer
+vk_create_host_visible_coherent_buffer(VkPhysicalDevice physical_device, VkDevice device, VkBufferUsageFlags usage, void *source, u32 source_size)
+{
+    vk_host_visible_coherent_buffer result = {};
+    result.size = source_size;
+
+    VkBufferCreateInfo bufferCreateInfo = {};
+    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCreateInfo.size = result.size;
+    bufferCreateInfo.usage = usage;
+    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; // NOTE(joon) exculsive to this family
+
+    CheckVkResult(vkCreateBuffer(device, &bufferCreateInfo, 0, &result.buffer));
+    result.device_memory = VkBufferAllocateMemory(physical_device, device, result.buffer, 
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    // This pointer minus offset must be aligned to at least VkPhysicalDeviceLimits::minMemoryMapAlignment.
+    CheckVkResult(vkMapMemory(device, result.device_memory, 0, result.size, 0, &result.memory));
+
+    vk_update_host_visible_coherent_buffer_entirely(&result, source, source_size);
+
+    return result;
+}
+
+
+#if 0
 internal void
 CleanVulkan(renderer *renderer)
 {
@@ -1053,6 +543,219 @@ CleanVulkan(renderer *renderer)
     vkDestroyInstance(renderer->instance, 0);
 
 }
+#endif
+
+internal void
+vk_set_viewport(VkCommandBuffer command_buffer, u32 width, u32 height, f32 min, f32 max)
+{
+    VkViewport viewport = {};
+    viewport.width = width;
+    viewport.height = height;
+    viewport.minDepth = min;
+    viewport.maxDepth = max;
+
+    vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+}
+
+internal void
+vk_set_scissor_rect(VkCommandBuffer command_buffer, u32 width, u32 height)
+{
+    VkRect2D scissor_rect = {};
+    scissor_rect.extent.width = width;
+    scissor_rect.extent.height = height;
+
+    vkCmdSetScissor(command_buffer, 0, 1, &scissor_rect);
+}
+
+#if 1
+internal RenderMesh
+vk_create_render_mesh(VkPhysicalDevice physical_device, VkDevice device,
+                        void *vertices, u32 vertex_size, u32 vertex_count,
+                        void *indices, u32 index_size, u32 index_count)
+{
+    assert(vertices && indices);
+
+    RenderMesh result = {};
+    result.vertex_count = vertex_count;
+    result.index_count = index_count;
+
+    u32 total_vertex_size = vertex_size * vertex_count;
+    u32 total_index_size = index_size * index_count;
+
+    result.vertex_buffer = 
+        vk_create_host_visible_coherent_buffer(physical_device, device, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertices, total_vertex_size);
+
+    result.index_buffer = 
+        vk_create_host_visible_coherent_buffer(physical_device, device, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices, total_index_size);
+
+    return result;
+}
+#endif
+
+#if 0
+internal void
+vk_render_render_group(RenderGroup *render_group, RenderContext *render_context)
+{
+    Camera *camera = &render_group->camera;
+
+    f32 width_over_height = (f32)render_context->window_width / (f32)render_context->window_height;
+    m4 proj = projection(camera->focal_length, width_over_height, 0.1f, 10000.0f);
+    m4 view = world_to_camera(camera->p, 
+                            camera->initial_x_axis, camera->along_x, 
+                            camera->initial_y_axis, camera->along_y, 
+                            camera->initial_z_axis, camera->along_z);
+
+    Uniform uniform = {};
+
+    uniform.model = scale_m4(1.0f, 1.0f, 1.0f);
+    uniform.proj_view = proj * camera_rhs_to_lhs(view);
+
+    vk_update_uniform_buffer(&render_context->uniform_buffer, render_context->current_image_index, &uniform, sizeof(uniform));
+
+    VkCommandBuffer *command_buffer = render_context->graphics_command_buffers + render_context->current_image_index;
+    // TODO(joon) : fence needed here!
+    VkCommandBufferBeginInfo command_buffer_begin_info = {};
+    command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+    CheckVkResult(vkBeginCommandBuffer(*command_buffer, &command_buffer_begin_info));
+
+    VkClearValue clear_values[2] = {}; 
+    clear_values[0].color = {0.0001f, 0.0001f, 0.0001f, 1};
+    clear_values[1].depthStencil.depth = 1.0f;
+
+    VkRenderPassBeginInfo renderPassBeginInfo = {};
+    renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBeginInfo.renderPass = render_context->renderpass;
+    renderPassBeginInfo.framebuffer = render_context->framebuffers[render_context->current_image_index];
+    renderPassBeginInfo.renderArea.offset = {0, 0};
+    renderPassBeginInfo.renderArea.extent.width = (u32)render_context->surface_width;
+    renderPassBeginInfo.renderArea.extent.height = (u32)render_context->surface_height;
+    renderPassBeginInfo.clearValueCount = array_count(clear_values);
+    renderPassBeginInfo.pClearValues = clear_values;
+    vkCmdBeginRenderPass(*command_buffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBindPipeline(*command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, render_context->pipeline);
+
+    vk_set_viewport(*command_buffer, render_context->surface_width, render_context->surface_height, 0.0f, 1.0f);
+    vk_set_scissor_rect(*command_buffer, render_context->surface_width, render_context->surface_height);
+
+    VkWriteDescriptorSet write_descriptor_set[1] = {};
+
+    VkDescriptorBufferInfo uniform_buffer_info = {};
+    uniform_buffer_info.buffer = render_context->uniform_buffer.buffer;
+
+    uniform_buffer_info.offset = render_context->current_image_index * render_context->uniform_buffer.element_size;
+    uniform_buffer_info.range = render_context->uniform_buffer.element_size;
+
+    write_descriptor_set[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write_descriptor_set[0].dstSet = 0;
+    write_descriptor_set[0].dstBinding = 1;
+    write_descriptor_set[0].descriptorCount = 1;
+    write_descriptor_set[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write_descriptor_set[0].pBufferInfo = &uniform_buffer_info;
+
+    vkCmdPushDescriptorSetKHR(*command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+            render_context->pipeline_layout, 0, array_count(write_descriptor_set), write_descriptor_set);
+
+    for(u32 consumed = 0;
+            consumed < render_group->render_memory.used;
+            )
+    {
+        RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_group->render_memory.base + consumed);
+        consumed += sizeof(*header);
+
+        switch(header->type)
+        {
+            case render_entry_type_cube:
+            {
+                RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_group->render_memory.base + consumed);
+                consumed += sizeof(*entry);
+
+                //RenderMesh(&render_context-> &helmetRenderMesh, *commandBuffer);
+
+                //RenderMesh(&render_context-> &terrainRenderMesh, *commandBuffer);
+
+
+            }break;
+
+            case render_entry_type_line:
+            {
+                RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_group->render_memory.base + consumed);
+                consumed += sizeof(*entry);
+
+            }break;
+        }
+    }
+
+    vkCmdEndRenderPass(*command_buffer);
+    CheckVkResult(vkEndCommandBuffer(*command_buffer));
+
+    u32 image_index = u32_max;
+    VkResult acquire_next_image_result = vkAcquireNextImageKHR(render_context->device, render_context->swapchain, 
+            UINT64_MAX, // TODO(joon) : Why not just use the next image, instead of waiting this image?
+            render_context->ready_to_render_semaphores[render_context->current_image_index], // signaled when the application can use the image.
+            0, // fence that will signaled when the application can use the image. unused for now.
+            &image_index);
+
+    if(acquire_next_image_result == VK_SUCCESS)
+    {
+        VkCommandBuffer *command_buffer = render_context->graphics_command_buffers + image_index;
+
+#if 1
+
+#endif
+
+        // TODO(joon) : Check this value!
+        VkPipelineStageFlags wait_flags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        VkSubmitInfo queueSubmitInfo = {};
+        queueSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        queueSubmitInfo.waitSemaphoreCount = 1;
+        queueSubmitInfo.pWaitSemaphores = render_context->ready_to_render_semaphores + render_context->current_image_index;
+        queueSubmitInfo.pWaitDstStageMask = &wait_flags;
+        queueSubmitInfo.commandBufferCount = 1;
+        queueSubmitInfo.pCommandBuffers = command_buffer;
+        queueSubmitInfo.signalSemaphoreCount = 1;
+        queueSubmitInfo.pSignalSemaphores = render_context->ready_to_present_semaphores + render_context->current_image_index;
+
+        // TODO(joon) : Do we really need to specify fence here?
+        CheckVkResult(vkQueueSubmit(render_context->graphics_queue, 1, &queueSubmitInfo, 0));
+
+        VkPresentInfoKHR present_info = {};
+        present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        present_info.waitSemaphoreCount = 1;
+        present_info.pWaitSemaphores = render_context->ready_to_present_semaphores + render_context->current_image_index;
+        present_info.swapchainCount = 1;
+        present_info.pSwapchains = &render_context->swapchain;
+        present_info.pImageIndices = &image_index;
+
+        CheckVkResult(vkQueuePresentKHR(render_context->graphics_queue, &present_info));
+
+        // NOTE(joon) : equivalent to calling vkQueueWaitIdle for all queues
+        CheckVkResult(vkDeviceWaitIdle(render_context->device));
+    }
+    else if(acquire_next_image_result == VK_SUBOPTIMAL_KHR)
+    {
+        // TODO(joon) : screen resized!
+    }
+    else if(acquire_next_image_result == VK_NOT_READY)
+    {
+        // NOTE(joon) : Just use the next image
+    }
+    else
+    {
+        assert(acquire_next_image_result != VK_TIMEOUT);
+        // NOTE : If the code gets inside here, one of these should have happened
+        //VK_ERROR_OUT_OF_HOST_MEMORY
+        //VK_ERROR_OUT_OF_DEVICE_MEMORY
+        //VK_ERROR_DEVICE_LOST
+        //VK_ERROR_OUT_OF_DATE_KHR
+        //VK_ERROR_SURFACE_LOST_KHR
+        //VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT
+    }
+
+    render_context->current_image_index = (render_context->current_image_index + 1)%render_context->swapchain_image_count;
+}
+#endif
 
     
 

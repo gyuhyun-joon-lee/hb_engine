@@ -1,7 +1,5 @@
 #include <Cocoa/Cocoa.h> // APPKIT
 #include <CoreGraphics/CoreGraphics.h> 
-#include <Metal/metal.h>
-#include <metalkit/metalkit.h>
 #include <mach/mach_time.h> // mach_absolute_time
 #include <stdio.h> // printf for debugging purpose
 #include <sys/stat.h>
@@ -9,54 +7,21 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <Carbon/Carbon.h>
+#include <dlfcn.h> // dlsym
+#include <metalkit/metalkit.h>
+#include <metal/metal.h>
 
+// NOTE(joon) we need some metal layer even if we use vulkan
 #include "meka_metal_shader_shared.h"
 
 #undef internal
 #undef assert
+
 #include "meka_types.h"
 #include "meka_platform.h"
-#include "meka_math.h"
-#include "meka_random.h"
-#include "meka_simd.h"
-#include "meka_intrinsic.h"
-#include "meka_font.h"
-// NOTE(joon):add platform independent codes here
 
-#include "meka_render.h"
-#include "meka_terrain.cpp"
-#include "meka_mesh_loader.cpp"
-#include "meka_render.cpp"
-#include "meka_ray.cpp"
-#include "meka_image_loader.cpp"
-#include "meka_voxel.cpp"
 #include "meka_metal.cpp"
-
-/*
-   TODO(joon)
-   metal
-   - use indirect command buffer for drawing voxels
-
-   macos
-   - 
-
- */
-
-//TODO(joon) : Put input handlers inside some struct or something
-global b32 is_w_down;
-global b32 is_a_down;
-global b32 is_s_down;
-global b32 is_d_down;
-
-global b32 is_i_down;
-global b32 is_j_down;
-global b32 is_k_down;
-global b32 is_l_down;
-
-global b32 is_arrow_up_down;
-global b32 is_arrow_down_down;
-global b32 is_arrow_left_down;
-global b32 is_arrow_right_down;
+#include "meka.cpp"
 
 // TODO(joon): Get rid of global variables?
 global v2 last_mouse_p;
@@ -89,7 +54,7 @@ PLATFORM_GET_FILE_SIZE(macos_get_file_size)
 
 PLATFORM_READ_FILE(debug_macos_read_file)
 {
-    platform_read_file_result Result = {};
+    PlatformReadFileResult Result = {};
 
     int File = open(filename, O_RDONLY);
     int Error = errno;
@@ -198,68 +163,7 @@ display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_t
 }
 
 internal void
-metal_record_render_command(id<MTLRenderCommandEncoder> render_encoder, render_mesh *mesh, 
-                            v3 scale, v3 translate, v3 color = v3_(1, 1, 1))
-{
-    // TODO(joon) : I wonder if Metal copies whatever data it needs, 
-    // or does it need a seperate storage that holds all the uniform buffer just like in Vulkan?
-    u32 per_object_data_index_in_shader = 2;
-    per_object_data per_object_data = {};
-    per_object_data.model = translate_m4(translate)*scale_m4(scale);
-    per_object_data.color = color;
-
-    [render_encoder setVertexBytes: &per_object_data
-                    length: sizeof(per_object_data)
-                    atIndex: per_object_data_index_in_shader]; 
-
-    [render_encoder setVertexBuffer: mesh->vertex_buffer
-                    offset: 0
-                    atIndex:0]; 
-
-    [render_encoder drawIndexedPrimitives: MTLPrimitiveTypeTriangle
-                    indexCount: mesh->index_count 
-                    indexType: MTLIndexTypeUInt32
-                    indexBuffer: mesh->index_buffer 
-                    indexBufferOffset: 0 
-                    instanceCount: 1]; 
-}
-
-// NOTE(joon) p0, p1 should be in world position, so will not be multiplied by the the model matrix
-// Also, the pipeline should be line_pipeline!
-// TODO(joon) We don't need to set vertices every time we draw the line!
-internal void
-metal_draw_line(id<MTLRenderCommandEncoder> render_encoder, v3 p0, v3 p1, v3 color)
-{
-    per_object_data per_object_data = {};
-    per_object_data.color = {color.r, color.g, color.b};
-
-    r32_3 line_vertices[2] = {};
-    line_vertices[0].x = p0.x;
-    line_vertices[0].y = p0.y;
-    line_vertices[0].z = p0.z;
-
-    line_vertices[1].x = p1.x;
-    line_vertices[1].y = p1.y;
-    line_vertices[1].z = p1.z;
-
-    [render_encoder setVertexBytes: &per_object_data
-                    length: sizeof(per_object_data)
-                    atIndex: 2]; 
-
-    // NOTE(joon): setVertexBytes can only used for data with size up to 4kb
-    [render_encoder setVertexBytes: line_vertices
-                    length: sizeof(r32_3) * 2 
-                    atIndex: 0]; 
-
-    [render_encoder drawPrimitives:MTLPrimitiveTypeLine
-                    vertexStart:0 
-                    vertexCount:2];
-}
-
-
-
-internal void
-macos_handle_event(NSApplication *app, NSWindow *window)
+macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform_input)
 {
     NSPoint mouse_location = [NSEvent mouseLocation];
     NSRect frame_rect = [window frame];
@@ -339,53 +243,49 @@ macos_handle_event(NSApplication *app, NSWindow *window)
                         }
                         else if(key_code == kVK_ANSI_W)
                         {
-                            is_w_down = is_down;
+                            platform_input->move_up = is_down;
                         }
                         else if(key_code == kVK_ANSI_A)
                         {
-                            is_a_down = is_down;
+                            platform_input->move_left = is_down;
                         }
                         else if(key_code == kVK_ANSI_S)
                         {
-                            is_s_down = is_down;
+                            platform_input->move_down = is_down;
                         }
                         else if(key_code == kVK_ANSI_D)
                         {
-                            is_d_down = is_down;
+                            platform_input->move_right = is_down;
                         }
 
                         else if(key_code == kVK_ANSI_I)
                         {
-                            is_i_down = is_down;
+                            platform_input->action_up = is_down;
                         }
                         else if(key_code == kVK_ANSI_J)
                         {
-                            is_j_down = is_down;
+                            platform_input->action_left = is_down;
                         }
                         else if(key_code == kVK_ANSI_K)
                         {
-                            is_k_down = is_down;
+                            platform_input->action_down = is_down;
                         }
                         else if(key_code == kVK_ANSI_L)
                         {
-                            is_l_down = is_down;
+                            platform_input->action_right = is_down;
                         }
 
                         else if(key_code == kVK_LeftArrow)
                         {
-                            is_arrow_left_down = is_down;
                         }
                         else if(key_code == kVK_RightArrow)
                         {
-                            is_arrow_right_down = is_down;
                         }
                         else if(key_code == kVK_UpArrow)
                         {
-                            is_arrow_up_down = is_down;
                         }
                         else if(key_code == kVK_DownArrow)
                         {
-                            is_arrow_down_down = is_down;
                         }
                         else if(key_code == kVK_Return)
                         {
@@ -540,39 +440,720 @@ thread_proc(void *data)
     return 0;
 }
 
+#if MEKA_VULKAN
+internal void
+macos_initialize_vulkan(RenderContext *render_context, CAMetalLayer *metal_layer)
+{
+    void *lib = dlopen("../external/vulkan/macos/lib/libvulkan.1.dylib", RTLD_LAZY|RTLD_GLOBAL);
+    if(lib)
+    {
+        vkGetInstanceProcAddr = (VFType(vkGetInstanceProcAddr))dlsym(lib, "vkGetInstanceProcAddr");
+    }
+    else
+    {
+        invalid_code_path;
+    }
+
+    resolve_pre_instance_functions();
+
+    char *desired_layers[] = 
+    {
+#if MEKA_DEBUG
+        "VK_LAYER_KHRONOS_validation" 
+#endif
+    };
+    vk_check_desired_layers_support(desired_layers, array_count(desired_layers));
+
+    char *desired_extensions[] =
+    {
+#if MEKA_DEBUG
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+#endif
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_EXT_METAL_SURFACE_EXTENSION_NAME,
+        "VK_KHR_get_physical_device_properties2",
+        //"VK_KHR_dynamic_rendering", // TODO(joon) sometimes in the future....
+    };
+    vk_check_desired_extensions_support(desired_extensions, array_count(desired_extensions));
+
+    VkInstance instance = vk_create_instance(desired_layers, array_count(desired_layers), desired_extensions, array_count(desired_extensions));
+
+    resolve_instance_functions(instance);
+
+    // NOTE(joon) create debug messenger
+    CreateDebugMessenger(instance);
+
+    VkPhysicalDevice physical_device = find_physical_device(instance);
+    VkPhysicalDeviceProperties property;
+    vkGetPhysicalDeviceProperties(physical_device, &property);
+    u32 uniform_buffer_alignment = property.limits.minUniformBufferOffsetAlignment;
+
+    VkMetalSurfaceCreateInfoEXT surface_create_info = {};
+    surface_create_info.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
+    surface_create_info.pNext = 0;
+    surface_create_info.flags = 0;
+    surface_create_info.pLayer = metal_layer;
+    VkSurfaceKHR surface;
+    CheckVkResult(vkCreateMetalSurfaceEXT(instance, &surface_create_info, 0, &surface));
+
+    vk_queue_families queue_families = get_supported_queue_familes(physical_device, surface);
+    VkDevice device = vk_create_device(physical_device, surface, &queue_families);
+
+    ResolveDeviceLevelFunctions(device);
+
+    VkQueue graphics_queue;
+    VkQueue transfer_queue;
+    VkQueue present_queue;
+    vkGetDeviceQueue(device, queue_families.graphicsQueueFamilyIndex, 0, &graphics_queue);
+    vkGetDeviceQueue(device, queue_families.presentQueueFamilyIndex, 0, &present_queue);
+    vkGetDeviceQueue(device, queue_families.transferQueueFamilyIndex, 0, &transfer_queue);
+
+    VkFormat surface_format_candidates[] = {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_SRGB};
+
+    VkSurfaceFormatKHR surface_format = vk_select_surface_format(physical_device, surface, surface_format_candidates, array_count(surface_format_candidates));
+
+    vk_check_desired_present_mode_support(physical_device, surface, VK_PRESENT_MODE_FIFO_KHR);
+
+    VkSurfaceCapabilitiesKHR surface_capabilities;
+    CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities));
+
+    VkSwapchainCreateInfoKHR swapchain_create_info = {};
+    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    //swapchain_create_info.flags; // TODO(joon) : might be worth looking into protected image?
+    swapchain_create_info.surface = surface;
+    swapchain_create_info.minImageCount = surface_capabilities.minImageCount + 1;
+    if(swapchain_create_info.minImageCount > surface_capabilities.maxImageCount)
+    {
+        swapchain_create_info.minImageCount = surface_capabilities.maxImageCount;
+    }
+    if(surface_capabilities.maxImageCount == 0)
+    {
+        // NOTE(joon) ; If the maxImageCount is 0, means there is no limit for the maximum image count
+        swapchain_create_info.minImageCount = 3;
+    }
+    swapchain_create_info.imageFormat = surface_format.format;
+    swapchain_create_info.imageColorSpace = surface_format.colorSpace;
+    swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    swapchain_create_info.imageExtent = surface_capabilities.currentExtent;
+    swapchain_create_info.imageArrayLayers = 1; // non-stereoscopic
+    swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_create_info.queueFamilyIndexCount = 1;
+    swapchain_create_info.pQueueFamilyIndices = &queue_families.graphicsQueueFamilyIndex; // TODO(joon) why are we just using the graphics queue?
+    swapchain_create_info.preTransform = surface_capabilities.currentTransform;
+    // TODO(joon) : surface_capabilities also return supported alpha composite, so we should check that one too
+    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; 
+    swapchain_create_info.clipped = VK_TRUE;
+
+    VkSwapchainKHR swapchain;
+    vkCreateSwapchainKHR(device, &swapchain_create_info, 0, &swapchain);
+
+    // NOTE(joon) : You _have to_ query first and then get the images, otherwise vulkan always returns VK_INCOMPLETE
+    u32 swapchain_image_count;
+    CheckVkResult(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, 0));
+    VkImage *swapchain_images = (VkImage *)malloc(swapchain_image_count*sizeof(VkImage)); // TODO(joon) maybe get rid of this dynamic allocation
+    CheckVkResult(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, swapchain_images));
+
+    VkImageView *swapchain_image_views = (VkImageView *)malloc(swapchain_image_count*sizeof(VkImageView));
+    for(u32 swapchain_image_index = 0;
+        swapchain_image_index < swapchain_image_count;
+        ++swapchain_image_index)
+    {
+        VkImageViewCreateInfo image_view_create_info = {};
+        image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        image_view_create_info.image = swapchain_images[swapchain_image_index];
+        image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        image_view_create_info.format = surface_format.format;
+        image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        image_view_create_info.subresourceRange.baseMipLevel = 0;
+        image_view_create_info.subresourceRange.levelCount = 1;
+        image_view_create_info.subresourceRange.baseArrayLayer = 0;
+        image_view_create_info.subresourceRange.layerCount = 1;
+
+        CheckVkResult(vkCreateImageView(device, &image_view_create_info, 0, swapchain_image_views + swapchain_image_index));
+    }
+
+    VkAttachmentReference color_attachemnt_ref = {};
+    color_attachemnt_ref.attachment = 0; // index
+    color_attachemnt_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // TODO(joon) : Check this value!
+
+    VkAttachmentReference depthStencil_ref = {};
+    depthStencil_ref.attachment = 1; // index
+    depthStencil_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass_desc = {};
+    subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass_desc.colorAttachmentCount = 1;
+    subpass_desc.pColorAttachments = &color_attachemnt_ref;
+    subpass_desc.pDepthStencilAttachment = &depthStencil_ref;
+
+    // NOTE(joon) color attachment
+    VkAttachmentDescription renderpass_attachments[2] = {};
+    renderpass_attachments[0].format = surface_format.format;
+    renderpass_attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    renderpass_attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // This will enable the renderpass clear value
+    renderpass_attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // If we are not recording the command buffer every single time, OP_STORE should be specified
+    renderpass_attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    renderpass_attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    renderpass_attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    renderpass_attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    // NOTE(joon) depth attachment
+    renderpass_attachments[1].format = VK_FORMAT_D32_SFLOAT;
+    renderpass_attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    renderpass_attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // This will enable the renderpass clear value
+    renderpass_attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE; // If we are not recording the command buffer every single time, OP_STORE should be specified
+    renderpass_attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    renderpass_attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    renderpass_attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    renderpass_attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    // NOTE(joon): Not an official information, but pipeline is always optimized
+    // for using specific subpass with specific renderpass, not for using 
+    // multiple subpasses
+    VkRenderPassCreateInfo renderpass_create_info = {};
+    renderpass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderpass_create_info.attachmentCount = array_count(renderpass_attachments);
+    renderpass_create_info.pAttachments = renderpass_attachments;
+    renderpass_create_info.subpassCount = 1;
+    renderpass_create_info.pSubpasses = &subpass_desc;
+    //renderpass_create_info.dependencyCount = 0;
+    //renderpass_create_info.pDependencies = ;
+    
+    VkRenderPass renderpass;
+    CheckVkResult(vkCreateRenderPass(device, &renderpass_create_info, 0, &renderpass));
+
+    PlatformReadFileResult vertex_shader_code = debug_macos_read_file("/Volumes/meka/meka_renderer/code/shader/shader.vert.spv");
+    VkShaderModuleCreateInfo vertex_shader_module_create_info = {};
+    vertex_shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    vertex_shader_module_create_info.codeSize = vertex_shader_code.size;
+    vertex_shader_module_create_info.pCode = (u32 *)vertex_shader_code.memory;
+
+    VkShaderModule vertex_shader_module;
+    CheckVkResult(vkCreateShaderModule(device, &vertex_shader_module_create_info, 0, &vertex_shader_module));
+    //platformApi->FreeFileMemory(vertex_shader_code.memory);
+
+    PlatformReadFileResult frag_shader_code = debug_macos_read_file("/Volumes/meka/meka_renderer/code/shader/shader.frag.spv");
+    VkShaderModuleCreateInfo frag_shader_module_create_info = {};
+    frag_shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    frag_shader_module_create_info.codeSize = frag_shader_code.size;
+    frag_shader_module_create_info.pCode = (u32 *)frag_shader_code.memory;
+
+    VkShaderModule frag_shader_module;
+    CheckVkResult(vkCreateShaderModule(device, &frag_shader_module_create_info, 0, &frag_shader_module));
+    //platformApi->FreeFileMemory(frag_shader_code.memory);
+
+    VkPipelineShaderStageCreateInfo stage_create_info[2] = {};
+    stage_create_info[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stage_create_info[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stage_create_info[0].module = vertex_shader_module;
+    stage_create_info[0].pName = "main";
+
+    stage_create_info[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stage_create_info[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stage_create_info[1].module = frag_shader_module;
+    stage_create_info[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vertexInputState = {};
+    vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = {};
+    inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport = {};
+    viewport.width = (r32)surface_capabilities.currentExtent.width;
+    viewport.height = (r32)surface_capabilities.currentExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor = {};
+    scissor.extent.width = surface_capabilities.currentExtent.width;
+    scissor.extent.height = surface_capabilities.currentExtent.height;
+
+    VkPipelineViewportStateCreateInfo viewportState = {};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports = &viewport;
+    viewportState.scissorCount = 1;
+    viewportState.pScissors = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo rasterizationState = {};
+    rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizationState.depthClampEnable = false;
+    rasterizationState.rasterizerDiscardEnable = false; // TODO(joon) :If enabled, the rasterizer will discard some vertices, but don't know what's the policy for that
+    rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT; // which triangle should be discarded
+    rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizationState.depthBiasEnable = false;
+    rasterizationState.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisampleState = {};
+    multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT ;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencilState = {};
+    depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencilState.depthTestEnable = true;
+    depthStencilState.depthWriteEnable = true;
+    depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencilState.depthBoundsTestEnable = false;
+    VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
+    colorBlendAttachment.blendEnable = false;
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.colorWriteMask =   VK_COLOR_COMPONENT_R_BIT |
+                                            VK_COLOR_COMPONENT_G_BIT |
+                                            VK_COLOR_COMPONENT_B_BIT |
+                                            VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo colorBlendState = {};
+    colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendState.logicOpEnable = false;
+    colorBlendState.logicOp = VK_LOGIC_OP_COPY;
+    colorBlendState.attachmentCount = 1;
+    colorBlendState.pAttachments = &colorBlendAttachment;
+    
+#if 1
+    VkDescriptorSetLayoutBinding layout_bindings[2] = {};
+    layout_bindings[0].binding = 0;
+    layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    layout_bindings[0].descriptorCount = 1;
+    layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    layout_bindings[1].binding = 1;
+    layout_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layout_bindings[1].descriptorCount = 1;
+    layout_bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {};
+    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutCreateInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; // descriptor sets must not be allocated with this layout
+    layoutCreateInfo.bindingCount = array_count(layout_bindings);
+    layoutCreateInfo.pBindings = layout_bindings;
+
+    VkDescriptorSetLayout setLayout;
+    vkCreateDescriptorSetLayout(device, &layoutCreateInfo, 0, &setLayout);
+#endif
+    VkPushConstantRange pushConstantRange[1] = {};
+    pushConstantRange[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange[0].offset = 0;
+    pushConstantRange[0].size = sizeof(m4);
+
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts = &setLayout;
+    pipelineLayoutCreateInfo.pushConstantRangeCount = array_count(pushConstantRange);  // TODO(joon) : Look into this more to use push constant
+    pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRange;
+
+    VkPipelineLayout pipeline_layout;
+    CheckVkResult(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, 0, &pipeline_layout));
+
+    VkDynamicState dynamic_states[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }; 
+    VkPipelineDynamicStateCreateInfo dynamic_state = {};
+    dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO; 
+    dynamic_state.dynamicStateCount = array_count(dynamic_states);
+    dynamic_state.pDynamicStates = dynamic_states;
+
+    VkGraphicsPipelineCreateInfo graphics_pipeline_create_info = {};
+    graphics_pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    graphics_pipeline_create_info.stageCount = 2;
+    graphics_pipeline_create_info.pStages = stage_create_info;
+    graphics_pipeline_create_info.pVertexInputState = &vertexInputState; // vertices are pushed using pushDescriptorSet
+    graphics_pipeline_create_info.pInputAssemblyState = &inputAssemblyState;
+    graphics_pipeline_create_info.pViewportState = &viewportState;
+    graphics_pipeline_create_info.pRasterizationState = &rasterizationState;
+    graphics_pipeline_create_info.pMultisampleState = &multisampleState;
+    graphics_pipeline_create_info.pDepthStencilState = &depthStencilState;
+    graphics_pipeline_create_info.pColorBlendState = &colorBlendState;
+    graphics_pipeline_create_info.pDynamicState = &dynamic_state;
+    graphics_pipeline_create_info.layout = pipeline_layout;
+    graphics_pipeline_create_info.renderPass = renderpass;
+    graphics_pipeline_create_info.subpass = 0;
+
+    VkPipeline graphics_pipeline;
+    CheckVkResult(vkCreateGraphicsPipelines(device, 0, 1, &graphics_pipeline_create_info, 0, &graphics_pipeline));
+
+    // NOTE(joon) now it's safe to destroy the shader modules
+    vkDestroyShaderModule(device, vertex_shader_module, 0);
+    vkDestroyShaderModule(device, frag_shader_module, 0);
+
+    VkImageCreateInfo image_create_info = {};
+    image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_D32_SFLOAT;
+    image_create_info.extent.width = surface_capabilities.currentExtent.width;
+    image_create_info.extent.height = surface_capabilities.currentExtent.height;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = 1;
+    image_create_info.arrayLayers = 1;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VkImage depth_image;
+    CheckVkResult(vkCreateImage(device, &image_create_info, 0, &depth_image));
+
+    // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    VkMemoryRequirements memory_requirements;
+    vkGetImageMemoryRequirements(device, depth_image, &memory_requirements);
+
+    u32 usable_memory_index_for_depth_image = vk_get_usable_memory_index(physical_device, device, memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    VkMemoryAllocateInfo memory_allocate_info = {};
+    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memory_allocate_info.allocationSize = memory_requirements.size;
+    memory_allocate_info.memoryTypeIndex = usable_memory_index_for_depth_image;
+
+    VkDeviceMemory depth_image_memory;
+    CheckVkResult(vkAllocateMemory(device, &memory_allocate_info, 0, &depth_image_memory));
+
+    CheckVkResult(vkBindImageMemory(device, depth_image, depth_image_memory, 0));
+
+    VkImageViewCreateInfo image_view_create_info = {};
+    image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    image_view_create_info.image = depth_image;
+    image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    image_view_create_info.format = VK_FORMAT_D32_SFLOAT;
+    image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    image_view_create_info.subresourceRange.levelCount = 1;
+    image_view_create_info.subresourceRange.layerCount = 1;
+
+    VkImageView depth_image_view;
+    CheckVkResult(vkCreateImageView(device, &image_view_create_info, 0, &depth_image_view));
+
+    VkFramebuffer *framebuffers = (VkFramebuffer *)malloc(swapchain_image_count * sizeof(VkFramebuffer)); 
+    for(u32 framebuffer_index = 0;
+        framebuffer_index < swapchain_image_count;
+        ++framebuffer_index)
+    {
+        VkImageView attachments[2] = {};
+        attachments[0] = swapchain_image_views[framebuffer_index];
+        attachments[1] = depth_image_view;
+
+        VkFramebufferCreateInfo framebuffer_create_info = {};
+        framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebuffer_create_info.renderPass = renderpass;
+        framebuffer_create_info.attachmentCount = array_count(attachments);
+        framebuffer_create_info.pAttachments = attachments;
+        framebuffer_create_info.width = surface_capabilities.currentExtent.width;
+        framebuffer_create_info.height = surface_capabilities.currentExtent.height;
+        framebuffer_create_info.layers = 1;
+
+        CheckVkResult(vkCreateFramebuffer(device, &framebuffer_create_info, 0, framebuffers + framebuffer_index));
+    }
+
+    // NOTE(joon) : command buffers inside the pool can only be submitted to the specified queue
+    // graphics related command buffers- 
+    // graphics related command buffers -> graphics queue
+    // transfer related command buffers -> transfer queue
+    VkCommandPoolCreateInfo command_pool_create_info = {};
+    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    //commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    command_pool_create_info.queueFamilyIndex = queue_families.graphicsQueueFamilyIndex;
+
+    VkCommandPool graphics_command_pool;
+    CheckVkResult(vkCreateCommandPool(device, &command_pool_create_info, 0, &graphics_command_pool));
+
+    VkCommandBufferAllocateInfo command_buffer_allocate_info = {};
+    command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    command_buffer_allocate_info.commandPool = graphics_command_pool;
+    command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_buffer_allocate_info.commandBufferCount = swapchain_image_count;
+
+    VkCommandBuffer *graphics_command_buffers = (VkCommandBuffer *)malloc(sizeof(VkCommandBuffer) * swapchain_image_count);
+    CheckVkResult(vkAllocateCommandBuffers(device, &command_buffer_allocate_info, graphics_command_buffers));
+
 #if 0
-internal v3
-minimum(v3 a, v3 b)
-{
-    v3 result = {};
+    // TODO(joon) : If possible, make this to use transfer queue(and command pool)!
+    VkCommandBuffer transfer_commadn_pool;
+    commandBufferAllocateInfo = {};
+    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    commandBufferAllocateInfo.commandPool = graphicsCommandPool;
+    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    commandBufferAllocateInfo.commandBufferCount = 1;
+    CheckVkResult(vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &transferCommandBuffer));
+#endif
+    
+    VkSemaphore *ready_to_render_semaphores = (VkSemaphore *)malloc(sizeof(VkSemaphore) * swapchain_image_count);
+    VkSemaphore *ready_to_present_semaphores = (VkSemaphore *)malloc(sizeof(VkSemaphore) * swapchain_image_count);
+    for(u32 semaphore_index = 0;
+        semaphore_index < swapchain_image_count;
+        ++semaphore_index)
+    {
+        VkSemaphoreCreateInfo semaphore_create_info = {};
+        semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    return result;
-}
+        CheckVkResult(vkCreateSemaphore(device, &semaphore_create_info, 0, ready_to_render_semaphores + semaphore_index));
+        CheckVkResult(vkCreateSemaphore(device, &semaphore_create_info, 0, ready_to_present_semaphores + semaphore_index));
+    }
 
-internal v3
-maximum(v3 a, v3 b)
-{
-    v3 result = {};
+    VkFence *ready_to_render_fences = (VkFence *)malloc(sizeof(VkFence) * swapchain_image_count);
+    VkFence *ready_to_present_fences = (VkFence *)malloc(sizeof(VkFence) * swapchain_image_count);
+    for(u32 fence_index = 0;
+        fence_index < swapchain_image_count;
+        ++fence_index)
+    {
+        VkFenceCreateInfo  fenceCreateInfo = {};
+        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        
+        CheckVkResult(vkCreateFence(device, &fenceCreateInfo, 0, ready_to_render_fences + fence_index));
+        CheckVkResult(vkCreateFence(device, &fenceCreateInfo, 0, ready_to_present_fences + fence_index));
+    }
 
-    return result;
+    // TODO(joon) : Correct this image memory barrier, and also find out what pipeline stage we should be using
+#if 0
+    for(u32 swapchainImageIndex = 0;
+        swapchainImageIndex < swapchainImageCount;
+        ++swapchainImageIndex)
+    {
+        VkImageMemoryBarrier imageMemoryBarrier = {};
+        imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE_KHR;
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // No queue transfer occurs
+        imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        imageMemoryBarrier.image = swapchainImages[swapchainImageIndex];
+        imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+        imageMemoryBarrier.subresourceRange.levelCount = 1; // vk_remaining_mip_levels?
+        imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+        imageMemoryBarrier.subresourceRange.layerCount = 1; // vk_remaining_array_levels?
+        
+        vkCmdPipelineBarrier(transferCommandBuffer,
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                    1,
+                                    &imageMemoryBarrier);
+#endif
+    render_context->instance = instance;
+    render_context->physical_device = physical_device;
+    render_context->device = device;
+
+    render_context->swapchain = swapchain;
+    render_context->swapchain_image_count = swapchain_image_count;
+
+    render_context->framebuffers = framebuffers;
+
+    render_context->renderpass = renderpass;
+    render_context->pipeline = graphics_pipeline;
+    render_context->pipeline_layout = pipeline_layout;
+
+    render_context->ready_to_render_semaphores = ready_to_render_semaphores;
+    render_context->ready_to_present_semaphores = ready_to_present_semaphores;
+
+    render_context->ready_to_render_fences = ready_to_render_fences;
+    render_context->ready_to_present_fences = ready_to_present_fences;
+
+    render_context->graphics_command_buffers = graphics_command_buffers;
+
+    render_context->uniform_buffer_alignment = uniform_buffer_alignment;
+
+    render_context->graphics_queue = graphics_queue;
+    //VkQueue transfer_queue;
+    //VkQueue present_queue;
+
+    render_context->current_image_index = 0;
+
+    render_context->uniform_buffer = vk_create_uniform_buffer(physical_device, device, 
+                                                            sizeof(Uniform), swapchain_image_count, uniform_buffer_alignment);
 }
 #endif
+
+// TODO(joon) Later, we can make this to also 'stream' the meshes(just like the other assets), and put them inside the render mesh
+// so that the graphics API can render them.
+internal void
+metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_base, u32 push_buffer_used_size, u32 window_width, u32 window_height)
+{
+    MTLViewport viewport = metal_make_viewport(0, 0, window_width, window_height, 0, 1);
+    MTLScissorRect scissor_rect = metal_make_scissor_rect(0, 0, window_width, window_height);
+
+    // NOTE(joon): renderpass descriptor is already configured for this frame
+    MTLRenderPassDescriptor *this_frame_descriptor = render_context->view.currentRenderPassDescriptor;
+
+    //renderpass_descriptor.colorAttachments[0].texture = ;
+    this_frame_descriptor.colorAttachments[0].clearColor = {0, 0, 0, 1};
+    this_frame_descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
+    this_frame_descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+    this_frame_descriptor.depthAttachment.clearDepth = 1.0f;
+    this_frame_descriptor.depthAttachment.loadAction = MTLLoadActionClear;
+    this_frame_descriptor.depthAttachment.storeAction = MTLStoreActionDontCare;
+
+    if(this_frame_descriptor)
+    {
+        id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
+        // TODO(joon) double check whether this thing is freed automatically or not
+        // if not, we can pull this outside, and put this inside the render context
+        id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: this_frame_descriptor];
+
+        [render_encoder setViewport: viewport];
+        [render_encoder setScissorRect: scissor_rect];
+        [render_encoder setTriangleFillMode : MTLTriangleFillModeFill];
+        [render_encoder setFrontFacingWinding :MTLWindingCounterClockwise];
+        [render_encoder setCullMode :MTLCullModeBack];
+        [render_encoder setDepthStencilState: render_context->depth_state];
+
+        Camera *camera = (Camera *)(push_buffer_base);
+        f32 width_over_height = (f32)window_width / (f32)window_height;
+        m4 proj = projection(camera->focal_length, width_over_height, 0.1f, 10000.0f);
+        m4 view = world_to_camera(camera->p, 
+                camera->initial_x_axis, camera->along_x, 
+                camera->initial_y_axis, camera->along_y, 
+                camera->initial_z_axis, camera->along_z);
+
+        PerFrameData per_frame_data = {};
+        per_frame_data.proj_view_ = proj*camera_rhs_to_lhs(view);
+        [render_encoder setVertexBytes: &per_frame_data
+                        length: sizeof(per_frame_data)
+                        atIndex: 1]; 
+
+        u32 voxel_count = 0;
+        for(u32 consumed = sizeof(Camera); // NOTE(joon) The first element of the push buffer is camera
+                consumed < push_buffer_used_size;
+                )
+        {
+            RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)push_buffer_base + consumed);
+
+            switch(header->type)
+            {
+                case render_entry_type_voxel:
+                {
+                    RenderEntryVoxel *entry = (RenderEntryVoxel *)((u8 *)push_buffer_base + consumed);
+                    consumed += sizeof(*entry);
+
+                    metal_append_to_managed_buffer(&render_context->voxel_position_buffer, &entry->p, sizeof(entry->p));
+                    metal_append_to_managed_buffer(&render_context->voxel_color_buffer, &entry->color, sizeof(entry->color));
+
+                    voxel_count++;
+                }break;
+
+#if 0
+                case render_entry_type_line:
+                {
+                    RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_group->render_memory.base + consumed);
+                    consumed += sizeof(*entry);
+
+                    [render_encoder setRenderPipelineState:render_context->line_pipeline_state];
+                    //metal_encode_line(render_encoder, entry->start, entry->end, entry->color);
+                }break;
+#endif
+            }
+        }
+
+        metal_flush_managed_buffer(&render_context->voxel_position_buffer);
+        metal_flush_managed_buffer(&render_context->voxel_color_buffer);
+
+        f32 voxel_vertices[] = 
+        {
+            -0.5f,-0.5f,-0.5f, // triangle 1 : begin
+            -0.5f,-0.5f, 0.5f,
+            -0.5f, 0.5f, 0.5f, // triangle 1 : end
+            0.5f, 0.5f,-0.5f, // triangle 2 : begin
+            -0.5f,-0.5f,-0.5f,
+            -0.5f, 0.5f,-0.5f, // triangle 2 : end
+            0.5f,-0.5f, 0.5f,
+            -0.5f,-0.5f,-0.5f,
+            0.5f,-0.5f,-0.5f,
+            0.5f, 0.5f,-0.5f,
+            0.5f,-0.5f,-0.5f,
+            -0.5f,-0.5f,-0.5f,
+            -0.5f,-0.5f,-0.5f,
+            -0.5f, 0.5f, 0.5f,
+            -0.5f, 0.5f,-0.5f,
+            0.5f,-0.5f, 0.5f,
+            -0.5f,-0.5f, 0.5f,
+            -0.5f,-0.5f,-0.5f,
+            -0.5f, 0.5f, 0.5f,
+            -0.5f,-0.5f, 0.5f,
+            0.5f,-0.5f, 0.5f,
+            0.5f, 0.5f, 0.5f,
+            0.5f,-0.5f,-0.5f,
+            0.5f, 0.5f,-0.5f,
+            0.5f,-0.5f,-0.5f,
+            0.5f, 0.5f, 0.5f,
+            0.5f,-0.5f, 0.5f,
+            0.5f, 0.5f, 0.5f,
+            0.5f, 0.5f,-0.5f,
+            -0.5f, 0.5f,-0.5f,
+            0.5f, 0.5f, 0.5f,
+            -0.5f, 0.5f,-0.5f,
+            -0.5f, 0.5f, 0.5f,
+            0.5f, 0.5f, 0.5f,
+            -0.5f, 0.5f, 0.5f,
+            0.5f,-0.5f, 0.5f
+        };
+        
+        [render_encoder setRenderPipelineState : render_context->voxel_pipeline_state];
+
+        [render_encoder setVertexBytes: voxel_vertices
+                        length: sizeof(f32) * array_count(voxel_vertices)
+                        atIndex: 0]; 
+
+        [render_encoder setVertexBuffer:render_context->voxel_position_buffer.buffer
+                        offset:0
+                        atIndex:3];
+
+        [render_encoder setVertexBuffer:render_context->voxel_color_buffer.buffer
+                        offset:0
+                        atIndex:4];
+
+        [render_encoder drawPrimitives: MTLPrimitiveTypeTriangle
+                                        vertexStart: 0
+                                        vertexCount: array_count(voxel_vertices)/3
+                                        instanceCount: voxel_count 
+                                        baseInstance: 0];
+
+        // x axis
+        //metal_draw_line(render_encoder, v3_(), v3_(100, 0, 0), v3_(0, 0, 1));
+        // y axis
+        //metal_draw_line(render_encoder, v3_(), v3_(0, 100, 0), v3_(1, 0, 0));
+        // z axis
+        //metal_draw_line(render_encoder, v3_(), v3_(0, 0, 100), v3_(0, 1, 0));
+
+        [render_encoder endEncoding];
+
+
+        if(render_context->view.currentDrawable)
+        {
+            [command_buffer presentDrawable: render_context->view.currentDrawable];
+        }
+        else
+        {
+            invalid_code_path;
+        }
+
+        // TODO(joon): Sync with the swap buffer!
+        [command_buffer commit];
+    }
+}
 
 int 
 main(void)
 { 
-    // TODO(joon): Get rid of rand()
-    srand((u32)time(NULL));
-    u32 random_seed = (u32)rand();
+    u32 random_seed = time(NULL);
     random_series series = start_random_series(random_seed); 
 
     //TODO : writefile?
-    platform_api platform_api = {};
+    PlatformAPI platform_api = {};
     platform_api.read_file = debug_macos_read_file;
     platform_api.write_entire_file = debug_macos_write_entire_file;
     platform_api.free_file_memory = debug_macos_free_file_memory;
 
-    platform_memory platform_memory = {};
+    PlatformMemory platform_memory = {};
 
     platform_memory.permanent_memory_size = gigabytes(1);
     platform_memory.transient_memory_size = gigabytes(3);
@@ -583,460 +1164,18 @@ main(void)
                 VM_FLAGS_ANYWHERE);
     platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
 
-    platform_read_file_result font = debug_macos_read_file("/Users/mekalopo/Library/Fonts/InputMonoCompressed-Light.ttf");
+    PlatformReadFileResult font = debug_macos_read_file("/Users/mekalopo/Library/Fonts/InputMonoCompressed-Light.ttf");
 
     struct mach_timebase_info mach_time_info;
     mach_timebase_info(&mach_time_info);
     r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
 
-    platform_read_file_result vox_file = debug_macos_read_file("/Volumes/meka/meka_renderer/data/vox/chr_knight.vox");
-    load_vox_result loaded_vox = load_vox(vox_file.memory, vox_file.size);
-
-#if 0
-    // TODO(joon): Actually use this brdf tables
-    platform_read_file_result brdf_files[5] = {};
-    brdf_files[0] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/chrome-steel.binary");
-    brdf_files[1] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/fruitwood-241.binary");
-    brdf_files[2] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/light-brown-fabric.binary");
-    brdf_files[3] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/pure-rubber.binary");
-    brdf_files[4] = debug_macos_read_file("/Volumes/meka/meka_renderer/data/merl_brdf/special-walnut-224.binary");
-
-    f32 *brdf_lookup_tables[5] = {};
-    brdf_lookup_tables[0] = load_merl_brdf(brdf_files[0]);
-    brdf_lookup_tables[1] = load_merl_brdf(brdf_files[1]);
-    brdf_lookup_tables[2] = load_merl_brdf(brdf_files[2]);
-    brdf_lookup_tables[3] = load_merl_brdf(brdf_files[3]);
-brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
-    
-
-    //u32 output_width = 2*1920;
-    //u32 output_height = 2*1080;
-
-    u32 output_width = 1920;
-    u32 output_height = 1080;
-
-    u32 output_size = sizeof(u32)*output_width*output_height + sizeof(bmp_file_header);
-    u8 *output = (u8 *)malloc(output_size);
-    zero_memory(output, output_size);
-    
-    bmp_file_header *bmp_header = (bmp_file_header *)output;  
-    bmp_header->file_header = 19778;
-    bmp_header->file_size = output_size;
-    bmp_header->pixel_offset = sizeof(bmp_file_header);
-
-    bmp_header->header_size = sizeof(bmp_file_header) - 14;
-    bmp_header->width = output_width;
-    bmp_header->height = output_height;
-    bmp_header->color_plane_count = 1;
-    bmp_header->bits_per_pixel = 32;
-    bmp_header->compression = 3;
-
-    bmp_header->image_size = sizeof(u32)*output_width*output_height;
-    bmp_header->pixels_in_meter_x = 11811;
-    bmp_header->pixels_in_meter_y = 11811;
-    bmp_header->red_mask = 0x00ff0000;
-    bmp_header->green_mask = 0x0000ff00;
-    bmp_header->blue_mask = 0x000000ff;
-    bmp_header->alpha_mask = 0xff000000;
-
-    material materials[9] = {};
-    // TODO(joon): objects with emit color seems like working ok only ifbthe emit color is much brighter than the limit.. 
-    // are we doing something wrong ?
-    materials[0].emit_color = 2.0f*v3_(0.7f, 0.7f, 1.0f);
-
-    materials[1].brdf_table = brdf_lookup_tables[0];
-    materials[1].reflection_color = v3_(0.3f, 0.12f, 0.12f);
-    materials[1].reflectivity = 0.0f; 
-
-    materials[2].emit_color = 9*v3_(1.0f, 0.1f, 0.2f);
-    //materials[2].reflectivity = 0.5f;
-
-    materials[3].brdf_table = brdf_lookup_tables[1];
-    materials[3].reflection_color = v3_(0.3f, 0.7f, 0.2f);
-    materials[3].reflectivity = 1.0f;
-
-    materials[4].brdf_table = brdf_lookup_tables[2];
-    materials[4].reflection_color = v3_(0.3f, 0.1f, 0.7f);
-    materials[4].reflectivity = 0.8f;
-
-    materials[5].brdf_table = brdf_lookup_tables[3];
-    materials[5].reflection_color = v3_(0.9f, 0.7f, 0.8f);
-    materials[5].reflectivity = 0.9f;
-
-    materials[6].brdf_table = brdf_lookup_tables[3];
-    materials[6].reflection_color = v3_(1.0f, 1.0f, 1.0f);
-    materials[6].reflectivity = 1.0f;
-
-    materials[7].brdf_table = brdf_lookup_tables[3];
-    materials[7].reflection_color = v3_(0.7f, 0.7f, 0.7f);
-    materials[7].reflectivity = 1.0f;
-
-    materials[8].brdf_table = brdf_lookup_tables[3];
-    materials[8].reflection_color = v3_(0.1f, 0.1f, 0.1f);
-    materials[8].reflectivity = 1.0f;
-
-    plane planes[1] = {};
-    planes[0].normal = v3_(0, 0, 1);
-    planes[0].d = 0;
-    planes[0].material_index = 1;
-
-    sphere spheres[5] = {};
-    spheres[0].center = v3_(0, 0, 0); 
-    spheres[0].radius = 1; 
-    spheres[0].material_index = 2;
-
-    spheres[1].center = v3_(3, 1.5f, 0.8f); 
-    spheres[1].radius = 0.7f; 
-    spheres[1].material_index = 3;
-
-    spheres[2].center = v3_(-3, 0, 2); 
-    spheres[2].radius = 1; 
-    spheres[2].material_index = 4;
-
-    spheres[3].center = v3_(-8, 15, 5); 
-    spheres[3].radius = 4; 
-    spheres[3].material_index = 6;
-
-    spheres[4].center = v3_(5, 10, 1); 
-    spheres[4].radius = 3; 
-    spheres[4].material_index = 8;
-
-    triangle triangles[2] = {};
-    triangles[0].v0 = v3_(-3, 4, 0.5f); 
-    triangles[0].v1 = v3_(3, 4, 0.5f); 
-    triangles[0].v2 = v3_(0, 4, 5); 
-    triangles[0].material_index = 7;
-
-    triangles[1].v0 = v3_(-30, 7, 0); 
-    triangles[1].v1 = v3_(-20, 60, 2); 
-    triangles[1].v2 = v3_(0, 4, 2); 
-    triangles[1].material_index = 5;
-#endif
-
-#if 0
-    // TODO(joon) hash should not be fixed size, allocate more when we hit the limit & increase the hash count
-    voxel_chunk_hash voxel_chunk_hashes[1024] = {};
-    // NOTE(joon) allocate all the hashes at the head up
-    for(u32 hash_index = 0;
-            hash_index < array_count(voxel_chunk_hashes);
-            ++hash_index)
-    {
-        voxel_chunk_hash *hash = voxel_chunk_hashes + hash_index;
-        hash->x = Empty_Hash;
-    }
-
-    memory_arena voxel_memory_arena = start_memory_arena(platform_memory.transient_memory, megabytes(512), &platform_memory.transient_memory_used);
-
-    u32 voxel_range = 64;
-
-    u32 fill_chunk_count = 20;
-
-    for(u32 chunk_index = 0;
-            chunk_index < )
-    u32 x = random_between_u32(&series, 0, voxel_range);
-    u32 y = random_between_u32(&series, 0, voxel_range);
-    u32 z = random_between_u32(&series, 0, voxel_range);
-
-    u32 chunk_lod = 3; // chunk dim = 2^(n-1)(n = 1, 2,...)
-    u32 chunk_dim = power((u32)2, chunk_lod - 1);
-    u32 chunk_x = x / chunk_dim;
-    u32 chunk_y = y / chunk_dim;
-    u32 chunk_z = z / chunk_dim;
-
-    voxel_chunk_hash *chunk = get_voxel_chunk_hash(voxel_chunk_hashes, array_count(voxel_chunk_hashes), chunk_x, chunk_y, chunk_z);
-    chunk->first_child_offset = voxel_memory_arena.used;
-
-    u32 next_child_node_count = 1;
-
-    for(u32 chunk_lod_index = 0;
-            chunk_lod_index < chunk_lod;
-            ++chunk_lod_index)
-    {
-        u32 *first_child_node = push_array(&voxel_memory_arena, u32, next_child_node_count);
-
-        u32 child_node_count = next_child_node_count;
-        next_child_node_count = 0;
-
-        for(u32 child_node_index = 0;
-                child_node_index < child_node_count;
-                ++child_node_index)
-        {
-            // TODO(joon) get this value from the map data
-            u8 child_bit = (u8)random_between_u32(&series, 1, 255);
-            u32 child_node_count = count_set_bit(child_bit, sizeof(child_bit));
-
-            u32 child_offset = (u32)pointer_diff((u8 *)voxel_memory_arena.base + voxel_memory_arena.used, first_child_node);
-            if(chunk_lod_index == chunk_lod - 1) // we don't need to store the leaf nodes!
-            {
-                child_offset = 0; // If the offset is 0, we assume that the bit mask represents the child nodes
-            }
-            assert(child_offset < 16777216); // 2^24
-            *first_child_node = (child_offset << 8) | child_bit;
-
-            next_child_node_count += child_node_count;
-            first_child_node++;
-        }
-    }
-#endif
-    // NOTE(joon) As we store every voxels, we can just store the child bit mask - 
-    // TODO(joon) this helps when we simulate the voxels, but we can use SVO or DAG when we 'store' the voxels as a map!
-    // or, we can just store the leaf nodes sparsely, as the leaf nodes takes the most of the space
-
-    u32 total_node_count = 0;
-    for(u32 i = 0;
-            i < 8;
-            ++i)
-    {
-        total_node_count += power((u32)8, (u32)i);
-    }
-
-    u8 *nodes = (u8 *)malloc(total_node_count);
-    u32 dim = 256;
-
-    for(u32 voxel_index = 0;
-            voxel_index < loaded_vox.voxel_count;
-            ++voxel_index)
-    {
-        // TODO(joon) we also need to take account of the chunk pos?
-        u8 x = loaded_vox.xs[voxel_index];
-        u8 y = loaded_vox.ys[voxel_index];
-        u8 z = loaded_vox.zs[voxel_index];
-
-        if(x == 123 && y == 2 && z == 0)
-        {
-            int brekahere = 0;
-        }
-
-        insert_voxel(nodes, 0, x, y, z, 256, 0);
-    }
-    validate_voxels_with_vox_file(loaded_vox, nodes);
-
-#if 0
-    world world = {};
-    world.material_count = array_count(materials);
-    world.materials = materials;
-
-    world.plane_count = array_count(planes);
-    world.planes = planes;
-
-    //world.sphere_count = array_count(spheres);
-    //world.spheres = spheres;
-
-    //world.triangle_count = array_count(triangles);
-    //world.triangles = triangles;
-
-    v3 camera_p = v3_(0, -10, 1);
-
-    v3 camera_z_axis = normalize(camera_p); // - V3(0, 0, 0), which is the center of the world
-    v3 camera_x_axis = normalize(cross(v3_(0, 0, 1), camera_z_axis));
-    v3 camera_y_axis = normalize(cross(camera_z_axis, camera_x_axis));
-
-    r32 film_width = 1.0f;
-    r32 film_height = 1.0f;
-    if(output_width > output_height)
-    {
-        film_height *= output_height/(r32)output_width;
-    }
-    else if(output_width < output_height)
-    {
-        film_width *= output_width/(r32)output_height;
-    }
-
-    r32 half_film_width = film_width/2.0f;
-    r32 half_film_height = film_height/2.0f;
-
-    r32 half_x_per_pixel = 0.5f*film_width/output_width;
-    r32 half_y_per_pixel = 0.5f*film_height/output_height;
-    
-    r32 distance_from_camera_to_film = 1.0f;
-    v3 film_center = camera_p - distance_from_camera_to_film*camera_z_axis;
-
-    // TODO(joon): m1 pro has 8 high performance cores and 2 efficiency cores,
-    // any way to use all of them?
-    u32 core_count = 8;
-
-    // NOTE(joon): If the height is a positive value, the bitmap is bottom-up
-    u32 *pixels = (u32 *)(output + sizeof(bmp_file_header));
-
-#if 0
-    u8 *row = (u8 *)pixels;
-    for(u32 y = 0;
-            y < output_height;
-            ++y)
-    {
-        u32 *p = (u32 *)row;
-        for(u32 x = 0;
-                x < output_width;
-                ++x)
-        {
-            *p++ = 0xffff0000;
-        }
-
-        row += sizeof(u32) * output_width;
-    }
-#endif
-    
-    semaphore = dispatch_semaphore_create(0);
-
-    pthread_attr_t thread_attribute = {};
-    pthread_attr_init(&thread_attribute);
-
-    thread_work_queue work_queue = {};
-
-    u32 thread_count = 8; // 1;
-
-    // NOTE(joon): spawn threads
-    if(thread_count > 1)
-    {
-        // TODO(joon) : spawn threads based on the core count
-        macos_thread *threads = (macos_thread *)malloc(sizeof(macos_thread) * (thread_count - 1));
-
-        for(u32 thread_index = 0;
-                thread_index < thread_count;
-                ++thread_index)
-        {
-            macos_thread *thread = threads + thread_index;
-            thread->ID = thread_index + 1; // 0th thread is the main thread
-            thread->queue = &work_queue;
-
-            pthread_t thread_id; // we don't care about this one, we just generate our own id
-            int result = pthread_create(&thread_id, &thread_attribute, &thread_proc, (void *)(threads + thread_index));
-
-            if(result != 0) // 0 is the success value in posix
-            {
-                assert(0);
-            }
-        }
-    }
-#endif
-
-
-#if 0
-    // NOTE(joon): This value should be carefully managed, as it affects to the drainout effect
-    // for now, 16 by 16 seems like outputting the best(close to) result(1.57 sec)?
-    u32 tile_x_count = 16;
-    u32 tile_y_count = 16;
-    u32 pixel_count_per_tile_x = output_width/tile_x_count;
-    u32 pixel_count_per_tile_y = output_height/tile_y_count;
-    u32 ray_per_pixel_count = 256;
-
-    world.total_tile_count = tile_x_count * tile_y_count;
-    world.rendered_tile_count = 0;
-
-    thread_work_raytrace_tile_data *raytracer_datas = (thread_work_raytrace_tile_data *)malloc(sizeof(thread_work_raytrace_tile_data) * tile_x_count * tile_y_count);
-    u32 raytracer_data_index = 0;
-
-    u64 begin_raytracing_time = mach_absolute_time();
-    for(u32 tile_y = 0;
-            tile_y < tile_y_count;
-            ++tile_y)
-    {
-        u32 min_y = tile_y * pixel_count_per_tile_y;
-        u32 one_past_max_y = min_y + pixel_count_per_tile_y;
-
-        if(one_past_max_y > output_height)
-        {
-            one_past_max_y = output_height;
-        }
-
-        for(u32 tile_x = 0;
-                tile_x < tile_x_count;
-                ++tile_x)
-        {
-            u32 min_x = tile_x * pixel_count_per_tile_x;
-            u32 one_past_max_x = min_x + pixel_count_per_tile_x;
-
-            if(one_past_max_x > output_width)
-            {
-                one_past_max_x = output_width;
-            }
-
-            thread_work_raytrace_tile_data *data = raytracer_datas + raytracer_data_index++;
-            data->raytracer_input.world = &world;
-
-            data->raytracer_input.pixels = pixels;
-            data->raytracer_input.output_width = output_width; 
-            data->raytracer_input.output_height = output_height;
-
-            data->raytracer_input.film_center = film_center;  
-            data->raytracer_input.film_width = film_width; 
-            data->raytracer_input.film_height = film_height;
-
-            data->raytracer_input.camera_p = camera_p;
-            data->raytracer_input.camera_x_axis = camera_x_axis;
-            data->raytracer_input.camera_y_axis = camera_y_axis; 
-            data->raytracer_input.camera_z_axis = camera_z_axis;
-
-            data->raytracer_input.min_x = min_x;
-            data->raytracer_input.one_past_max_x = one_past_max_x;
-            data->raytracer_input.min_y = min_y;
-            data->raytracer_input.one_past_max_y = one_past_max_y;
-
-            data->raytracer_input.ray_per_pixel_count = ray_per_pixel_count;
-
-            // TODO(joon): Get rid of rand(), maybe by using rand instruction set?
-            data->raytracer_input.series = start_random_series((u32)rand(), (u32)rand(), (u32)rand(), (u32)rand());
-
-            macos_add_thread_work_item(&work_queue,
-                                        thread_work_callback_render_tile,
-                                        (void *)data);
-        }
-    }
-
-#if 0
-    macos_complete_all_thread_work_queue_items(&work_queue);
-
-    // complete all thread work only gurantee that all the works are fired up, 
-    // but does not gurantee that all of them are done
-    while(world.total_tile_count != world.rendered_tile_count)
-    {
-    }
-
-    // 7.71052sec
-    u64 nano_sec_elapsed = mach_time_diff_in_nano_seconds(begin_raytracing_time, mach_absolute_time(), nano_seconds_per_tick);
-    
-    printf("Config : %u thread(s), %u lane(s), %u rays/pixel\n", thread_count, MEKA_LANE_WIDTH, ray_per_pixel_count);
-    printf("Raytracing finished in : %.6fsec\n", (float)((double)nano_sec_elapsed/(double)sec_to_nano_sec));
-    printf("Total Ray Count : %llu, ", world.total_ray_count);
-    printf("Bounced Ray Count : %llu, ", world.bounced_ray_count);
-    printf("%0.6fns/ray\n", ((double)nano_sec_elapsed/world.bounced_ray_count));
-#endif
-
-    //usleep(1000000);
-
-    debug_macos_write_entire_file("/Volumes/meka/meka_renderer/data/test.bmp", (void *)output, output_size);
-#endif
-
-
-	i32 window_width = 1920;
-	i32 window_height = 1080;
-    r32 window_width_over_height = (r32)window_width/(r32)window_height;
-
+    i32 window_width = 1920;
+    i32 window_height = 1080;
 
     u32 target_frames_per_second = 60;
     r32 target_seconds_per_frame = 1.0f/(r32)target_frames_per_second;
     u32 target_nano_seconds_per_frame = (u32)(target_seconds_per_frame*sec_to_nano_sec);
-
-
-    // TODO/joon: clean this memory managing stuffs...
-    memory_arena mesh_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(16), &platform_memory.permanent_memory_used);
-    memory_arena transient_memory_arena = start_memory_arena(platform_memory.transient_memory, gigabytes(1), &platform_memory.transient_memory_used);
-
-    platform_read_file_result cow_obj_file = platform_api.read_file("/Volumes/meka/meka_renderer/data/cow.obj");
-    raw_mesh cow_raw_mesh = parse_obj_tokens(&mesh_memory_arena, cow_obj_file.memory, cow_obj_file.size);
-
-
-    //generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, &raw_cow_mesh);
-    generate_vertex_normals_simd(&mesh_memory_arena, &transient_memory_arena, &cow_raw_mesh);
-    platform_api.free_file_memory(cow_obj_file.memory);
-
-#if 1
-    platform_read_file_result suzanne_obj_file = platform_api.read_file("/Volumes/meka/meka_renderer/data/suzanne.obj");
-    raw_mesh raw_suzanne_mesh = parse_obj_tokens(&mesh_memory_arena, suzanne_obj_file.memory, suzanne_obj_file.size);
-
-    platform_api.free_file_memory(suzanne_obj_file.memory);
-#endif
-
     NSApplication *app = [NSApplication sharedApplication];
     [app setActivationPolicy :NSApplicationActivationPolicyRegular];
     app_delegate *delegate = [app_delegate new];
@@ -1073,12 +1212,16 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     [window makeMainWindow];
 
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-
     NSString *name = device.name;
     bool has_unified_memory = device.hasUnifiedMemory;
 
     MTKView *view = [[MTKView alloc] initWithFrame : window_rect
                                         device:device];
+    CAMetalLayer *metal_layer = (CAMetalLayer*)[view layer];
+
+    // load vkGetInstanceProcAddr
+    //macos_initialize_vulkan(&render_context, metal_layer);
+
     [window setContentView:view];
     view.depthStencilPixelFormat = MTLPixelFormatDepth32Float;
 
@@ -1090,13 +1233,11 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
        2. create a depth state
        3. pass this whenever we have a command buffer that needs a depth test
     */
-    MTLDepthStencilDescriptor *metal_depth_descriptor = [MTLDepthStencilDescriptor new];
-    metal_depth_descriptor.depthCompareFunction = MTLCompareFunctionLessEqual;
-    metal_depth_descriptor.depthWriteEnabled = true;
-    id<MTLDepthStencilState> metal_depth_state = [device newDepthStencilStateWithDescriptor:metal_depth_descriptor];
-    [metal_depth_descriptor release];
-
-    //window.contentView = view; // TODO(joon) : use NSViewController to change the view?
+    MTLDepthStencilDescriptor *depth_descriptor = [MTLDepthStencilDescriptor new];
+    depth_descriptor.depthCompareFunction = MTLCompareFunctionLessEqual;
+    depth_descriptor.depthWriteEnabled = true;
+    id<MTLDepthStencilState> depth_state = [device newDepthStencilStateWithDescriptor:depth_descriptor];
+    [depth_descriptor release];
 
     NSError *error;
     // TODO(joon) : Put the metallib file inside the app
@@ -1106,63 +1247,12 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
                                             error: &error];
     check_ns_error(error);
 
-    id<MTLFunction> vertex_function = [shader_library newFunctionWithName:@"vertex_function"];
-    id<MTLFunction> frag_phong_lighting = [shader_library newFunctionWithName:@"phong_frag_function"];
-    MTLRenderPipelineDescriptor *phong_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
-    phong_pipeline_descriptor.label = @"Simple Pipeline";
-    phong_pipeline_descriptor.vertexFunction = vertex_function;
-    phong_pipeline_descriptor.fragmentFunction = frag_phong_lighting;
-    phong_pipeline_descriptor.sampleCount = 1;
-    phong_pipeline_descriptor.rasterSampleCount = phong_pipeline_descriptor.sampleCount;
-    phong_pipeline_descriptor.rasterizationEnabled = true;
-    phong_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
-    phong_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    phong_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-    phong_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
-
-    id<MTLRenderPipelineState> metal_pipeline_state = [device newRenderPipelineStateWithDescriptor:phong_pipeline_descriptor
-                                                                 error:&error];
-
-    id<MTLFunction> raytracing_vertex_function = [shader_library newFunctionWithName:@"raytracing_vertex_function"];
-    id<MTLFunction> raytracing_frag_function = [shader_library newFunctionWithName:@"raytracing_frag_function"];
-    MTLRenderPipelineDescriptor *raytracing_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
-    raytracing_pipeline_descriptor.label = @"Raytracing Pipeline";
-    raytracing_pipeline_descriptor.vertexFunction = raytracing_vertex_function;
-    raytracing_pipeline_descriptor.fragmentFunction = raytracing_frag_function;
-    raytracing_pipeline_descriptor.sampleCount = 1;
-    raytracing_pipeline_descriptor.rasterSampleCount = raytracing_pipeline_descriptor.sampleCount;
-    raytracing_pipeline_descriptor.rasterizationEnabled = true;
-    raytracing_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
-    raytracing_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    raytracing_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-    raytracing_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
-
-    id<MTLRenderPipelineState> raytracing_pipline_state = [device newRenderPipelineStateWithDescriptor:raytracing_pipeline_descriptor
-                                                                 error:&error];
-
-    id<MTLFunction> line_vertex_function = [shader_library newFunctionWithName:@"line_vertex_function"];
-    id<MTLFunction> line_frag_function = [shader_library newFunctionWithName:@"line_frag_function"];
-    MTLRenderPipelineDescriptor *line_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
-    line_pipeline_descriptor.label = @"Line Pipeline";
-    line_pipeline_descriptor.vertexFunction = line_vertex_function;
-    line_pipeline_descriptor.fragmentFunction = line_frag_function;
-    line_pipeline_descriptor.sampleCount = 1;
-    line_pipeline_descriptor.rasterSampleCount = line_pipeline_descriptor.sampleCount;
-    line_pipeline_descriptor.rasterizationEnabled = true;
-    line_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassLine;
-    line_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    line_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-    line_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
-
-    id<MTLRenderPipelineState> line_pipeline_state = [device newRenderPipelineStateWithDescriptor:line_pipeline_descriptor
-                                                                error:&error];
-
-    id<MTLFunction> voxel_vertex_function = [shader_library newFunctionWithName:@"voxel_vertex_function"];
-    id<MTLFunction> voxel_frag_function = [shader_library newFunctionWithName:@"voxel_frag_function"];
+    id<MTLFunction> voxel_vertex = [shader_library newFunctionWithName:@"voxel_vertex"];
+    id<MTLFunction> voxel_frag = [shader_library newFunctionWithName:@"voxel_frag"];
     MTLRenderPipelineDescriptor *voxel_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
     voxel_pipeline_descriptor.label = @"Voxel Pipeline";
-    voxel_pipeline_descriptor.vertexFunction = voxel_vertex_function;
-    voxel_pipeline_descriptor.fragmentFunction = voxel_frag_function;
+    voxel_pipeline_descriptor.vertexFunction = voxel_vertex;
+    voxel_pipeline_descriptor.fragmentFunction = voxel_frag;
     voxel_pipeline_descriptor.sampleCount = 1;
     voxel_pipeline_descriptor.rasterSampleCount = voxel_pipeline_descriptor.sampleCount;
     voxel_pipeline_descriptor.rasterizationEnabled = true;
@@ -1178,6 +1268,12 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
 
+    MetalRenderContext metal_render_context = {};
+    metal_render_context.device = device;
+    metal_render_context.view = view;
+    metal_render_context.command_queue = command_queue;
+    metal_render_context.depth_state = depth_state;
+
     CVDisplayLinkRef display_link;
     if(CVDisplayLinkCreateWithActiveCGDisplays(&display_link)== kCVReturnSuccess)
     {
@@ -1185,98 +1281,12 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
         CVDisplayLinkStart(display_link);
     }
 
-    raw_mesh sphere_raw_mesh = generate_sphere_mesh(100, 100);
-    render_mesh sphere_mesh = metal_create_render_mesh_from_raw_mesh(device, &sphere_raw_mesh, &transient_memory_arena);
-
-    m4 bottom_rotation = QuarternionRotationM4(v3_(0, 1, 0), pi_32);
-    m4 right_rotation = QuarternionRotationM4(v3_(1, 0, 0), half_pi_32);
-    m4 left_rotation = QuarternionRotationM4(v3_(1, 0, 0), -half_pi_32);
-    m4 front_rotation = QuarternionRotationM4(v3_(0, 1, 0), half_pi_32);
-    m4 back_rotation = QuarternionRotationM4(v3_(0, 1, 0), -half_pi_32);
-
-    memory_arena terrain_memory_arena = start_memory_arena(platform_memory.permanent_memory, megabytes(32), &platform_memory.permanent_memory_used);
-    raw_mesh terrains[6] = {};
-    render_mesh terrain_meshes[6] = {};
-    // top
-    terrains[0] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); 
-    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 0);
-    terrain_meshes[0] = metal_create_render_mesh_from_raw_mesh(device, terrains + 0, &transient_memory_arena);
-
-    // bottom
-    terrains[1] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); 
-    for(u32 vertex_index = 0;
-            vertex_index < terrains[1].position_count;
-            ++vertex_index)
-    {
-        v3 *position = terrains[1].positions + vertex_index;
-        *position = (bottom_rotation*v4_(*position, 1.0f)).xyz;
-    }
-    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 1);
-    terrain_meshes[1] = metal_create_render_mesh_from_raw_mesh(device, terrains + 1, &transient_memory_arena);
-
-    // left
-    terrains[2] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); // left
-    for(u32 vertex_index = 0;
-            vertex_index < terrains[2].position_count;
-            ++vertex_index)
-    {
-        v3 *position = terrains[2].positions + vertex_index;
-        *position = (left_rotation*v4_(*position, 1.0f)).xyz;
-
-        int a = 1;
-    }
-    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 2);
-    terrain_meshes[2] = metal_create_render_mesh_from_raw_mesh(device, terrains + 2, &transient_memory_arena);
-
-    // right
-    terrains[3] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); // right
-    for(u32 vertex_index = 0;
-            vertex_index < terrains[1].position_count;
-            ++vertex_index)
-    {
-        v3 *position = terrains[3].positions + vertex_index;
-        *position = (right_rotation*v4_(*position, 1.0f)).xyz;
-    }
-    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 3);
-    terrain_meshes[3] = metal_create_render_mesh_from_raw_mesh(device, terrains + 3, &transient_memory_arena);
-
-    // front
-    terrains[4] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); // front
-    for(u32 vertex_index = 0;
-            vertex_index < terrains[1].position_count;
-            ++vertex_index)
-    {
-        v3 *position = terrains[4].positions + vertex_index;
-        *position = (front_rotation*v4_(*position, 1.0f)).xyz;
-    }
-    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 4);
-    terrain_meshes[4] = metal_create_render_mesh_from_raw_mesh(device, terrains + 4, &transient_memory_arena);
-
-    // back
-    terrains[5] = generate_plane_terrain_mesh(&terrain_memory_arena, 100, 100); // back
-    for(u32 vertex_index = 0;
-            vertex_index < terrains[1].position_count;
-            ++vertex_index)
-    {
-        v3 *position = terrains[5].positions + vertex_index;
-        *position = (back_rotation*v4_(*position, 1.0f)).xyz;
-    }
-    generate_vertex_normals(&mesh_memory_arena, &transient_memory_arena, terrains + 5);
-    terrain_meshes[5] = metal_create_render_mesh_from_raw_mesh(device, terrains + 5, &transient_memory_arena);
-
-    render_mesh cow_mesh = metal_create_render_mesh_from_raw_mesh(device, &cow_raw_mesh, &transient_memory_arena);
-    render_mesh suzanne_mesh = metal_create_render_mesh_from_raw_mesh(device, &raw_suzanne_mesh, &transient_memory_arena);
-
-
-    camera camera = {};
-    r32 focal_length = 1.0f;
-    camera.p = v3_(-10, 0, 0);
-    camera.initial_z_axis = v3_(-1, 0, 0);
-    camera.initial_x_axis = normalize(cross(v3_(0, 0, 1), camera.initial_z_axis));
-    camera.initial_y_axis = normalize(cross(camera.initial_z_axis, camera.initial_x_axis));
-     
     r32 light_angle = 0.f;
     r32 light_radius = 1000.0f;
+
+    PlatformInput platform_input = {};
+    u32 render_push_buffer_size = megabytes(16);
+    u8 *render_push_buffer = (u8 *)malloc(megabytes(16));
 
     [app activateIgnoringOtherApps:YES];
     [app run];
@@ -1285,58 +1295,11 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
     is_game_running = true;
     while(is_game_running)
     {
-        macos_handle_event(app, window);
-
-        v3 camera_dir = camera_to_world(-camera.initial_z_axis, camera.initial_x_axis, camera.along_x, 
-                                                        camera.initial_y_axis, camera.along_y,
-                                                        camera.initial_z_axis, camera.along_z);
+        platform_input.dt_per_frame = target_seconds_per_frame;
+        macos_handle_event(app, window, &platform_input);
 
         // TODO/joon: check if the focued window is working properly
         b32 is_window_focused = [app keyWindow] && [app mainWindow];
-
-        if(is_window_focused)
-        {
-            m4 temp_view_matrix = world_to_camera(camera.p, 
-                                            camera.initial_x_axis, camera.along_x, 
-                                            camera.initial_y_axis, camera.along_y, 
-                                            camera.initial_z_axis, camera.along_z);
-
-            m4 proj = projection(focal_length, window_width_over_height, 0.1f, 10000.0f);
-
-            v4 temp = v4_(0, 1, 1, 1);
-            v4 view_temp = (temp_view_matrix * temp);
-            v4 proj_temp = proj*view_temp;
-
-            r32 camera_speed = 0.1f;
-
-            if(is_w_down)
-            {
-                camera.p += camera_speed*camera_dir;
-            }
-
-            if(is_s_down)
-            {
-                camera.p -= camera_speed*camera_dir;
-            }
-
-            r32 arrow_key_camera_rotation_speed = 0.01f;
-            if(is_arrow_up_down || is_i_down)
-            {
-                camera.along_x += arrow_key_camera_rotation_speed;
-            }
-            if(is_arrow_down_down || is_k_down)
-            {
-                camera.along_x -= arrow_key_camera_rotation_speed;
-            }
-            if(is_arrow_left_down || is_j_down)
-            {
-                camera.along_y += arrow_key_camera_rotation_speed;
-            }
-            if(is_arrow_right_down || is_l_down)
-            {
-                camera.along_y -= arrow_key_camera_rotation_speed;
-            }
-        }
 
         /*
             TODO(joon) : For more precisely timed rendering, the operations should be done in this order
@@ -1345,216 +1308,19 @@ brdf_lookup_tables[4] = load_merl_brdf(brdf_files[4]);
             3. With the return value from the displayLinkOutputCallback function, get the absolute time to present
             4. Use presentDrawable:atTime to present at the specific time
         */
+
         @autoreleasepool
         {
-            id<MTLCommandBuffer> command_buffer = [command_queue commandBuffer];
-
-            MTLViewport viewport = metal_set_viewport(0, 0, (f32)window_width, (f32)window_height);
-
-            // NOTE(joon): renderpass descriptor is already configured for this frame, obtain it as late as possible
-            MTLRenderPassDescriptor *this_frame_descriptor = view.currentRenderPassDescriptor;
-            //renderpass_descriptor.colorAttachments[0].texture = ;
-            this_frame_descriptor.colorAttachments[0].clearColor = {0, 0, 0, 1};
-            this_frame_descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
-            this_frame_descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-            this_frame_descriptor.depthAttachment.clearDepth = 1.0f;
-            this_frame_descriptor.depthAttachment.loadAction = MTLLoadActionClear;
-            this_frame_descriptor.depthAttachment.storeAction = MTLStoreActionDontCare;
-
-            assert(view.currentDrawable);
-            CAMetalLayer *layer = (CAMetalLayer*)[view layer];
-
-            if(this_frame_descriptor)
-            {
-                // NOTE(joon) : encoder is the another layer we need to record commands inside the command buffer.
-                // it needs to be created whenever we try to render something 
-                id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor : this_frame_descriptor];
-                render_encoder.label = @"render_encoder";
-                [render_encoder setViewport:viewport];
-                [render_encoder setRenderPipelineState:metal_pipeline_state];
-
-                [render_encoder setTriangleFillMode: MTLTriangleFillModeFill];
-                [render_encoder setFrontFacingWinding: MTLWindingCounterClockwise];
-                [render_encoder setCullMode: MTLCullModeNone];
-                //[render_encoder setCullMode: MTLCullModeBack];
-                [render_encoder setDepthStencilState: metal_depth_state];
-
-                m4 proj_matrix = projection(focal_length, window_width_over_height, 0.1f, 10000.0f);
-                m4 view_matrix = world_to_camera(camera.p, 
-                                                 camera.initial_x_axis, camera.along_x, 
-                                                 camera.initial_y_axis, camera.along_y, 
-                                                 camera.initial_z_axis, camera.along_z);
-
-                per_frame_data per_frame_data = {};
-                per_frame_data.proj_view = proj_matrix*camera_rhs_to_lhs(view_matrix);
-                v3 light_p = v3_(light_radius*cosf(light_angle), light_radius*sinf(light_angle), 10.f);
-                per_frame_data.light_p = light_p;
-                [render_encoder setVertexBytes: &per_frame_data
-                                length: sizeof(per_frame_data)
-                                atIndex: 1]; 
-
-                // NOTE/joon : make sure you update the non-vertex information first
-                per_object_data per_object_data = {};
-
-#if 0
-                temp_memory voxel_temp_memory = start_temp_memory(&voxel_memory_arena, megabytes(256));
-                get_all_voxels_inside_chunk((u32 *)voxel_memory_arena.base, &voxel_temp_memory, 0, 0, 0, chunk_dim);
-
-                u32 voxel_count = voxel_temp_memory.used / sizeof(voxel);
-                assert((voxel_temp_memory.used % sizeof(voxel)) == 0);
-#endif
-
-                r32_3 cube_vertices[] = 
-                {
-                    {-1.0f,-1.0f,-1.0f}, // triangle 1 : begin
-                    {-1.0f,-1.0f, 1.0f},
-                    {-1.0f, 1.0f, 1.0f}, // triangle 1 : end
-                    {1.0f, 1.0f,-1.0f}, // triangle 2 : begin
-                    {-1.0f,-1.0f,-1.0f},
-                    {-1.0f, 1.0f,-1.0f}, // triangle 2 : end
-                    {1.0f,-1.0f, 1.0f},
-                    {-1.0f,-1.0f,-1.0f},
-                    {1.0f,-1.0f,-1.0f},
-                    {1.0f, 1.0f,-1.0f},
-                    {1.0f,-1.0f,-1.0f},
-                    {-1.0f,-1.0f,-1.0f},
-                    {-1.0f,-1.0f,-1.0f},
-                    {-1.0f, 1.0f, 1.0f},
-                    {-1.0f, 1.0f,-1.0f},
-                    {1.0f,-1.0f, 1.0f},
-                    {-1.0f,-1.0f, 1.0f},
-                    {-1.0f,-1.0f,-1.0f},
-                    {-1.0f, 1.0f, 1.0f},
-                    {-1.0f,-1.0f, 1.0f},
-                    {1.0f,-1.0f, 1.0f},
-                    {1.0f, 1.0f, 1.0f},
-                    {1.0f,-1.0f,-1.0f},
-                    {1.0f, 1.0f,-1.0f},
-                    {1.0f,-1.0f,-1.0f},
-                    {1.0f, 1.0f, 1.0f},
-                    {1.0f,-1.0f, 1.0f},
-                    {1.0f, 1.0f, 1.0f},
-                    {1.0f, 1.0f,-1.0f},
-                    {-1.0f, 1.0f,-1.0f},
-                    {1.0f, 1.0f, 1.0f},
-                    {-1.0f, 1.0f,-1.0f},
-                    {-1.0f, 1.0f, 1.0f},
-                    {1.0f, 1.0f, 1.0f},
-                    {-1.0f, 1.0f, 1.0f},
-                    {1.0f,-1.0f, 1.0f}
-                };
-
-                [render_encoder setRenderPipelineState:voxel_pipeline_state];
-
-                [render_encoder setVertexBytes: cube_vertices 
-                                    length: sizeof(r32_3) * array_count(cube_vertices) 
-                                    atIndex: 0]; 
-
-#if 0
-                v3 voxel_dim = v3(1.f, 1.f, 1.f);
-                                v3 center = get_voxel_center_in_meter(x, y, z, voxel_dim);
-                                per_object_data.model = translate_m4(x, y, z)*scale_m4(1, 1, 1);
-                                [render_encoder setVertexBytes: &per_object_data
-                                                length: sizeof(per_object_data)
-                                                atIndex: 2]; 
-                                [render_encoder drawPrimitives:MTLPrimitiveTypeTriangle
-                                                vertexStart:0 
-                                                vertexCount:array_count(cube_vertices)];                               
-                                debug_rendered_voxel_count++;
-#endif
-                render_all_voxels(render_encoder, &per_object_data, nodes, 0, 0, 0, 0, 256, 0);
-
-#if 0
-                [render_encoder setVertexBytes: cube_vertices 
-                                    length: sizeof(r32_3) * array_count(cube_vertices) 
-                                    atIndex: 0]; 
-                
-                per_object_data.model = translate_m4(center.x, center.y, center.z)*scale_m4(1, 1, 1);
-
-
-                [render_encoder drawPrimitives:MTLPrimitiveTypeTriangle
-                                vertexStart:0 
-                                vertexCount:array_count(cube_vertices)];
-#endif
-
-                [render_encoder setRenderPipelineState:line_pipeline_state];
-#if 0
-                for(u32 voxel_index = 0;
-                        voxel_index < loaded_vox.voxel_count;
-                        ++voxel_index)
-                {
-                    u32 x = loaded_vox.x[voxel_index];
-                    u32 y = loaded_vox.y[voxel_index];
-                    u32 z = loaded_vox.z[voxel_index];
-
-                    v3 center = get_voxel_center_in_meter(x, y, z, 2.0f * voxel_half_dim); 
-
-                    v3 bottom[4] = {};
-                    bottom[0] = center - voxel_half_dim;
-                    bottom[1] = bottom[0] + v3_(1, 0, 0);
-                    bottom[2] = bottom[0] + v3_(1, 1, 0);
-                    bottom[3] = bottom[0] + v3_(0, 1, 0);
-
-                    v3 top[4] = {};
-                    top[0] = center + voxel_half_dim;
-                    top[1] = top[0] - v3_(1, 0, 0);
-                    top[2] = top[0] - v3_(1, 1, 0);
-                    top[3] = top[0] - v3_(0, 1, 0);
-
-                    // NOTE(joon) draw voxel outline
-                    metal_draw_line(render_encoder, bottom[0], bottom[1], v3_(1, 1, 1));
-                    metal_draw_line(render_encoder, bottom[1], bottom[2], v3_(1, 1, 1));
-                    metal_draw_line(render_encoder, bottom[2], bottom[3], v3_(1, 1, 1));
-                    metal_draw_line(render_encoder, bottom[3], bottom[0], v3_(1, 1, 1));
-
-                    metal_draw_line(render_encoder, top[0], top[1], v3_(1, 1, 1));
-                    metal_draw_line(render_encoder, top[1], top[2], v3_(1, 1, 1));
-                    metal_draw_line(render_encoder, top[2], top[3], v3_(1, 1, 1));
-                    metal_draw_line(render_encoder, top[3], top[0], v3_(1, 1, 1));
-
-                    metal_draw_line(render_encoder, bottom[0], top[2], v3_(1, 1, 1));
-                    metal_draw_line(render_encoder, bottom[1], top[3], v3_(1, 1, 1));
-                    metal_draw_line(render_encoder, bottom[2], top[0], v3_(1, 1, 1));
-                    metal_draw_line(render_encoder, bottom[3], top[1], v3_(1, 1, 1));
-                }
-#endif
-
-                // x axis
-                metal_draw_line(render_encoder, v3_(), v3_(100, 0, 0), v3_(0, 0, 1));
-                // y axis
-                metal_draw_line(render_encoder, v3_(), v3_(0, 100, 0), v3_(1, 0, 0));
-                // z axis
-                metal_draw_line(render_encoder, v3_(), v3_(0, 0, 100), v3_(0, 1, 0));
-
-                [render_encoder endEncoding];
-            
-                u64 time_before_presenting = mach_absolute_time();
-                u64 time_passed = mach_time_diff_in_nano_seconds(last_time, time_before_presenting, nano_seconds_per_tick);
-                u64 time_left_until_present_in_nano_seconds = target_nano_seconds_per_frame - time_passed;
-                                                            
-                double time_left_until_present_in_sec = time_left_until_present_in_nano_seconds/(double)sec_to_nano_sec;
-
-                // TODO(joon):currentdrawable vs nextdrawable?
-                // NOTE(joon): This will work find, as long as we match our display refresh rate with our game
-                [command_buffer presentDrawable: view.currentDrawable];
-                //[command_buffer presentDrawable:view.currentDrawable
-                                //atTime:time_left_until_present_in_sec];
-
-            }
-
-            // NOTE : equivalent to vkQueueSubmit,
-            // TODO(joon): Sync with the swap buffer!
-            [command_buffer commit];
-
+            update_and_render(&platform_api, &platform_input, &platform_memory, render_push_buffer, render_push_buffer_size);
         }
+
         light_angle += 0.01f;
 
         u64 time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
 
         // NOTE(joon): Because nanosleep is such a high resolution sleep method, for precise timing,
         // we need to undersleep and spend time in a loop
-        u64 undersleep_nano_seconds = 10000000;
+        u64 undersleep_nano_seconds = 100000000;
         if(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
         {
             timespec time_spec = {};

@@ -1,11 +1,7 @@
-/*
-   TODO(joon)
-   metal
-   - use indirect command buffer for drawing voxels
-*/
+#include "meka_metal.h"
 
 internal MTLViewport
-metal_set_viewport(f32 x, f32 y, f32 width, f32 height, f32 near = 0.0f, f32 far = 1.0f)
+metal_make_viewport(f32 x, f32 y, f32 width, f32 height, f32 near, f32 far)
 {
     MTLViewport result = {};
 
@@ -19,56 +15,76 @@ metal_set_viewport(f32 x, f32 y, f32 width, f32 height, f32 near = 0.0f, f32 far
     return result;
 }
 
-internal render_mesh
-metal_create_render_mesh_from_raw_mesh(id<MTLDevice> device, raw_mesh *raw_mesh, memory_arena *memory_arena)
+internal MTLScissorRect
+metal_make_scissor_rect(u32 x, u32 y, u32 width, u32 height)
 {
-    assert(raw_mesh->normals);
-    assert(raw_mesh->position_count == raw_mesh->normal_count);
-    // TODO(joon) : Does not allow certain vertex to have different normal index per face
-    if(raw_mesh->normal_indices)
-    {
-        assert(raw_mesh->indices[0] == raw_mesh->normal_indices[0]);
-    }
+    MTLScissorRect result = {};
 
-    // TODO(joon) : not super important, but what should be the size of this
-    temp_memory mesh_temp_memory = start_temp_memory(memory_arena, megabytes(16));
-
-    render_mesh result = {};
-    temp_vertex *vertices = push_array(&mesh_temp_memory, temp_vertex, raw_mesh->position_count);
-    for(u32 vertex_index = 0;
-            vertex_index < raw_mesh->position_count;
-            ++vertex_index)
-    {
-        temp_vertex *vertex = vertices + vertex_index;
-
-        // TODO(joon): does vf3 = v3 work just fine?
-        vertex->p.x = raw_mesh->positions[vertex_index].x;
-        vertex->p.y = raw_mesh->positions[vertex_index].y;
-        vertex->p.z = raw_mesh->positions[vertex_index].z;
-
-        assert(is_normalized(raw_mesh->normals[vertex_index]));
-
-        vertex->normal.x = raw_mesh->normals[vertex_index].x;
-        vertex->normal.y = raw_mesh->normals[vertex_index].y;
-        vertex->normal.z = raw_mesh->normals[vertex_index].z;
-    }
-
-    // NOTE/joon : MTLResourceStorageModeManaged requires the memory to be explictly synchronized
-    u32 vertex_buffer_size = sizeof(temp_vertex)*raw_mesh->position_count;
-    result.vertex_buffer = [device newBufferWithBytes: vertices
-                                        length: vertex_buffer_size 
-                                        options: MTLResourceStorageModeManaged];
-    [result.vertex_buffer didModifyRange:NSMakeRange(0, vertex_buffer_size)];
-
-    u32 index_buffer_size = sizeof(raw_mesh->indices[0])*raw_mesh->index_count;
-    result.index_buffer = [device newBufferWithBytes: raw_mesh->indices
-                                        length: index_buffer_size
-                                        options: MTLResourceStorageModeManaged];
-    [result.index_buffer didModifyRange:NSMakeRange(0, index_buffer_size)];
-
-    result.index_count = raw_mesh->index_count;
-
-    end_temp_memory(&mesh_temp_memory);
+    result.x = x;
+    result.y = y;
+    result.width = width;
+    result.height = height;
 
     return result;
 }
+
+// NOTE(joon) creates a shared memory between CPU and GPU
+// TODO(joon) Do we want the buffer to be more than 4GB?
+internal MetalSharedBuffer
+metal_create_shared_buffer(id<MTLDevice> device, u32 max_size)
+{
+    MetalSharedBuffer result = {};
+    result.buffer = [device 
+                    newBufferWithLength:max_size
+                    options:MTLResourceStorageModeShared];
+
+    result.memory = [result.buffer contents];
+    result.max_size = max_size;
+
+    return result;
+}
+
+internal void
+metal_write_shared_buffer(MetalSharedBuffer *buffer, void *source, u32 source_size)
+{
+    assert(source_size <= buffer->max_size);
+    memcpy(buffer->memory, source, source_size);
+}
+
+internal MetalManagedBuffer
+metal_create_managed_buffer(id<MTLDevice> device, u32 max_size)
+{
+    MetalManagedBuffer result = {};
+    result.buffer = [device 
+                    newBufferWithLength:max_size
+                    options:MTLResourceStorageModeManaged];
+
+    result.memory = [result.buffer contents];
+    result.max_size = max_size;
+
+    return result;
+}
+
+internal void
+metal_append_to_managed_buffer(MetalManagedBuffer *buffer, void *source, u32 source_size)
+{
+    memcpy((u8 *)buffer->memory + buffer->used, source, source_size);
+    buffer->used += source_size;
+
+    assert(buffer->used <= buffer->max_size);
+}
+
+internal void
+metal_flush_managed_buffer(MetalManagedBuffer *buffer)
+{
+    assert(buffer->used != 0);
+    NSRange range = NSMakeRange(0, buffer->used);
+
+    [buffer->buffer didModifyRange:range];
+
+    buffer->used = 0;
+
+}
+
+
+

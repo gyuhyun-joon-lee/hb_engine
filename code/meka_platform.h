@@ -2,6 +2,7 @@
  * Written by Gyuhyun 'Joon' Lee
  * https://github.com/meka-lopo/
  */
+
 #ifndef MEKA_PLATFORM_H
 #define MEKA_PLATFORM_H
 
@@ -9,32 +10,14 @@
 extern "C" {
 #endif
 
-#include <limits.h>
-#include <float.h>
 #include "meka_types.h" 
 
-typedef int32_t b32;
-typedef uintptr_t uintptr;
-
-#define U8_MAX UCHAR_MAX
-#define U16_MAX USHRT_MAX
-#define U32_MAX UINT_MAX
-
-#define I8_MIN SCHAR_MIN
-#define I8_MAX SCHAR_MAX
-#define I16_MIN SHRT_MIN
-#define I16_MAX SHRT_MAX
-#define I32_MIN INT_MIN
-#define I32_MAX INT_MAX
-
-typedef float r32;
-typedef double r64;
-
-#define assert(Expression) if(!(Expression)) {int *a = 0; *a = 0;}
-#define array_count(Array) (sizeof(Array) / sizeof(Array[0]))
+#define assert(expression) if(!(expression)) {int *a = 0; *a = 0;}
+#define array_count(array) (sizeof(array) / sizeof(array[0]))
 #define invalid_code_path assert(0)
 
 #define global static
+#define global_variable global
 #define local_persist static
 #define internal static
 
@@ -58,15 +41,7 @@ typedef double r64;
 
 #include "math.h"
 
-inline void
-Swap(u16 *a, u16 *b)
-{
-    u16 temp = *a;
-    *a = *b;
-    *b = temp;
-}
-
-struct platform_read_file_result
+struct PlatformReadFileResult
 {
     u8 *memory;
     u64 size; // TOOD/joon : make this to be at least 64bit
@@ -75,7 +50,7 @@ struct platform_read_file_result
 #define PLATFORM_GET_FILE_SIZE(name) u64 (name)(char *filename)
 typedef PLATFORM_GET_FILE_SIZE(platform_get_file_size);
 
-#define PLATFORM_READ_FILE(name) platform_read_file_result (name)(char *filename)
+#define PLATFORM_READ_FILE(name) PlatformReadFileResult (name)(char *filename)
 typedef PLATFORM_READ_FILE(platform_read_file);
 
 #define PLATFORM_WRITE_ENTIRE_FILE(name) void (name)(char *file_name, void *memory_to_write, u32 size)
@@ -84,58 +59,29 @@ typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 #define PLATFORM_FREE_FILE_MEMORY(name) void (name)(void *memory)
 typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
 
-struct platform_api
+struct PlatformAPI
 {
     platform_read_file *read_file;
     platform_write_entire_file *write_entire_file;
     platform_free_file_memory *free_file_memory;
 };
 
-internal u32
-GetCharCountNullTerminated(const char *buffer)
+struct PlatformInput
 {
-    u32 result = 0;
-    if(buffer)
-    {
-        while(buffer[result] != '\0')
-        {
-            ++result;
-        }
-    }
+    b32 move_up;
+    b32 move_down;
+    b32 move_left;
+    b32 move_right;
 
-    return result;
-}
+    b32 action_up;
+    b32 action_down;
+    b32 action_left;
+    b32 action_right;
 
-// TODO(joon) : inefficient for long char arrays
-// NOTE(joon) : No bound checking for the source char, which can be very dangerous!
-internal b32
-StringCompare(char *src, char *test)
-{
-    assert(src && test);
+    b32 space;
 
-    b32 result = true;
-    u32 testCount = GetCharCountNullTerminated(test);
-
-    for(u32 charIndex = 0;
-        charIndex < testCount;
-        ++charIndex)
-    {
-        if(src[charIndex] == '\0' ||
-            src[charIndex] != test[charIndex])
-        {
-            result = false;
-            break;
-        }
-    }
-
-    return result;
-}
-
-#if MEKA_ARM
-#include <arm_neon.h>
-#elif MEKA_X64
-#include <immintrin.h>
-#endif
+    f32 dt_per_frame;
+};
 
 // TODO/Joon: intrinsic zero memory?
 // TODO(joon): can be faster using wider vectors
@@ -187,18 +133,16 @@ reverse_bits(u8 value)
     return result;
 }
 
-struct platform_memory
+struct PlatformMemory
 {
     void *permanent_memory;
     u64 permanent_memory_size;
-    u64 permanent_memory_used;
 
     void *transient_memory;
     u64 transient_memory_size;
-    u64 transient_memory_used;
 };
 
-struct memory_arena
+struct MemoryArena
 {
     void *base;
     size_t total_size;
@@ -207,16 +151,13 @@ struct memory_arena
     u32 temp_memory_count;
 };
 
-
-internal memory_arena
-start_memory_arena(void *base, size_t size, u64 *used, b32 should_be_zero = true)
+internal MemoryArena
+start_memory_arena(void *base, size_t size, b32 should_be_zero = true)
 {
-    memory_arena result = {};
+    MemoryArena result = {};
 
-    result.base = (u8 *)base + *used;
+    result.base = (u8 *)base;
     result.total_size = size;
-
-    *used += result.total_size;
 
     // TODO/joon :zeroing memory every time might not be a best idea
     if(should_be_zero)
@@ -233,7 +174,7 @@ start_memory_arena(void *base, size_t size, u64 *used, b32 should_be_zero = true
 
 // TODO(joon) : Alignment might be an issue, always take account of that
 internal void *
-push_size(memory_arena *memory_arena, size_t size, size_t alignment = 0)
+push_size(MemoryArena *memory_arena, size_t size, size_t alignment = 0)
 {
     assert(size != 0);
     assert(memory_arena->temp_memory_count == 0);
@@ -245,10 +186,9 @@ push_size(memory_arena *memory_arena, size_t size, size_t alignment = 0)
     return result;
 }
 
-
-struct temp_memory
+struct TempMemory
 {
-    memory_arena *memory_arena;
+    MemoryArena *memory_arena;
 
     // TODO/Joon: temp memory is for arrays only, so dont need to keep track of 'used'?
     void *base;
@@ -258,7 +198,7 @@ struct temp_memory
 
 // TODO(joon) : Alignment might be an issue, always take account of that
 internal void *
-push_size(temp_memory *temp_memory, size_t size, size_t alignment = 0)
+push_size(TempMemory *temp_memory, size_t size, size_t alignment = 0)
 {
     assert(size != 0);
 
@@ -270,10 +210,10 @@ push_size(temp_memory *temp_memory, size_t size, size_t alignment = 0)
     return result;
 }
 
-internal temp_memory
-start_temp_memory(memory_arena *memory_arena, size_t size, b32 should_be_zero = true)
+internal TempMemory
+start_temp_memory(MemoryArena *memory_arena, size_t size, b32 should_be_zero = true)
 {
-    temp_memory result = {};
+    TempMemory result = {};
     result.base = (u8 *)memory_arena->base + memory_arena->used;
     result.total_size = size;
     result.memory_arena = memory_arena;
@@ -281,7 +221,6 @@ start_temp_memory(memory_arena *memory_arena, size_t size, b32 should_be_zero = 
     push_size(memory_arena, size);
 
     memory_arena->temp_memory_count++;
-
     if(should_be_zero)
     {
         zero_memory(result.base, result.total_size);
@@ -292,9 +231,9 @@ start_temp_memory(memory_arena *memory_arena, size_t size, b32 should_be_zero = 
 
 // TODO(joon) no need to pass the pointer
 internal void
-end_temp_memory(temp_memory *temp_memory)
+end_temp_memory(TempMemory *temp_memory)
 {
-    memory_arena *memory_arena = temp_memory->memory_arena;
+    MemoryArena *memory_arena = temp_memory->memory_arena;
     // NOTE(joon) : safe guard for using this temp memory after ending it 
     temp_memory->base = 0;
 

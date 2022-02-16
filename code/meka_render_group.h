@@ -1,5 +1,5 @@
-#ifndef MEKA_RENDER_H
-#define MEKA_RENDER_H
+#ifndef MEKA_RENDER_GROUP_H
+#define MEKA_RENDER_GROUP_H
 
 // NOTE(joon) : This forces us to copy these datas again to the actual 'usable' vertex buffer,
 // but even with more than 100000 vertices, the size of it isn't too big 
@@ -24,19 +24,15 @@ struct raw_mesh
     u32 texcoord_index_count;
 };
 
-// mesh that is ready in a form thatto be consumed by the renderer
-struct render_mesh
+// TODO(joon) pack a bunch of host coherent & visible buffer, save the offset of each of them, and then
+// pass to the GPU?
+struct Uniform
 {
-#if MEKA_VULKAN
-    vk_host_visible_coherent_buffer vertexBuffer;
-    vk_host_visible_coherent_buffer indexBuffer;
-#elif MEKA_METAL
-    // NOTE(joon): These are only accessible by the GPU
-    id<MTLBuffer> vertex_buffer;
-    id<MTLBuffer> index_buffer;
-#endif
+    // TODO(joon) move to per object uniform buffer
+    m4 model;
+    m4 proj_view;
 
-    unsigned index_count;
+    alignas(16) v3 light_p;
 };
 
 /*
@@ -50,7 +46,8 @@ struct render_mesh
 
     This gives us more reasonable world coordinate when we move from camera space to world space 
 */
-struct camera
+// TODO(joon) make this to be entirely quarternion-based
+struct Camera
 {
     // TODO(joon): dont need to store these values, when we finalize the camera code?
     v3 initial_x_axis;
@@ -58,6 +55,9 @@ struct camera
     v3 initial_z_axis;
 
     v3 p;
+
+    f32 focal_length;
+
     union
     {
         struct
@@ -78,14 +78,53 @@ struct camera
     };
 };
 
-#if  0
-struct uniform_buffer
+enum RenderEntryType
 {
-    // NOTE(joon) : mat4 should be 16 bytes aligned
-    alignas(16) m4 model;
-    alignas(16) m4 projView;
-    alignas(16) v3 lightP;
+    render_entry_type_voxel,
+    render_entry_type_cube,
+    render_entry_type_line,
 };
-#endif
+
+struct RenderEntryHeader
+{
+    // NOTE(joon) This should _always_ come first
+    RenderEntryType type;
+    
+};
+
+struct RenderEntryVoxelChunk
+{
+    RenderEntryHeader header;
+
+    void *chunk_data; // just storing the pointer
+    u32 chunk_size; // around 0.2mb
+};
+
+struct RenderEntryVoxel
+{
+    RenderEntryHeader header;
+
+    // Every voxel is even sized, so we will not store dim here
+    v3 p;
+    u32 color;
+};
+
+struct RenderEntryLine
+{
+    RenderEntryHeader header;
+
+    v3 start;
+    v3 end;
+    v3 color;
+};
+
+struct RenderGroup
+{
+    u8 *render_push_buffer;
+    u32 render_push_buffer_used;
+    u32 render_push_buffer_max_size;
+
+    Camera camera;
+};
 
 #endif

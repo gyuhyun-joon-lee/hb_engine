@@ -851,6 +851,22 @@ lerp(v3 min, r32 t, v3 max)
     return result;
 }
 
+inline f32
+max_component(v3 a)
+{
+    f32 result = maximum(maximum(a.x, a.y), a.z);
+
+    return result;
+}
+
+inline f32
+min_component(v3 a)
+{
+    f32 result = minimum(minimum(a.x, a.y), a.z);
+
+    return result;
+}
+
 // 0x11 22 33 44
 //    3  2  1  0 - little endian
 //    0  1  2  3 - big endian

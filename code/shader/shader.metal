@@ -5,150 +5,85 @@ using namespace metal;
 #define MEKA_METAL_SHADER
 #include "../meka_metal_shader_shared.h"
 
-// Vertex shader outputs and fragment shader inputs
-struct vertex_output
+#if 0
+struct LineVertexOutput
 {
-    // @NOTE/Joon: [[position]] -> indicator that this is clip space position
-    // This is mandatory to be inside the vertex output struct
-    r32_4 clip_position [[position]];
-
-    // @NOTE/Joon : These values are in world space
-    r32_3 p;
-    r32_3 normal;
-    r32_3 light_p;
-    r32_3 color;
+    float4 clip_p[[position]];
+    float3 color;
 };
-
-// NOTE(joon) : vertex is a prefix for vertex shader
-vertex vertex_output
-vertex_function(uint vertexID [[vertex_id]],
-             constant temp_vertex *vertices [[buffer(0)]], 
-             constant per_frame_data *per_frame_data [[buffer(1)]],
-             constant per_object_data *per_object_data [[buffer(2)]])
-{
-    vertex_output output = {};
-
-    r32_3 model_p = vertices[vertexID].p;
-    r32_3 normal = vertices[vertexID].normal;
-
-    r32_3 world_p = (per_object_data->model*convert_to_r32_4(model_p, 1.0f)).xyz;
-
-    output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
-
-    output.p = world_p;
-    output.normal = normalize((per_object_data->model * convert_to_r32_4(normal, 0.0f)).xyz);
-    output.light_p = per_frame_data->light_p;
-    output.color = per_object_data->color;
-
-    return output;
-}
-
-fragment r32_4 
-phong_frag_function(vertex_output vertex_output [[stage_in]])
-{
-    r32_3 light_color = {1, 1, 1};
-    r32_3 light_dir = normalize(vertex_output.light_p - vertex_output.p.xyz);
-
-    //float distanceSquare = dot(vertex_output.light_p, vertex_output.p.xyz);
-    //float attenuation = 10000.0f/distanceSquare;
-
-    r32_3 ambient = light_color * 0.0f;
-    r32_3 diffuse = light_color*max(dot(light_dir, vertex_output.normal), 0.0f);
-
-    r32_3 result_color = ambient + diffuse;
-    r32_4 out_color = convert_to_r32_4(result_color, 1.0f);
-    //out_color = 2.f*R32_4(48/255.0f, 10/255.0f, 36/255.0f, 1);
-
-    return out_color;
-}
-
-// NOTE(joon): Not exactly doing the raytracing, just rendering the raytraced objects
-// NOTE(joon): This also receives a world coordinate position as an input
-vertex vertex_output
-raytracing_vertex_function(uint vertexID [[vertex_id]],
-                            constant r32_3 *vertices [[buffer(0)]],
-                            constant per_frame_data *per_frame_data [[buffer(1)]],
-                            constant per_object_data *per_object_data [[buffer(2)]])
-{
-    vertex_output output = {};
-
-    r32_3 world_p = vertices[vertexID].xyz;
-
-    output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
-
-    output.color = per_object_data->color;
-
-    return output;
-}
-
-fragment r32_4 
-raytracing_frag_function(vertex_output vertex_output [[stage_in]])
-{
-    return convert_to_r32_4(vertex_output.color, 1.0f);
-}
-
-struct line_vertex_output
-{
-    r32_4 clip_position [[position]];
-
-    r32_3 color;
-};
-
 // NOTE(joon) : line vertex function gets a world position input
-vertex line_vertex_output
-line_vertex_function(uint vertexID [[vertex_id]],
+vertex LineVertexOutput
+line_vertex(uint vertexID [[vertex_id]],
                     constant line_vertex *vertices [[buffer(0)]],
-                    constant per_frame_data *per_frame_data [[buffer(1)]],
-                    constant per_object_data *per_object_data [[buffer(2)]])
+                    constant PerFrameData *per_frame_data [[buffer(1)]],
+                    constant PerObjectData *per_object_data [[buffer(2)]])
 {
-    line_vertex_output output = {};
+    LineVertexOutput result = {};
 
-    r32_3 world_p = vertices[vertexID].p;
+    float3 world_p = vertices[vertexID].p;
 
-    output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
-    //output.clip_position = convert_to_r32_4(world_p, 1.0f);
+    result.clip_position = per_frame_data->proj_view*convert_to_float4(world_p, 1.0f);
+    //output.clip_position = convert_to_float4(world_p, 1.0f);
     //output.clip_position = {10, 0, 0, 1};
 
-    output.color = per_object_data->color;
+    result.color = per_object_data->color;
 
-    return output;
+    return result;
 }
 
-fragment r32_4 
-line_frag_function(vertex_output vertex_output [[stage_in]])
+fragment float4 
+line_frag(LineVertexOutput vertex_output [[stage_in]])
 {
-    return convert_to_r32_4(vertex_output.color, 1.0f);
+    return float4(vertex_output.color, 1.0f);
 }
+#endif
 
 
-struct voxel_vertex_output
+struct VoxelVertexOutput
 {
-    r32_4 clip_position [[position]];
+    float4 clip_p [[position]];
+
+    float3 p [[flat]];
+    float3 normal [[flat]];
+
+    float4 color; 
 };
 
 // NOTE(joon) : vertex is a prefix for vertex shader
-vertex voxel_vertex_output
-voxel_vertex_function(uint vertexID [[vertex_id]],
-             constant r32_3 *vertices [[buffer(0)]], 
-             constant per_frame_data *per_frame_data [[buffer(1)]],
-             constant per_object_data *per_object_data [[buffer(2)]])
+vertex VoxelVertexOutput
+voxel_vertex(uint vertexID [[vertex_id]],
+                uint instanceID [[instance_id]],
+                constant float *vertices [[buffer(0)]], 
+                constant PerFrameData *per_frame_data [[buffer(1)]],
+                constant float *voxel_positions[[buffer(2)]],
+                constant u32 *voxel_colors[[buffer(3)]])
 {
-    voxel_vertex_output output = {};
+    VoxelVertexOutput result = {};
 
-    r32_3 model_p = vertices[vertexID];
+    // TODO(joon) better way of doing this?
+    float4 world_p = float4(voxel_positions[3*instanceID] + vertices[3*vertexID+0], 
+                            voxel_positions[3*instanceID+1] + vertices[3*vertexID+1],
+                            voxel_positions[3*instanceID+2] + vertices[3*vertexID+2],
+                            1.0f);
 
-    r32_3 world_p = (per_object_data->model*convert_to_r32_4(model_p, 1.0f)).xyz;
+    result.clip_p = per_frame_data->proj_view*world_p;
+    result.p = world_p.xyz;
+    result.normal = normalize(result.p);
 
-    output.clip_position = per_frame_data->proj_view*convert_to_r32_4(world_p, 1.0f);
+    uint color = voxel_colors[instanceID];
+    result.color = float4(round((float)((color >> 0) & 0xff)) / 255.0f,
+                        round((float)((color >> 8) & 0xff)) / 255.0f,
+                        round((float)((color >> 16) & 0xff)) / 255.0f,
+                        round((float)((color >> 24) & 0xff)) / 255.0f);
 
-    return output;
+    return result;
 }
 
-fragment r32_4 
-voxel_frag_function(voxel_vertex_output vertex_output [[stage_in]])
+fragment float4 
+voxel_frag(VoxelVertexOutput vertex_output [[stage_in]])
 {
-    r32_4 out_color = 2.f*R32_4(48/255.0f, 10/255.0f, 36/255.0f, 1);
+    float4 result = vertex_output.color;
 
-    return out_color;
+    return result;
 }
 

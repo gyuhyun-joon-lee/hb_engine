@@ -96,7 +96,7 @@ ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_origin, v3 ray_dir)
        (1 - u - v)*v0 + u*v1 + v*v2;
 
        Note that there are a lot of same cross products, which we can calculate just once and reuse
-       v0, v1, v2 can be in any order
+       Also, v0, v1, v2 can be in any order
     */
     r32 hit_t_threshold = 0.0001f;
 

@@ -1,12 +1,42 @@
 #include "meka_voxel.h"
 #define Hash_Is_Empty U32_Max
 
-#if 0
+#if 1
 // NOTE(joon) if the chunk was empty, x value of the chunk hash is set to this value
 #define Empty_Hash U32_Max
 
-internal voxel_chunk_hash *
-get_voxel_chunk_hash(voxel_chunk_hash *hashes, u32 hash_count, 
+internal void
+initialize_voxel_world(VoxelWorld *world)
+{
+    u32 hash_count = array_count(world->chunk_hashes);
+    for(u32 hash_index = 0;
+            hash_index < hash_count;
+            ++hash_index)
+    {
+        VoxelChunkHash *hash = world->chunk_hashes + hash_index;
+        hash->x = Empty_Hash;
+        hash->y = Empty_Hash;
+        hash->z = Empty_Hash;
+
+        hash->first_node_offset = Empty_Hash; 
+    }
+
+    // TODO(joon) this helps when we simulate the voxels, but we can use SVO or DAG when we 'store' the voxels as a map!
+    // or, we can just store the leaf nodes sparsely, as the leaf nodes takes the most of the space
+    for(u32 i = 0;
+            i < 8;
+            ++i)
+    {
+        world->node_count_per_chunk += power((u32)8, (u32)i);
+    }
+
+    world->chunk_dim = 256;
+    world->lod = 8;
+    assert(power((u32)2, (u32)world->lod) == world->chunk_dim);
+}
+
+internal VoxelChunkHash *
+get_voxel_chunk_hash(VoxelChunkHash *hashes, u32 hash_count, 
                     u32 chunk_x, u32 chunk_y, u32 chunk_z)
 {
     // TODO(joon) better hash function
@@ -16,10 +46,10 @@ get_voxel_chunk_hash(voxel_chunk_hash *hashes, u32 hash_count,
     // TODO(joon) used to check if we have looped through the whole hash chunk or not, any better way to do this?
     u32 first_index = hash_key;
     u32 search_index = first_index;
-    voxel_chunk_hash *found_chunk = 0;
+    VoxelChunkHash *found_chunk = 0;
     while(found_chunk == 0)
     {
-        voxel_chunk_hash *search = hashes + search_index;
+        VoxelChunkHash *search = hashes + search_index;
         if(search->x == chunk_x && search->y == chunk_y && search->z == chunk_z)
         {
             found_chunk = search;
@@ -32,7 +62,6 @@ get_voxel_chunk_hash(voxel_chunk_hash *hashes, u32 hash_count,
             found_chunk->x = chunk_x;
             found_chunk->y = chunk_y;
             found_chunk->z = chunk_z;
-            found_chunk->first_child_offset = 0;
 
             break;
         }
@@ -48,42 +77,14 @@ get_voxel_chunk_hash(voxel_chunk_hash *hashes, u32 hash_count,
     return found_chunk;
 }
 
-internal void
-insert_voxel(voxel_chunk_hash *hashes, u32 hash_count, 
-            u32 chunk_dim, 
-            memory_arena *voxel_memory_arena,
-            u32 x, u32 y, u32 z) // x, y, z are in world space, in voxel 
-{
-    u32 chunk_x = x/chunk_dim;
-    u32 chunk_y = y/chunk_dim;
-    u32 chunk_z = z/chunk_dim;
-
-    voxel_chunk_hash *chunk = get_voxel_chunk_hash(hashes, hash_count, chunk_x, chunk_y, chunk_z);
-
-    u32 *first_node = voxel_memory_arena->base + chunk->first_node_offset;
-    u32 child_offset = (*first_node >> 8);
-    u8 child_bit = (*first_node & 0xff);
-    if(!child_bit)
-    {
-        // NOTE(joon): This chunk was never accessed, and should be filled
-    }
-    else
-    {
-        u32 *end_node = first_node;
-        while(1)
-        {
-            if(end_node->)
-        }
-    }
-}
-
-#if 1
+#if 0
 struct voxel
 {
     u32 x;
     u32 y;
     u32 z;
 };
+
 
 internal void 
 get_all_voxels_inside_chunk(u32 *node, temp_memory *memory_to_fill, u32 x, u32 y, u32 z, u32 dim)
@@ -154,7 +155,7 @@ get_all_voxels_inside_chunk(u32 *node, temp_memory *memory_to_fill, u32 x, u32 y
             if(offset_to_child == 0)
             {
                 assert(dim == 1);
-                voxel *v = push_struct(memory_to_fill, voxel);
+                v3u *voxel = push_struct(memory_to_fill, v3u);
                 v->x = voxel_x;
                 v->y = voxel_y;
                 v->z = voxel_z;
@@ -256,16 +257,70 @@ insert_voxel(u8 *start, u32 stride, u32 x, u32 y, u32 z, u32 dim, u32 lod)
     insert_voxel(next_lod_start, next_stride, x, y, z, dim/2, lod+1);
 }
 
+internal void
+add_voxel_entity_from_vox_file(GameState *game_state, load_vox_result vox)
+{
+    for(u32 voxel_index = 0;
+            voxel_index < vox.voxel_count;
+            ++voxel_index)
+    {
+        // TODO(joon) we also need to take account of the chunk pos?
+        u8 x = vox.xs[voxel_index];
+        u8 y = vox.ys[voxel_index];
+        u8 z = vox.zs[voxel_index];
+        u32 color = vox.palette[vox.colorIDs[voxel_index]];
+
+        add_voxel_entity(game_state, v3_(x, y, z), color);
+    }
+
+    int a = 1;
+}
+
+internal void
+allocate_voxel_chunk_from_vox_file(VoxelWorld *world, MemoryArena *arena, load_vox_result vox)
+{
+    for(u32 voxel_index = 0;
+            voxel_index < vox.voxel_count;
+            ++voxel_index)
+    {
+        // TODO(joon) we also need to take account of the chunk pos?
+        u8 x = vox.xs[voxel_index];
+        u8 y = vox.ys[voxel_index];
+        u8 z = vox.zs[voxel_index];
+
+        // TODO(joon) This might take more time, but is necessarily because the order of the voxels are unpredictable
+        // because we are keep loading the voxels from the vox file without keeping the chunk information.
+        // we can definitely do better here
+        VoxelChunkHash *chunk = get_voxel_chunk_hash(world->chunk_hashes, array_count(world->chunk_hashes), x, y, z);
+
+        u8 *nodes = 0;
+        if(chunk->first_node_offset == U32_Max)
+        {
+            u32 prev_used_amount = arena->used;
+            nodes = (u8 *)push_size(arena, world->node_count_per_chunk);
+            chunk->first_node_offset = prev_used_amount;
+        }
+        else
+        {
+            nodes = (u8 *)arena->base + chunk->first_node_offset;
+        }
+
+        insert_voxel(nodes, 0, x, y, z, world->chunk_dim, 0);
+    }
+
+    //validate_voxels_with_vox_file(loaded_vox, nodes);
+}
+
 // NOTE(joon) inputs are represented in raw voxel space
 // TODO(joon) also take account of the the chunk!
 
-struct get_voxel_result
+struct GetVoxelResult
 {
     b32 exist;
 };
 
 internal void
-get_voxel(u8 *start, u32 stride, u32 x, u32 y, u32 z, u32 dim, u32 lod, get_voxel_result *result)
+get_voxel(u8 *start, u32 stride, u32 x, u32 y, u32 z, u32 dim, u32 lod, GetVoxelResult *result)
 {
     u32 node_size = 1;
 
@@ -332,6 +387,7 @@ get_voxel(u8 *start, u32 stride, u32 x, u32 y, u32 z, u32 dim, u32 lod, get_voxe
     }
 }
 
+// NOTE(joon) 
 internal void
 validate_voxels_with_vox_file(load_vox_result vox, u8 *nodes)
 {
@@ -370,7 +426,7 @@ validate_voxels_with_vox_file(load_vox_result vox, u8 *nodes)
                     int breakhere = 0;
                 }
 
-                get_voxel_result voxel = {};
+                GetVoxelResult voxel = {};
                 get_voxel(nodes, 0, x, y, z, 256, 0, &voxel);
 
                 assert(voxel.exist == should_exist);
@@ -379,22 +435,29 @@ validate_voxels_with_vox_file(load_vox_result vox, u8 *nodes)
     }
 }
 
+/*
+   chunk based culling in cpu
+   push voxel chunk as - is, including the position
+   'somehow' process the chunk inside the compute shader, and get the voxels that are visible(which returns what?? we can also do masked-out version of it, )
+
+   // between here, we should also do the raytracing.. omg
+
+   draw all visible voxels
+*/
+
 internal void
-render_all_voxels(id<MTLRenderCommandEncoder> render_encoder, per_object_data *per_object_data, u8 *start, u32 stride, u32 x, u32 y, u32 z, u32 dim, u32 lod)
+push_voxel_chunk(void *push_buffer, u32 *push_buffer_size, u32 total_push_buffer_size)
+{
+}
+
+internal void
+push_all_voxels(void *push_buffer, u32 *push_buffer_size, u32 total_push_buffer_size, u8 *start, u32 stride, u32 x, u32 y, u32 z, u32 dim, u32 lod)
 {
     if(dim == 1)
     {
         v3 center = get_voxel_center_in_meter(x, y, z, v3_(1, 1, 1));
 
-        per_object_data->model = translate_m4(center.x, center.y, center.z)*scale_m4(1, 1, 1);
-
-        [render_encoder setVertexBytes: per_object_data
-                        length: sizeof(*per_object_data)
-                        atIndex: 2]; 
-
-        [render_encoder drawPrimitives:MTLPrimitiveTypeTriangle
-                                vertexStart:0 
-                                vertexCount:36];
+        // TODO(joon) : push here!
         return;
     }
 
@@ -414,52 +477,69 @@ render_all_voxels(id<MTLRenderCommandEncoder> render_encoder, per_object_data *p
             u8 *next_lod_start = start + node_size * power((u32)8, (u32)lod);
             u32 next_stride = 8 * stride + bit_shift_index * node_size;
 
+            u32 next_x = x;
+            u32 next_y = y;
+            u32 next_z = z;
+
             switch(scan_mask)
             {
                 case voxel_p_000:
                 {
-                    render_all_voxels(render_encoder, per_object_data, next_lod_start, next_stride, x, y, z, dim/2, lod+1);
                 }break;
 
                 case voxel_p_100:
                 {
-                    render_all_voxels(render_encoder, per_object_data, next_lod_start, next_stride, x + half_dim, y, z, dim/2, lod+1);
+                    next_x += half_dim;
                 }break;
 
                 case voxel_p_010:
                 {
-                    render_all_voxels(render_encoder, per_object_data, next_lod_start, next_stride, x, y + half_dim, z, dim/2, lod+1);
+                    next_y += half_dim;
                 }break;
 
                 case voxel_p_110:
                 {
-                    render_all_voxels(render_encoder, per_object_data, next_lod_start, next_stride, x + half_dim, y + half_dim, z, dim/2, lod+1);
+                    next_x += half_dim;
+                    next_y += half_dim;
                 }break;
 
                 case voxel_p_001:
                 {
-                    render_all_voxels(render_encoder, per_object_data, next_lod_start, next_stride, x, y, z + half_dim, dim/2, lod+1);
+                    next_z += half_dim;
                 }break;
 
                 case voxel_p_101:
                 {
-                    render_all_voxels(render_encoder, per_object_data, next_lod_start, next_stride, x + half_dim, y, z + half_dim, dim/2, lod+1);
+                    next_x += half_dim;
+                    next_z += half_dim;
                 }break;
 
                 case voxel_p_011:
                 {
-                    render_all_voxels(render_encoder, per_object_data, next_lod_start, next_stride, x, y + half_dim, z + half_dim, dim/2, lod+1);
+                    next_y += half_dim;
+                    next_z += half_dim;
                 }break;
 
                 case voxel_p_111:
                 {
-                    render_all_voxels(render_encoder, per_object_data, next_lod_start, next_stride, x + half_dim, y + half_dim, z + half_dim, dim/2, lod+1);
+                    next_x += half_dim;
+                    next_y += half_dim;
+                    next_z += half_dim;
                 }break;
 
             }
+
+            //mtl_render_all_voxels(render_encoder, per_object_data, next_lod_start, next_stride, next_x, next_y, next_z, dim/2, lod+1);
         }
 
         scan_mask = scan_mask >> 1;
     }
+}
+
+internal v3u
+get_first_intersecting_voxel(v3 ray_origin, v3 ray_dir, VoxelWorld * world)
+{
+    v3u result = {};
+    return result;
 }
 

@@ -1,14 +1,14 @@
 COMPILER = clang 
-ARCHITECTURE = -march=armv8+simd #TODO(joon): -arch arm64 makes the code slower?
+ARCHITECTURE = -arch arm64 #TODO(joon): -arch arm64 makes the code slower? #TODO(joon) -march=armv8+simd causes error?
 MAKEFLAGS += --silent
 
 # -O0 = unoptimized, -O2 = compiler optimized
-COMPILER_FLAGS = -g -Wall -O0 -std=c++11 -lm -pthread -D MEKA_DEBUG=1 -D MEKA_LLVM=1 -D MEKA_ARM=1 -D MEKA_VULKAN=0 -D MEKA_METAL=1 #to use any third part library, enable this -I../external
+COMPILER_FLAGS = -g -Wall -O2 -std=c++11 -lm -pthread -D MEKA_WINDOWS=0 -D MEKA_MACOS=1 -D MEKA_DEBUG=1 -D MEKA_LLVM=1 -D MEKA_ARM=1 -D MEKA_VULKAN=0 -D MEKA_METAL=1
 # to disable warning, prefix the name of the warning with no-
-COMPILER_IGNORE_WARNINGS = -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-writable-strings -Wno-switch -Wno-objc-missing-super-calls -Wno-missing-braces -Wnonportable-include-path -Wno-uninitialized
+COMPILER_IGNORE_WARNINGS = -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-writable-strings -Wno-switch -Wno-objc-missing-super-calls -Wno-missing-braces -Wnonportable-include-path -Wno-uninitialized -Wno-nonportable-include-path -Wno-tautological-bitwise-compare
 MAIN_CODE_PATH = ../code
 
-MACOS_BUILD_PATH = ../../build
+MACOS_BUILD_PATH = ../build
 MACOS_APP_NAME = meka.app
 MACOS_EXE_PATH = $(MACOS_BUILD_PATH)/$(MACOS_APP_NAME)/Contents/MacOS
 MACOS_RESOURCE_PATH = $(MACOS_BUILD_PATH)/$(MACOS_APP_NAME)/Contents/Resources
@@ -29,7 +29,7 @@ make_app :
 # target:  dependency1 dependency2 ...
 #       <tab> command
 compile_main : $(MAIN_CODE_PATH)/macos_meka.mm
-	$(COMPILER) $(ARCHITECTURE) $(COMPILER_FLAGS) $(COMPILER_IGNORE_WARNINGS)  $(MACOS_FRAMEWORK) -o $(MACOS_EXE_PATH)/meka $(MAIN_CODE_PATH)/macos_meka.mm 
+	$(COMPILER) $(ARCHITECTURE) $(COMPILER_FLAGS) $(COMPILER_IGNORE_WARNINGS) $(MACOS_FRAMEWORK) -o $(MACOS_EXE_PATH)/meka $(MAIN_CODE_PATH)/macos_meka.mm 
 
 #clean all the object files.
 cleanup : 

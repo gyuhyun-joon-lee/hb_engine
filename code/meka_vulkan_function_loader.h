@@ -1,9 +1,5 @@
-#ifndef MIMIC_VULKAN_FUNCTION_POINTERS
-#define MIMIC_VULKAN_FUNCTION_POINTERS
-
-// NOTE(joon) : These disables pre defined functions
-#define VK_NO_PROTOTYPES 
-#include <vulkan/vulkan.h>
+#ifndef MEKA_VULKAN_FUNCTION_POINTERS
+#define MEKA_VULKAN_FUNCTION_POINTERS
 
 #define VFType(name) PFN_##name
 // NOTE(joon) : global, instance, device level proc address loader functions
@@ -32,9 +28,12 @@ global_variable VFType(vkEnumerateDeviceExtensionProperties) vkEnumerateDeviceEx
 global_variable VFType(vkDestroySurfaceKHR) vkDestroySurfaceKHR;
 
 // NOTE(joon) : Device level functions
-#ifdef VK_USE_PLATFORM_WIN32_KHR
+#ifdef MEKA_WIN32
 global_variable VFType(vkCreateWin32SurfaceKHR) vkCreateWin32SurfaceKHR;
+#elif MEKA_MACOS
+global_variable VFType(vkCreateMetalSurfaceEXT) vkCreateMetalSurfaceEXT;
 #endif
+
 global_variable VFType(vkCreateSwapchainKHR) vkCreateSwapchainKHR;
 global_variable VFType(vkGetSwapchainImagesKHR) vkGetSwapchainImagesKHR;
 global_variable VFType(vkAcquireNextImageKHR) vkAcquireNextImageKHR;
@@ -95,12 +94,11 @@ global_variable VFType(vkDestroyRenderPass) vkDestroyRenderPass;
 global_variable VFType(vkDestroySwapchainKHR) vkDestroySwapchainKHR;
 global_variable VFType(vkDestroyDevice) vkDestroyDevice;
 
-#define GetInstanceFunction(instance, name) name = (VFType(name))vkGetInstanceProcAddr(instance, #name); Assert(name)
-#define GetDeviceFunction(device, name) name = (VFType(name))vkGetDeviceProcAddr(device, #name); Assert(name)
+#define get_instance_function(instance, name) name = (VFType(name))vkGetInstanceProcAddr(instance, #name); assert(name)
+#define get_device_function(device, name) name = (VFType(name))vkGetDeviceProcAddr(device, #name); assert(name)
 
 // TODO(joon) : Make this more platform-independent!
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-#define LoadProcAddress(function) function = (VFType(function))GetProcAddress(library, #function)
+#ifdef MEKA_WIN32
 
 internal void
 Win32LoadVulkanLibrary(char *filename)
@@ -108,117 +106,119 @@ Win32LoadVulkanLibrary(char *filename)
     HMODULE library = LoadLibraryA(filename);
     if(library)
     {
-        LoadProcAddress(vkGetInstanceProcAddr);
+        vkGetInstanceProcAddr = (VFType(vkGetInstanceProcAddr))GetProcAddress(library, vkGetInstanceProcAddr);
     }
     else
     {
         // TODO(joon) : Log
-        Assert(0);
+        assert(0);
     }
 }
 
-#elif VK_USE_PLATFORM_MACOS_MVK // TODO(joon) : VK_USE_PLATFORM_METAL_EXT?
+#elif VK_MACOS // TODO(joon) : VK_USE_PLATFORM_METAL_EXT?
 #endif
 
 internal void
-ResolvePreInstanceLevelFunctions()
+resolve_pre_instance_functions()
 {
-    GetInstanceFunction(0, vkCreateInstance);
-    GetInstanceFunction(0, vkEnumerateInstanceLayerProperties);
-    GetInstanceFunction(0, vkEnumerateInstanceExtensionProperties);
+    get_instance_function(0, vkCreateInstance);
+    get_instance_function(0, vkEnumerateInstanceLayerProperties);
+    get_instance_function(0, vkEnumerateInstanceExtensionProperties);
 }
 
 internal void
-ResolveInstanceLevelFunctions(VkInstance instance)
+resolve_instance_functions(VkInstance instance)
 {
-    GetInstanceFunction(instance, vkGetPhysicalDeviceQueueFamilyProperties);
-    GetInstanceFunction(instance, vkEnumeratePhysicalDevices);
-    GetInstanceFunction(instance, vkGetPhysicalDeviceProperties);
-    GetInstanceFunction(instance, vkGetDeviceProcAddr);
-    GetInstanceFunction(instance, vkGetPhysicalDeviceFeatures);
-    GetInstanceFunction(instance, vkGetPhysicalDeviceQueueFamilyProperties);
-    GetInstanceFunction(instance, vkGetPhysicalDeviceSurfaceFormatsKHR);
-    GetInstanceFunction(instance, vkGetPhysicalDeviceSurfacePresentModesKHR);
+    get_instance_function(instance, vkGetPhysicalDeviceQueueFamilyProperties);
+    get_instance_function(instance, vkEnumeratePhysicalDevices);
+    get_instance_function(instance, vkGetPhysicalDeviceProperties);
+    get_instance_function(instance, vkGetDeviceProcAddr);
+    get_instance_function(instance, vkGetPhysicalDeviceFeatures);
+    get_instance_function(instance, vkGetPhysicalDeviceQueueFamilyProperties);
+    get_instance_function(instance, vkGetPhysicalDeviceSurfaceFormatsKHR);
+    get_instance_function(instance, vkGetPhysicalDeviceSurfacePresentModesKHR);
 
-    GetInstanceFunction(instance, vkCreateDevice);
-    GetInstanceFunction(instance, vkDestroyInstance);
-    GetInstanceFunction(instance, vkGetPhysicalDeviceSurfaceSupportKHR);
-    GetInstanceFunction(instance, vkCreateDebugUtilsMessengerEXT);
-    GetInstanceFunction(instance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
-    GetInstanceFunction(instance, vkGetPhysicalDeviceMemoryProperties);
-    GetInstanceFunction(instance, vkEnumerateDeviceExtensionProperties);
-    GetInstanceFunction(instance, vkDestroySurfaceKHR);
+    get_instance_function(instance, vkCreateDevice);
+    get_instance_function(instance, vkDestroyInstance);
+    get_instance_function(instance, vkGetPhysicalDeviceSurfaceSupportKHR);
+    get_instance_function(instance, vkCreateDebugUtilsMessengerEXT);
+    get_instance_function(instance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
+    get_instance_function(instance, vkGetPhysicalDeviceMemoryProperties);
+    get_instance_function(instance, vkEnumerateDeviceExtensionProperties);
+    get_instance_function(instance, vkDestroySurfaceKHR);
 
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-    GetInstanceFunction(instance, vkCreateWin32SurfaceKHR);
+#ifdef MEKA_WIN32
+    get_instance_function(instance, vkCreateWin32SurfaceKHR);
+#elif MEKA_MACOS
+    get_instance_function(instance, vkCreateMetalSurfaceEXT);
 #endif
 }
 
 internal void
 ResolveDeviceLevelFunctions(VkDevice device)
 {
-    GetDeviceFunction(device, vkCreateSwapchainKHR);
-    GetDeviceFunction(device, vkDestroySwapchainKHR);
-    GetDeviceFunction(device, vkGetSwapchainImagesKHR);
-    GetDeviceFunction(device, vkAcquireNextImageKHR);
-    GetDeviceFunction(device, vkQueuePresentKHR);
-    GetDeviceFunction(device, vkGetDeviceQueue);
-    GetDeviceFunction(device, vkCreateCommandPool);
-    GetDeviceFunction(device, vkCreateRenderPass);
-    GetDeviceFunction(device, vkCreateShaderModule);
-    GetDeviceFunction(device, vkCreatePipelineLayout);
-    GetDeviceFunction(device, vkCreateGraphicsPipelines);
-    GetDeviceFunction(device, vkDestroyShaderModule);
-    GetDeviceFunction(device, vkCreateImageView);
-    GetDeviceFunction(device, vkCreateFramebuffer);
-    GetDeviceFunction(device, vkAllocateCommandBuffers);
-    GetDeviceFunction(device, vkCreateSemaphore);
-    GetDeviceFunction(device, vkCreateFence);
-    GetDeviceFunction(device, vkCmdBeginRenderPass);
-    GetDeviceFunction(device, vkCmdEndRenderPass);
-    GetDeviceFunction(device, vkCreateBuffer);
-    GetDeviceFunction(device, vkAllocateMemory);
-    GetDeviceFunction(device, vkCmdBindVertexBuffers);
-    GetDeviceFunction(device, vkBindBufferMemory);
-    GetDeviceFunction(device, vkBeginCommandBuffer);
-    GetDeviceFunction(device, vkEndCommandBuffer);
-    GetDeviceFunction(device, vkCmdUpdateBuffer);
-    GetDeviceFunction(device, vkGetBufferMemoryRequirements);
-    GetDeviceFunction(device, vkCmdDraw);
-    GetDeviceFunction(device, vkCmdBindPipeline);
-    GetDeviceFunction(device, vkQueueSubmit);
-    GetDeviceFunction(device, vkCmdClearColorImage);
-    GetDeviceFunction(device, vkCmdPipelineBarrier);
-    GetDeviceFunction(device, vkQueueWaitIdle);
-    GetDeviceFunction(device, vkGetFenceStatus);
-    GetDeviceFunction(device, vkWaitForFences);
-    GetDeviceFunction(device, vkResetFences);
-    GetDeviceFunction(device, vkDeviceWaitIdle);
-    GetDeviceFunction(device, vkCmdSetViewport);
-    GetDeviceFunction(device, vkCmdSetScissor);
-    GetDeviceFunction(device, vkMapMemory);
-    GetDeviceFunction(device, vkCmdBindIndexBuffer);
-    GetDeviceFunction(device, vkCmdDrawIndexed);
-    GetDeviceFunction(device, vkCreateDescriptorSetLayout);
-    GetDeviceFunction(device, vkCmdPushDescriptorSetKHR); // Extension
-    GetDeviceFunction(device, vkCreateImage);
-    GetDeviceFunction(device, vkGetImageMemoryRequirements);
-    GetDeviceFunction(device, vkBindImageMemory);
-    GetDeviceFunction(device, vkDestroyPipelineLayout);
-    GetDeviceFunction(device, vkDestroySemaphore);
-    GetDeviceFunction(device, vkDestroyFence);
-    GetDeviceFunction(device, vkFreeCommandBuffers);
-    GetDeviceFunction(device, vkDestroyCommandPool);
-    GetDeviceFunction(device, vkDestroyFramebuffer);
-    GetDeviceFunction(device, vkFreeMemory);
-    GetDeviceFunction(device, vkDestroyImageView);
-    GetDeviceFunction(device, vkDestroyImage);
-    GetDeviceFunction(device, vkDestroyPipelineLayout);
-    GetDeviceFunction(device, vkDestroyPipeline);
-    GetDeviceFunction(device, vkDestroyRenderPass);
-    GetDeviceFunction(device, vkDestroySwapchainKHR);
-    GetDeviceFunction(device, vkDestroyDevice);
-   // GetDeviceFunction(device, );
+    get_device_function(device, vkCreateSwapchainKHR);
+    get_device_function(device, vkDestroySwapchainKHR);
+    get_device_function(device, vkGetSwapchainImagesKHR);
+    get_device_function(device, vkAcquireNextImageKHR);
+    get_device_function(device, vkQueuePresentKHR);
+    get_device_function(device, vkGetDeviceQueue);
+    get_device_function(device, vkCreateCommandPool);
+    get_device_function(device, vkCreateRenderPass);
+    get_device_function(device, vkCreateShaderModule);
+    get_device_function(device, vkCreatePipelineLayout);
+    get_device_function(device, vkCreateGraphicsPipelines);
+    get_device_function(device, vkDestroyShaderModule);
+    get_device_function(device, vkCreateImageView);
+    get_device_function(device, vkCreateFramebuffer);
+    get_device_function(device, vkAllocateCommandBuffers);
+    get_device_function(device, vkCreateSemaphore);
+    get_device_function(device, vkCreateFence);
+    get_device_function(device, vkCmdBeginRenderPass);
+    get_device_function(device, vkCmdEndRenderPass);
+    get_device_function(device, vkCreateBuffer);
+    get_device_function(device, vkAllocateMemory);
+    get_device_function(device, vkCmdBindVertexBuffers);
+    get_device_function(device, vkBindBufferMemory);
+    get_device_function(device, vkBeginCommandBuffer);
+    get_device_function(device, vkEndCommandBuffer);
+    get_device_function(device, vkCmdUpdateBuffer);
+    get_device_function(device, vkGetBufferMemoryRequirements);
+    get_device_function(device, vkCmdDraw);
+    get_device_function(device, vkCmdBindPipeline);
+    get_device_function(device, vkQueueSubmit);
+    get_device_function(device, vkCmdClearColorImage);
+    get_device_function(device, vkCmdPipelineBarrier);
+    get_device_function(device, vkQueueWaitIdle);
+    get_device_function(device, vkGetFenceStatus);
+    get_device_function(device, vkWaitForFences);
+    get_device_function(device, vkResetFences);
+    get_device_function(device, vkDeviceWaitIdle);
+    get_device_function(device, vkCmdSetViewport);
+    get_device_function(device, vkCmdSetScissor);
+    get_device_function(device, vkMapMemory);
+    get_device_function(device, vkCmdBindIndexBuffer);
+    get_device_function(device, vkCmdDrawIndexed);
+    get_device_function(device, vkCreateDescriptorSetLayout);
+    get_device_function(device, vkCmdPushDescriptorSetKHR); // Extension
+    get_device_function(device, vkCreateImage);
+    get_device_function(device, vkGetImageMemoryRequirements);
+    get_device_function(device, vkBindImageMemory);
+    get_device_function(device, vkDestroyPipelineLayout);
+    get_device_function(device, vkDestroySemaphore);
+    get_device_function(device, vkDestroyFence);
+    get_device_function(device, vkFreeCommandBuffers);
+    get_device_function(device, vkDestroyCommandPool);
+    get_device_function(device, vkDestroyFramebuffer);
+    get_device_function(device, vkFreeMemory);
+    get_device_function(device, vkDestroyImageView);
+    get_device_function(device, vkDestroyImage);
+    get_device_function(device, vkDestroyPipelineLayout);
+    get_device_function(device, vkDestroyPipeline);
+    get_device_function(device, vkDestroyRenderPass);
+    get_device_function(device, vkDestroySwapchainKHR);
+    get_device_function(device, vkDestroyDevice);
+   // get_device_function(device, );
 
 }
 

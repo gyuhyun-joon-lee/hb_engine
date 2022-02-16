@@ -6,14 +6,14 @@ struct vertex_normal_hit
 
 // TODO(joon): exclude duplicate vertex normals
 internal void
-generate_vertex_normals(memory_arena *permanent_arena , memory_arena *trasient_arena, raw_mesh *raw_mesh)
+generate_vertex_normals(MemoryArena *permanent_arena , MemoryArena *trasient_arena, raw_mesh *raw_mesh)
 {
     assert(!raw_mesh->normals);
 
     raw_mesh->normal_count = raw_mesh->position_count;
     raw_mesh->normals = push_array(permanent_arena, v3, sizeof(v3)*raw_mesh->normal_count);
 
-    temp_memory mesh_construction_temp_memory = start_temp_memory(trasient_arena, megabytes(16));
+    TempMemory mesh_construction_temp_memory = start_temp_memory(trasient_arena, megabytes(16));
     vertex_normal_hit *normal_hits = push_array(&mesh_construction_temp_memory, vertex_normal_hit, raw_mesh->position_count);
 
 #if MEKA_DEBUG
@@ -76,14 +76,14 @@ generate_vertex_normals(memory_arena *permanent_arena , memory_arena *trasient_a
     Also, this _only_ works for 4 wide lane simd, and does not work for 1(due to how the memory laid out)
 */
 internal void
- generate_vertex_normals_simd(memory_arena *permanent_arena , memory_arena *trasient_arena, raw_mesh *raw_mesh)
+ generate_vertex_normals_simd(MemoryArena *permanent_arena, MemoryArena *trasient_arena, raw_mesh *raw_mesh)
  {
      assert(!raw_mesh->normals);
 
      raw_mesh->normal_count = raw_mesh->position_count;
      raw_mesh->normals = push_array(permanent_arena, v3, sizeof(v3)*raw_mesh->normal_count);
 
-     temp_memory mesh_construction_temp_memory = start_temp_memory(trasient_arena, megabytes(16), true);
+     TempMemory mesh_construction_temp_memory = start_temp_memory(trasient_arena, megabytes(16), true);
 
      r32 *normal_sum_x = push_array(&mesh_construction_temp_memory, r32, raw_mesh->position_count);
      r32 *normal_sum_y = push_array(&mesh_construction_temp_memory, r32, raw_mesh->position_count);
@@ -334,240 +334,28 @@ internal void
      end_temp_memory(&mesh_construction_temp_memory);
 }
 
-#if 0
+
 internal void
-generate_vertex_normals_simd(memory_arena *permanent_arena , memory_arena *trasient_arena, raw_mesh *raw_mesh)
+push_voxel(RenderGroup *render_group, v3 p, u32 color)
 {
-    assert(MEKA_LANE_WIDTH == 4);
-    assert(!raw_mesh->normals);
+    RenderEntryVoxel *entry = (RenderEntryVoxel *)(render_group->render_push_buffer + render_group->render_push_buffer_used);
+    render_group->render_push_buffer_used += sizeof(RenderEntryVoxel);
+    assert(render_group->render_push_buffer_used <= render_group->render_push_buffer_max_size);
 
-    raw_mesh->normal_count = raw_mesh->position_count;
-    raw_mesh->normals = push_array(permanent_arena, v3, sizeof(v3)*raw_mesh->normal_count);
-
-    temp_memory mesh_construction_temp_memory = start_temp_memory(trasient_arena, megabytes(16), true);
-
-    r32 *normal_sum_x = push_array(&mesh_construction_temp_memory, r32, raw_mesh->position_count);
-    r32 *normal_sum_y = push_array(&mesh_construction_temp_memory, r32, raw_mesh->position_count);
-    r32 *normal_sum_z = push_array(&mesh_construction_temp_memory, r32, raw_mesh->position_count);
-
-    u32 *normal_hit_counts = push_array(&mesh_construction_temp_memory, u32, raw_mesh->position_count);
-
-    // NOTE(joon): dividing by 12 as each face is consisted of 3 indices, and we are going to use 4-wide(128 bits) SIMD
-    //u32 index_count_div_12 = face_count / 12;
-    u32 index_count_mod_12 = raw_mesh->index_count % 12;
-    u32 simd_end_index = raw_mesh->index_count - index_count_mod_12;
-
-#if MEKA_DEBUG
-    begin_cycle_counter(generate_vertex_normals);
-
-    u32 i1_stride = MEKA_LANE_WIDTH;
-    u32 i2_stride = 2*MEKA_LANE_WIDTH;
-#endif
-    // TODO(joon) : If we decide to lose the precision while calculating the normals,
-    // might be able to use float16, which doubles the faces that we can process at once
-    for(u32 i = 0;
-            i < simd_end_index;
-            i += 3*MEKA_LANE_WIDTH)
-    {
-        // Load 12 indices
-        // TODO(joon): timed this and for now it's not worth doing so(and increase the code complexity), 
-        // unless we change the index to be 16-bit?
-#if 1
-        // i00, i01 i02 i10
-        simd_u32 ia = simd_u32_load(raw_mesh->indices + i);
-        // i11, i12 i20 i21
-        simd_u32 ib = simd_u32_load(raw_mesh->indices + i + i1_stride);
-        // i22, i30 i31 i32
-        simd_u32 ic = simd_u32_load(raw_mesh->indices + i + i2_stride);
-#endif
-
-        v3 v00 = raw_mesh->positions[get_lane(ia, 0)]; 
-        v3 v01 = raw_mesh->positions[get_lane(ia, 1)]; 
-        v3 v02 = raw_mesh->positions[get_lane(ia, 2)];
-
-        v3 v10 = raw_mesh->positions[get_lane(ia, 3)]; 
-        v3 v11 = raw_mesh->positions[get_lane(ib, 0)]; 
-        v3 v12 = raw_mesh->positions[get_lane(ib, 1)];
-
-        v3 v20 = raw_mesh->positions[get_lane(ib, 2)]; 
-        v3 v21 = raw_mesh->positions[get_lane(ib, 3)]; 
-        v3 v22 = raw_mesh->positions[get_lane(ic, 0)];
-
-        v3 v30 = raw_mesh->positions[get_lane(ic, 1)]; 
-        v3 v31 = raw_mesh->positions[get_lane(ic, 2)]; 
-        v3 v32 = raw_mesh->positions[get_lane(ic, 3)];
-
-        simd_v3 v0 = simd_v3_(v00, v10, v20, v30);
-        simd_v3 v1 = simd_v3_(v01, v11, v21, v31);
-        simd_v3 v2 = simd_v3_(v02, v12, v22, v32);
-
-        // NOTE(joon): e0 = v1 - v0, e1 = v2 - v0, normal = cross(e0, e1);
-        simd_v3 e0 = v1 - v0;
-        simd_v3 e1 = v2 - v0;
-
-        // x,     y,     z 
-        // y0*z1, z0*x1, x0*y1
-        simd_v3 cross_left = {};
-        cross_left.x = e0.y * e1.z;
-        cross_left.y = e0.z * e1.x;
-        cross_left.z = e0.x * e1.y;
-
-        // x,     y,     z 
-        // z0*y1, x0*z1, y0*x1
-        simd_v3 cross_right = {};
-        cross_right.x = e1.y * e0.z;
-        cross_right.y = e0.x * e1.z;
-        cross_right.z = e0.y * e1.x;
-
-        simd_v3 cross_result = cross_left - cross_right;
-
-        // NOTE(joon): now we have a data that looks like : xxxx yyyy zzzz
-        // ia : i00, i01 i02 i10
-        // ib : i11, i12 i20 i21
-        // ic : i22, i30 i31 i32
-
-        // TODO(joon): Should be a better way to load the result data into the memory...
-        normal_hit_counts[get_lane(ia, 0)]++;
-        normal_hit_counts[get_lane(ia, 1)]++;
-        normal_hit_counts[get_lane(ia, 2)]++;
-
-        normal_hit_counts[get_lane(ia, 3)]++;
-        normal_hit_counts[get_lane(ib, 0)]++;
-        normal_hit_counts[get_lane(ib, 1)]++;
-
-        normal_hit_counts[get_lane(ib, 2)]++;
-        normal_hit_counts[get_lane(ib, 3)]++;
-        normal_hit_counts[get_lane(ic, 0)]++;
-
-        normal_hit_counts[get_lane(ic, 1)]++;
-        normal_hit_counts[get_lane(ic, 2)]++;
-        normal_hit_counts[get_lane(ic, 3)]++;
-
-        normal_sum_x[get_lane(ia, 0)] += cross_result.x[0];
-        normal_sum_x[get_lane(ia, 1)] += cross_result.x[0];
-        normal_sum_x[get_lane(ia, 2)] += cross_result.x[0];
-        normal_sum_y[get_lane(ia, 0)] += cross_result.y[0];
-        normal_sum_y[get_lane(ia, 1)] += cross_result.y[0];
-        normal_sum_y[get_lane(ia, 2)] += cross_result.y[0];
-        normal_sum_z[get_lane(ia, 0)] += cross_result.z[0];
-        normal_sum_z[get_lane(ia, 1)] += cross_result.z[0];
-        normal_sum_z[get_lane(ia, 2)] += cross_result.z[0];
-
-        normal_sum_x[get_lane(ia, 3)] += cross_result.x[1];
-        normal_sum_x[get_lane(ib, 0)] += cross_result.x[1];
-        normal_sum_x[get_lane(ib, 1)] += cross_result.x[1];
-        normal_sum_y[get_lane(ia, 3)] += cross_result.y[1];
-        normal_sum_y[get_lane(ib, 0)] += cross_result.y[1];
-        normal_sum_y[get_lane(ib, 1)] += cross_result.y[1];
-        normal_sum_z[get_lane(ia, 3)] += cross_result.z[1];
-        normal_sum_z[get_lane(ib, 0)] += cross_result.z[1];
-        normal_sum_z[get_lane(ib, 1)] += cross_result.z[1];
-
-        normal_sum_x[get_lane(ib, 2)] += cross_result.x[2];
-        normal_sum_x[get_lane(ib, 3)] += cross_result.x[2];
-        normal_sum_x[get_lane(ic, 0)] += cross_result.x[2];
-        normal_sum_y[get_lane(ib, 2)] += cross_result.y[2];
-        normal_sum_y[get_lane(ib, 3)] += cross_result.y[2];
-        normal_sum_y[get_lane(ic, 0)] += cross_result.y[2];
-        normal_sum_z[get_lane(ib, 2)] += cross_result.z[2];
-        normal_sum_z[get_lane(ib, 3)] += cross_result.z[2];
-        normal_sum_z[get_lane(ic, 0)] += cross_result.z[2];
-
-        normal_sum_x[get_lane(ic, 1)] += cross_result.x[3];
-        normal_sum_x[get_lane(ic, 2)] += cross_result.x[3];
-        normal_sum_x[get_lane(ic, 3)] += cross_result.x[3];
-        normal_sum_y[get_lane(ic, 1)] += cross_result.y[3];
-        normal_sum_y[get_lane(ic, 2)] += cross_result.y[3];
-        normal_sum_y[get_lane(ic, 3)] += cross_result.y[3];
-        normal_sum_z[get_lane(ic, 1)] += cross_result.z[3];
-        normal_sum_z[get_lane(ic, 2)] += cross_result.z[3];
-        normal_sum_z[get_lane(ic, 3)] += cross_result.z[3];
-    }
-
-    // NOTE(joon): Get the rest of the normals, that cannot be processed in vector-wide fassion
-    for(u32 i = simd_end_index;
-            i < raw_mesh->index_count;
-            i += 3)
-    {
-        u32 i0 = raw_mesh->indices[i];
-        u32 i1 = raw_mesh->indices[i+1];
-        u32 i2 = raw_mesh->indices[i+2];
-
-        v3 v0 = raw_mesh->positions[i0] - raw_mesh->positions[i1];
-        v3 v1 = raw_mesh->positions[i2] - raw_mesh->positions[i1];
-
-        v3 normal = cross(v1, v0);
-
-        normal_sum_x[i0] += normal.x;
-        normal_sum_y[i0] += normal.y;
-        normal_sum_z[i0] += normal.z;
-
-        normal_sum_x[i1] += normal.x;
-        normal_sum_y[i1] += normal.y;
-        normal_sum_z[i1] += normal.z;
-
-        normal_sum_x[i2] += normal.x;
-        normal_sum_y[i2] += normal.y;
-        normal_sum_z[i2] += normal.z;
-
-        normal_hit_counts[i0]++;
-        normal_hit_counts[i1]++;
-        normal_hit_counts[i2]++;
-    }
- 
-    u32 normal_count_mod_4 = raw_mesh->normal_count % 4;
-    u32 simd_normal_end_index = raw_mesh->normal_count - normal_count_mod_4;
-
-    for(u32 i = 0;
-           i  < simd_normal_end_index;
-            i += 4)
-    {
-        // TODO(joon): put hits back in!
-        //assert(normal_hit_counts[normal_index]);
-
-        simd_v3 normal_sum = simd_v3_load(normal_sum_x + i, normal_sum_y + i, normal_sum_z + i);
-
-        u32 *ptr = normal_hit_counts + i;
-        simd_f32 normal_hit_counts = convert_f32_from_u32(simd_u32_load(ptr));
-
-        // TODO(joon): div vs load one over
-        simd_v3 unnormalized_result = normal_sum / normal_hit_counts;
-
-        simd_v3 normalized_result = normalize(unnormalized_result);
-
-        raw_mesh->normals[i+0] = v3_(normalized_result.x[0], 
-                                    normalized_result.y[0], 
-                                    normalized_result.z[0]);
-        raw_mesh->normals[i+1] = v3_(normalized_result.x[1], 
-                                    normalized_result.y[1], 
-                                    normalized_result.z[1]);
-        raw_mesh->normals[i+2] = v3_(normalized_result.x[2], 
-                                    normalized_result.y[2], 
-                                    normalized_result.z[2]);
-        raw_mesh->normals[i+3] = v3_(normalized_result.x[3], 
-                                    normalized_result.y[3], 
-                                    normalized_result.z[3]);
-    }
-
-    // NOTE(joon): calculate the remaining normals
-    for(u32 normal_index = simd_normal_end_index;
-            normal_index < raw_mesh->normal_count;
-            normal_index++)
-    {
-        v3 normal_sum = v3_(normal_sum_x[normal_index], normal_sum_y[normal_index], normal_sum_z[normal_index]);
-        u32 normal_hit_count = normal_hit_counts[normal_index];
-        assert(normal_hit_count);
-
-        v3 result_normal = normalize(normal_sum/(r32)normal_hit_count);
-
-        raw_mesh->normals[normal_index] = result_normal;
-    }
-    
-#if MEKA_DEBUG
-    end_cycle_counter(generate_vertex_normals);
-#endif
-
-
-    end_temp_memory(&mesh_construction_temp_memory);
+    entry->header.type = render_entry_type_voxel;
+    entry->p = p;
+    entry->color = color;
 }
-#endif
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -115,7 +115,7 @@ check_png_chunk_header(char *c, const char *header_name)
 }
 
 internal void
-load_png(platform_read_file_result file)
+load_png(PlatformReadFileResult file)
 {
     u8 *c = (u8 *)file.memory;
 

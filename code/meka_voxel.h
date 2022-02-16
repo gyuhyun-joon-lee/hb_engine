@@ -1,11 +1,7 @@
 #ifndef MEKA_VOXEL_H
 #define MEKA_VOXEL_H
 
-// TODO(joon) use memory arena push functions to allocate the nodes & get the acutal size for free
-// NOTE(joon) this chunk can store whatever size of the voxel.
-// NOTE(joon) we will go with 8*8*8 voxels per chunk
-// NOTE(joon) accessed through hash table
-struct voxel_chunk_hash
+struct VoxelChunkHash
 {
     // TODO(joon) Do we want these values to be i32?
     u32 x;
@@ -15,18 +11,22 @@ struct voxel_chunk_hash
     u32 first_node_offset; // only the chunk hash has this value, as 24 bit is not enough to represent the whole world
 };
 
-struct material
+struct Material
 {
     u32 color;
     // TODO(joon) can also add texture ID, reflectivity...
 };
 
-struct voxel_chunk
+struct VoxelWorld
 {
-    u32 x;
-    u32 y;
-    u32 z;
+    // TODO(joon) How many chunks do we need?
+    // The number of chunk hashes has been significantly reduced, as we are not doing the chunk based culling
+    VoxelChunkHash chunk_hashes[32];
 
+    u32 node_count_per_chunk;
+
+    u32 chunk_dim;
+    u32 lod;
 };
 
 #define voxel_pos_x_mask 0b10101010

@@ -134,7 +134,7 @@ generate_sphere_mesh(u32 desired_column_count, u32 desired_row_count)
    quad_width = how many quad vertically
 */
 internal raw_mesh
-generate_plane_terrain_mesh(memory_arena *memory_arena, u32 quad_width, u32 quad_height)
+generate_plane_terrain_mesh(MemoryArena *memory_arena, u32 quad_width, u32 quad_height)
 {
     // TODO(joon): Get rid of rand()
     u32 random_seed = (u32)rand();
