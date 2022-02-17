@@ -6,7 +6,7 @@
 #include <math.h>
 
 inline v2
-v2_(r32 x, r32 y)
+V2(r32 x, r32 y)
 {
     v2 result = {};
 
@@ -23,7 +23,7 @@ length(v2 a)
 }
 
 inline v2
-v2i_(i32 x, i32 y)
+V2i(i32 x, i32 y)
 {
     v2 result = {};
 
@@ -113,16 +113,15 @@ operator*(r32 value, v2 &a)
 }
 
 inline v3
-v3_()
+V3()
 {
     v3 result = {};
 
     return result;
 }
 
-#define v3(x, y, z) v3_(x, y, z)
 inline v3
-v3_(r32 x, r32 y, r32 z)
+V3(r32 x, r32 y, r32 z)
 {
     v3 result = {};
 
@@ -280,7 +279,7 @@ dot(v3 a, v3 b)
 inline v3
 hadamard(v3 a, v3 b)
 {
-    return v3_(a.x*b.x, a.y*b.y, a.z*b.z);
+    return V3(a.x*b.x, a.y*b.y, a.z*b.z);
 }
 
 inline v4
@@ -389,7 +388,7 @@ operator*=(v4 &a, r32 value)
 
 // return identity matrix
 inline m4
-m4_()
+M4()
 {
     m4 result = {};
     result.column[0].e[0] = 1.0f;
@@ -401,7 +400,7 @@ m4_()
 }
 
 inline m4
-m4_(r32 e00, r32 e01, r32 e02, r32 e03,
+M4(r32 e00, r32 e01, r32 e02, r32 e03,
     r32 e10, r32 e11, r32 e12, r32 e13,
     r32 e20, r32 e21, r32 e22, r32 e23,
     r32 e30, r32 e31, r32 e32, r32 e33)
@@ -576,9 +575,9 @@ operator*(m4 m, v4 v)
 
 
 inline m4
-scale_m4(v3 scale)
+scale(v3 scale)
 {
-    m4 result = m4_();
+    m4 result = M4();
 
     result.column[0].e[0] *= scale.x;
     result.column[1].e[1] *= scale.y;
@@ -588,15 +587,15 @@ scale_m4(v3 scale)
 }
 
 inline m4
-scale_m4(r32 x, r32 y, r32 z)
+scale(r32 x, r32 y, r32 z)
 {
-    return scale_m4(v3_(x, y, z));
+    return scale(V3(x, y, z));
 }
 
 inline m4
-translate_m4(v3 translate)
+translate(v3 translate)
 {
-    m4 result = m4_();
+    m4 result = M4();
 
     result.column[3].xyz = translate;
 
@@ -604,9 +603,22 @@ translate_m4(v3 translate)
 }
 
 inline m4
-translate_m4(r32 x, r32 y, r32 z)
+scale_translate(v3 scale, v3 translate)
 {
-    return translate_m4(v3_(x, y, z));
+    m4 result = M4();
+
+    result.column[0].e[0] *= scale.x;
+    result.column[1].e[1] *= scale.y;
+    result.column[2].e[2] *= scale.z;
+    result.column[3].xyz = translate;
+
+    return result;
+}
+
+inline m4
+translate(r32 x, r32 y, r32 z)
+{
+    return translate(V3(x, y, z));
 }
 
 /*
@@ -698,7 +710,7 @@ world_to_camera(v3 camera_world_p,
     rotation.column[2] = v4_(camera_x_axis.z, camera_y_axis.z, camera_z_axis.z, 0);
     rotation.column[3] = v4_(0, 0, 0, 1);
 
-    m4 translation = translate_m4(-camera_world_p.x, -camera_world_p.y, -camera_world_p.z);
+    m4 translation = translate(-camera_world_p.x, -camera_world_p.y, -camera_world_p.z);
 
     return rotation*translation;
 } 

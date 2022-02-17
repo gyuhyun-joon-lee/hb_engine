@@ -3,12 +3,10 @@
 
 enum EntityType
 {
-    entity_type_null,
-    entity_type_voxel,
-    entity_type_bullet,
-    entity_type_orc,
-    entity_type_goblin,
-    entity_type_room,
+    Entity_Type_Null,
+    Entity_Type_Voxel,
+    Entity_Type_Bullet,
+    Entity_Type_Room,
 };
 
 struct Entity
@@ -18,9 +16,11 @@ struct Entity
     v3 v;
     v3 a;
 
-    // TODO(joon) This really should not be here..
-    // or we can have a palette that is relatve to this entity, similiar to teardown engine
-    u32 color;
+    // TODO(joon) move this inside the collision group
+    AABB aabb;
+
+    // TODO(joon) For the voxels, we can have a palette that is relatve to this entity, similiar to the teardown engine
+    v3 color;
 
     // NOTE(joon) collision volume is always a cube(for now)
     // TODO(joon) collision group & volume

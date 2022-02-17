@@ -17,7 +17,22 @@ struct PerFrameData
     union
     {
         alignas(16) m4 proj_view_;
-        f32x4 proj_view;
+        f32x4 proj_view[4];
+    };
+};
+
+struct PerObjectData
+{
+    union
+    {
+        alignas(16) m4 model_;
+        f32x4 model[4];
+    };
+
+    union
+    {
+        alignas(16) v3 color_;
+        f32x4 color;
     };
 };
 

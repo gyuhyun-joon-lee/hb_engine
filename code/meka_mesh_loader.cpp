@@ -1594,8 +1594,8 @@ lookup_from_merl_brdf_table(f32 *brdf_table, v3 in, v3 out)
     f32 halfway_theta = acos(halfway.z);
     f32 halfway_phi = atan2(halfway.y, halfway.x);
 
-    v3 bi_normal = v3(0.0f, 1.0f, 0.0f);
-    v3 normal = v3(0.0f, 0.0f, 1.0f);
+    v3 bi_normal = V3(0.0f, 1.0f, 0.0f);
+    v3 normal = V3(0.0f, 0.0f, 1.0f);
 
     v3 temp =QuarternionRotation(normal, -halfway_phi, in);
     v3 diff = QuarternionRotation(bi_normal, -halfway_theta, temp);

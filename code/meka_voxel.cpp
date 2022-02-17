@@ -257,24 +257,6 @@ insert_voxel(u8 *start, u32 stride, u32 x, u32 y, u32 z, u32 dim, u32 lod)
     insert_voxel(next_lod_start, next_stride, x, y, z, dim/2, lod+1);
 }
 
-internal void
-add_voxel_entity_from_vox_file(GameState *game_state, load_vox_result vox)
-{
-    for(u32 voxel_index = 0;
-            voxel_index < vox.voxel_count;
-            ++voxel_index)
-    {
-        // TODO(joon) we also need to take account of the chunk pos?
-        u8 x = vox.xs[voxel_index];
-        u8 y = vox.ys[voxel_index];
-        u8 z = vox.zs[voxel_index];
-        u32 color = vox.palette[vox.colorIDs[voxel_index]];
-
-        add_voxel_entity(game_state, v3_(x, y, z), color);
-    }
-
-    int a = 1;
-}
 
 internal void
 allocate_voxel_chunk_from_vox_file(VoxelWorld *world, MemoryArena *arena, load_vox_result vox)
@@ -435,27 +417,12 @@ validate_voxels_with_vox_file(load_vox_result vox, u8 *nodes)
     }
 }
 
-/*
-   chunk based culling in cpu
-   push voxel chunk as - is, including the position
-   'somehow' process the chunk inside the compute shader, and get the voxels that are visible(which returns what?? we can also do masked-out version of it, )
-
-   // between here, we should also do the raytracing.. omg
-
-   draw all visible voxels
-*/
-
-internal void
-push_voxel_chunk(void *push_buffer, u32 *push_buffer_size, u32 total_push_buffer_size)
-{
-}
-
 internal void
 push_all_voxels(void *push_buffer, u32 *push_buffer_size, u32 total_push_buffer_size, u8 *start, u32 stride, u32 x, u32 y, u32 z, u32 dim, u32 lod)
 {
     if(dim == 1)
     {
-        v3 center = get_voxel_center_in_meter(x, y, z, v3_(1, 1, 1));
+        v3 center = get_voxel_center_in_meter(x, y, z, V3(1, 1, 1));
 
         // TODO(joon) : push here!
         return;
@@ -536,10 +503,4 @@ push_all_voxels(void *push_buffer, u32 *push_buffer_size, u32 total_push_buffer_
     }
 }
 
-internal v3u
-get_first_intersecting_voxel(v3 ray_origin, v3 ray_dir, VoxelWorld * world)
-{
-    v3u result = {};
-    return result;
-}
 

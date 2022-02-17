@@ -299,16 +299,16 @@ internal void
          float32x4_t normalized_result_y_128 = vdivq_f32(unnormalized_result_y_128, length_128);
          float32x4_t normalized_result_z_128 = vdivq_f32(unnormalized_result_z_128, length_128);
 
-         raw_mesh->normals[i+0] = v3_(r32_from_slot(normalized_result_x_128, 0), 
+         raw_mesh->normals[i+0] = V3(r32_from_slot(normalized_result_x_128, 0), 
                                      r32_from_slot(normalized_result_y_128, 0), 
                                      r32_from_slot(normalized_result_z_128, 0));
-         raw_mesh->normals[i+1] = v3_(r32_from_slot(normalized_result_x_128, 1), 
+         raw_mesh->normals[i+1] = V3(r32_from_slot(normalized_result_x_128, 1), 
                                      r32_from_slot(normalized_result_y_128, 1), 
                                      r32_from_slot(normalized_result_z_128, 1));
-         raw_mesh->normals[i+2] = v3_(r32_from_slot(normalized_result_x_128, 2), 
+         raw_mesh->normals[i+2] = V3(r32_from_slot(normalized_result_x_128, 2), 
                                      r32_from_slot(normalized_result_y_128, 2), 
                                      r32_from_slot(normalized_result_z_128, 2));
-         raw_mesh->normals[i+3] = v3_(r32_from_slot(normalized_result_x_128, 3), 
+         raw_mesh->normals[i+3] = V3(r32_from_slot(normalized_result_x_128, 3), 
                                      r32_from_slot(normalized_result_y_128, 3), 
                                      r32_from_slot(normalized_result_z_128, 3));
      }
@@ -318,7 +318,7 @@ internal void
              normal_index < raw_mesh->normal_count;
              normal_index++)
      {
-         v3 normal_sum = v3_(normal_sum_x[normal_index], normal_sum_y[normal_index], normal_sum_z[normal_index]);
+         v3 normal_sum = V3(normal_sum_x[normal_index], normal_sum_y[normal_index], normal_sum_z[normal_index]);
          u32 normal_hit_count = normal_hit_counts[normal_index];
          assert(normal_hit_count);
 
@@ -334,18 +334,56 @@ internal void
      end_temp_memory(&mesh_construction_temp_memory);
 }
 
+internal void
+start_render_group(RenderGroup *render_group, Camera *camera, u8 *render_push_buffer_base, u32 render_push_buffer_max_size)
+{
+    render_group->camera = *camera;
+    render_group->push_buffer = render_push_buffer_base;
+    render_group->push_buffer_max_size = render_push_buffer_max_size;
+
+    // TODO(joon) pass the matrices, not the camera itself!
+    Camera *push_camera = (Camera *)render_push_buffer_base;
+    *push_camera = *camera;
+    render_group->push_buffer_used += sizeof(Camera);
+}
+
+
+// rgba -> in memory : abgr
+internal void
+push_voxel(RenderGroup *render_group, v3 p, v3 color)
+{
+    RenderEntryVoxel *entry = (RenderEntryVoxel *)(render_group->push_buffer + render_group->push_buffer_used);
+    render_group->push_buffer_used += sizeof(*entry);
+    assert(render_group->push_buffer_used <= render_group->push_buffer_max_size);
+
+    entry->header.type = Render_Entry_Type_Voxel;
+    entry->p = p;
+    
+    // TODO(joon) verify if the math is correct
+    u32 color_u32 = (round_r32_to_u32(255.0f*color.r) << 0) |
+                    (round_r32_to_u32(255.0f*color.g) << 8) |
+                    (round_r32_to_u32(255.0f*color.b) << 16) |
+                    (255 << 24);
+
+    entry->color = color_u32;
+}
 
 internal void
-push_voxel(RenderGroup *render_group, v3 p, u32 color)
+push_room(RenderGroup *render_group, v3 p, v3 dim, v3 color)
 {
-    RenderEntryVoxel *entry = (RenderEntryVoxel *)(render_group->render_push_buffer + render_group->render_push_buffer_used);
-    render_group->render_push_buffer_used += sizeof(RenderEntryVoxel);
-    assert(render_group->render_push_buffer_used <= render_group->render_push_buffer_max_size);
+    RenderEntryRoom *entry = (RenderEntryRoom *)(render_group->push_buffer + render_group->push_buffer_used);
+    render_group->push_buffer_used += sizeof(*entry);
+    assert(render_group->push_buffer_used <= render_group->push_buffer_max_size);
 
-    entry->header.type = render_entry_type_voxel;
+    entry->header.type = Render_Entry_Type_Room;
     entry->p = p;
+    entry->dim = dim;
+    
     entry->color = color;
 }
+
+
+
 
 
 

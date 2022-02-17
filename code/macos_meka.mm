@@ -38,7 +38,6 @@ mach_time_diff_in_nano_seconds(u64 begin, u64 end, r32 nano_seconds_per_tick)
     return (u64)(((end - begin)*nano_seconds_per_tick));
 }
 
-
 PLATFORM_GET_FILE_SIZE(macos_get_file_size) 
 {
     u64 result = 0;
@@ -973,14 +972,81 @@ macos_initialize_vulkan(RenderContext *render_context, CAMetalLayer *metal_layer
 }
 #endif
 
+f32 cube_vertices[] = 
+{
+    0.5f, 0.5f, 0.5f,
+    -0.5f, 0.5f, 0.5f,
+    0.5f, -0.5f, 0.5f,
+    -0.5f, -0.5f, 0.5f, 
+
+    0.5f, 0.5f, -0.5f,
+    -0.5f, 0.5f, -0.5f,
+    0.5f, -0.5f, -0.5f,
+    -0.5f, -0.5f, -0.5f, 
+};
+
+u32 cube_outward_facing_indices[]
+{
+    //+z
+    0, 1, 2,
+    1, 3, 2,
+
+    //-z
+    4, 6, 5, 
+    5, 6, 7, 
+
+    //+x
+    0, 2, 6,
+    0, 6, 4,
+
+    //-x
+    1, 5, 3,
+    5, 7, 3,
+
+    //+y
+    5, 0, 4,
+    5, 1, 0,
+
+    //-y
+    3, 7, 2,
+    7, 6, 2
+};
+
+u32 cube_inward_facing_indices[]
+{
+    //+z
+    0, 2, 1,
+    1, 2, 3,
+
+    //-z
+    4, 5, 6, 
+    5, 7, 6, 
+
+    //+x
+    0, 6, 2,
+    0, 4, 6,
+
+    //-x
+    1, 3, 5,
+    5, 3, 7,
+
+    //+y
+    5, 4, 0,
+    5, 0, 1,
+
+    //-y
+    3, 2, 7,
+    7, 2, 6
+};
+
+
+
+
 // TODO(joon) Later, we can make this to also 'stream' the meshes(just like the other assets), and put them inside the render mesh
 // so that the graphics API can render them.
 internal void
-metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_base, u32 push_buffer_used_size, u32 window_width, u32 window_height)
+metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_base, u32 push_buffer_used, u32 window_width, u32 window_height)
 {
-    MTLViewport viewport = metal_make_viewport(0, 0, window_width, window_height, 0, 1);
-    MTLScissorRect scissor_rect = metal_make_scissor_rect(0, 0, window_width, window_height);
-
     // NOTE(joon): renderpass descriptor is already configured for this frame
     MTLRenderPassDescriptor *this_frame_descriptor = render_context->view.currentRenderPassDescriptor;
 
@@ -1000,13 +1066,14 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
         // if not, we can pull this outside, and put this inside the render context
         id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: this_frame_descriptor];
 
-        [render_encoder setViewport: viewport];
-        [render_encoder setScissorRect: scissor_rect];
-        [render_encoder setTriangleFillMode : MTLTriangleFillModeFill];
-        [render_encoder setFrontFacingWinding :MTLWindingCounterClockwise];
-        [render_encoder setCullMode :MTLCullModeBack];
-        [render_encoder setDepthStencilState: render_context->depth_state];
+        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
+        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
+        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
+        metal_set_cull_mode(render_encoder, MTLCullModeBack);
+        metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
+        // TODO(joon) pass the matrices, not the camera itself!
         Camera *camera = (Camera *)(push_buffer_base);
         f32 width_over_height = (f32)window_width / (f32)window_height;
         m4 proj = projection(camera->focal_length, width_over_height, 0.1f, 10000.0f);
@@ -1017,20 +1084,19 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
 
         PerFrameData per_frame_data = {};
         per_frame_data.proj_view_ = proj*camera_rhs_to_lhs(view);
-        [render_encoder setVertexBytes: &per_frame_data
-                        length: sizeof(per_frame_data)
-                        atIndex: 1]; 
+
+        metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 1);
 
         u32 voxel_count = 0;
         for(u32 consumed = sizeof(Camera); // NOTE(joon) The first element of the push buffer is camera
-                consumed < push_buffer_used_size;
+                consumed < push_buffer_used;
                 )
         {
             RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)push_buffer_base + consumed);
 
             switch(header->type)
             {
-                case render_entry_type_voxel:
+                case Render_Entry_Type_Voxel:
                 {
                     RenderEntryVoxel *entry = (RenderEntryVoxel *)((u8 *)push_buffer_base + consumed);
                     consumed += sizeof(*entry);
@@ -1041,103 +1107,83 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
                     voxel_count++;
                 }break;
 
-#if 0
-                case render_entry_type_line:
+                case Render_Entry_Type_Room:
                 {
-                    RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_group->render_memory.base + consumed);
+                    RenderEntryRoom *entry = (RenderEntryRoom *)((u8 *)push_buffer_base + consumed);
                     consumed += sizeof(*entry);
 
-                    [render_encoder setRenderPipelineState:render_context->line_pipeline_state];
-                    //metal_encode_line(render_encoder, entry->start, entry->end, entry->color);
+                    m4 model = scale_translate(entry->dim, entry->p);
+                    PerObjectData per_object_data = {};
+                    per_object_data.model_ = model;
+                    per_object_data.color_ = entry->color;
+
+                    metal_set_pipeline(render_encoder, render_context->cube_pipeline_state);
+                    metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
+                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 2);
+
+                    metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
+                            render_context->cube_inward_facing_index_buffer.buffer, array_count(cube_inward_facing_indices), 1);
+
+                    // also draw lines!!!
+                    // TODO(joon) maybe it's more wise to pull the line into seperate entry, and 
+                    // instance draw them just by the position buffer
+                    metal_set_pipeline(render_encoder, render_context->line_pipeline_state);
+
+                    f32 x_axis[] = {0.0f, 0.0f, 0.0f, 100.0f, 0.0f, 0.0f};
+                    v3 x_axis_color = V3(1, 0, 0);
+                    f32 y_axis[] = {0.0f, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f};
+                    v3 y_axis_color = V3(0, 1, 0);
+                    f32 z_axis[] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f};
+                    v3 z_axis_color = V3(0, 0, 1);
+
+                    // x axis
+                    metal_set_vertex_bytes(render_encoder, x_axis, sizeof(f32) * array_count(x_axis), 0);
+                    metal_set_vertex_bytes(render_encoder, &x_axis_color, sizeof(v3), 2);
+                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
+
+                    // y axis
+                    metal_set_vertex_bytes(render_encoder, y_axis, sizeof(f32) * array_count(y_axis), 0);
+                    metal_set_vertex_bytes(render_encoder, &y_axis_color, sizeof(v3), 2);
+                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
+
+                    // z axis
+                    metal_set_vertex_bytes(render_encoder, z_axis, sizeof(f32) * array_count(z_axis), 0);
+                    metal_set_vertex_bytes(render_encoder, &z_axis_color, sizeof(v3), 2);
+                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
                 }break;
-#endif
             }
         }
 
+        // NOTE(joon) as we are drawing a lot of voxels, we are going to treat the voxels in a special way by
+        // using the instancing.
         metal_flush_managed_buffer(&render_context->voxel_position_buffer);
         metal_flush_managed_buffer(&render_context->voxel_color_buffer);
-
-        f32 voxel_vertices[] = 
-        {
-            -0.5f,-0.5f,-0.5f, // triangle 1 : begin
-            -0.5f,-0.5f, 0.5f,
-            -0.5f, 0.5f, 0.5f, // triangle 1 : end
-            0.5f, 0.5f,-0.5f, // triangle 2 : begin
-            -0.5f,-0.5f,-0.5f,
-            -0.5f, 0.5f,-0.5f, // triangle 2 : end
-            0.5f,-0.5f, 0.5f,
-            -0.5f,-0.5f,-0.5f,
-            0.5f,-0.5f,-0.5f,
-            0.5f, 0.5f,-0.5f,
-            0.5f,-0.5f,-0.5f,
-            -0.5f,-0.5f,-0.5f,
-            -0.5f,-0.5f,-0.5f,
-            -0.5f, 0.5f, 0.5f,
-            -0.5f, 0.5f,-0.5f,
-            0.5f,-0.5f, 0.5f,
-            -0.5f,-0.5f, 0.5f,
-            -0.5f,-0.5f,-0.5f,
-            -0.5f, 0.5f, 0.5f,
-            -0.5f,-0.5f, 0.5f,
-            0.5f,-0.5f, 0.5f,
-            0.5f, 0.5f, 0.5f,
-            0.5f,-0.5f,-0.5f,
-            0.5f, 0.5f,-0.5f,
-            0.5f,-0.5f,-0.5f,
-            0.5f, 0.5f, 0.5f,
-            0.5f,-0.5f, 0.5f,
-            0.5f, 0.5f, 0.5f,
-            0.5f, 0.5f,-0.5f,
-            -0.5f, 0.5f,-0.5f,
-            0.5f, 0.5f, 0.5f,
-            -0.5f, 0.5f,-0.5f,
-            -0.5f, 0.5f, 0.5f,
-            0.5f, 0.5f, 0.5f,
-            -0.5f, 0.5f, 0.5f,
-            0.5f,-0.5f, 0.5f
-        };
         
-        [render_encoder setRenderPipelineState : render_context->voxel_pipeline_state];
+        metal_set_pipeline(render_encoder, render_context->voxel_pipeline_state);
+        metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
+        metal_set_vertex_buffer(render_encoder, render_context->voxel_position_buffer.buffer, 0, 2);
+        metal_set_vertex_buffer(render_encoder, render_context->voxel_color_buffer.buffer, 0, 3);
 
-        [render_encoder setVertexBytes: voxel_vertices
-                        length: sizeof(f32) * array_count(voxel_vertices)
-                        atIndex: 0]; 
+        //metal_draw_primitives(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(voxel_vertices)/3, 0, voxel_count);
 
-        [render_encoder setVertexBuffer:render_context->voxel_position_buffer.buffer
-                        offset:0
-                        atIndex:3];
-
-        [render_encoder setVertexBuffer:render_context->voxel_color_buffer.buffer
-                        offset:0
-                        atIndex:4];
-
-        [render_encoder drawPrimitives: MTLPrimitiveTypeTriangle
-                                        vertexStart: 0
-                                        vertexCount: array_count(voxel_vertices)/3
-                                        instanceCount: voxel_count 
-                                        baseInstance: 0];
-
-        // x axis
-        //metal_draw_line(render_encoder, v3_(), v3_(100, 0, 0), v3_(0, 0, 1));
-        // y axis
-        //metal_draw_line(render_encoder, v3_(), v3_(0, 100, 0), v3_(1, 0, 0));
-        // z axis
-        //metal_draw_line(render_encoder, v3_(), v3_(0, 0, 100), v3_(0, 1, 0));
-
-        [render_encoder endEncoding];
+        metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
+                            render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), voxel_count);
+#if 0
+- (void)drawIndexedPrimitives:(MTLPrimitiveType)primitiveType 
+                   indexCount:(NSUInteger)indexCount 
+                    indexType:(MTLIndexType)indexType 
+                  indexBuffer:(id<MTLBuffer>)indexBuffer 
+            indexBufferOffset:(NSUInteger)indexBufferOffset 
+                instanceCount:(NSUInteger)instanceCount;
+#endif
 
 
-        if(render_context->view.currentDrawable)
-        {
-            [command_buffer presentDrawable: render_context->view.currentDrawable];
-        }
-        else
-        {
-            invalid_code_path;
-        }
+        metal_end_encoding(render_encoder);
+
+        metal_present_drawable(command_buffer, render_context->view);
 
         // TODO(joon): Sync with the swap buffer!
-        [command_buffer commit];
+        metal_commit_command_buffer(command_buffer, render_context->view);
     }
 }
 
@@ -1204,7 +1250,6 @@ main(void)
                                         backing : NSBackingStoreBuffered
                                         defer : NO];
 
-
     NSString *app_name = [[NSProcessInfo processInfo] processName];
     [window setTitle:app_name];
     [window makeKeyAndOrderFront:0];
@@ -1225,14 +1270,6 @@ main(void)
     [window setContentView:view];
     view.depthStencilPixelFormat = MTLPixelFormatDepth32Float;
 
-    /*
-       NOTE/Joon : 
-       METAL combines depth and stencil together.
-       To enable depth test inside metal, you need to :
-       1. create a metal depth descriptor
-       2. create a depth state
-       3. pass this whenever we have a command buffer that needs a depth test
-    */
     MTLDepthStencilDescriptor *depth_descriptor = [MTLDepthStencilDescriptor new];
     depth_descriptor.depthCompareFunction = MTLCompareFunctionLessEqual;
     depth_descriptor.depthWriteEnabled = true;
@@ -1264,6 +1301,40 @@ main(void)
     id<MTLRenderPipelineState> voxel_pipeline_state = [device newRenderPipelineStateWithDescriptor:voxel_pipeline_descriptor
                                                                 error:&error];
 
+    id<MTLFunction> cube_vertex = [shader_library newFunctionWithName:@"cube_vertex"];
+    id<MTLFunction> cube_frag = [shader_library newFunctionWithName:@"cube_frag"];
+    MTLRenderPipelineDescriptor *cube_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
+    cube_pipeline_descriptor.label = @"Cube Pipeline";
+    cube_pipeline_descriptor.vertexFunction = cube_vertex;
+    cube_pipeline_descriptor.fragmentFunction = cube_frag;
+    cube_pipeline_descriptor.sampleCount = 1;
+    cube_pipeline_descriptor.rasterSampleCount = cube_pipeline_descriptor.sampleCount;
+    cube_pipeline_descriptor.rasterizationEnabled = true;
+    cube_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+    cube_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    cube_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+    cube_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+
+    id<MTLRenderPipelineState> cube_pipeline_state = [device newRenderPipelineStateWithDescriptor:cube_pipeline_descriptor
+                                                                error:&error];
+
+    id<MTLFunction> line_vertex = [shader_library newFunctionWithName:@"line_vertex"];
+    id<MTLFunction> line_frag = [shader_library newFunctionWithName:@"line_frag"];
+    MTLRenderPipelineDescriptor *line_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
+    line_pipeline_descriptor.label = @"Line Pipeline";
+    line_pipeline_descriptor.vertexFunction = line_vertex;
+    line_pipeline_descriptor.fragmentFunction = line_frag;
+    line_pipeline_descriptor.sampleCount = 1;
+    line_pipeline_descriptor.rasterSampleCount = line_pipeline_descriptor.sampleCount;
+    line_pipeline_descriptor.rasterizationEnabled = true;
+    line_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassLine;
+    line_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    line_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+    line_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+
+    id<MTLRenderPipelineState> line_pipeline_state = [device newRenderPipelineStateWithDescriptor:line_pipeline_descriptor
+                                                                error:&error];
+
     check_ns_error(error);
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
@@ -1273,6 +1344,20 @@ main(void)
     metal_render_context.view = view;
     metal_render_context.command_queue = command_queue;
     metal_render_context.depth_state = depth_state;
+    metal_render_context.voxel_pipeline_state = voxel_pipeline_state;
+    metal_render_context.cube_pipeline_state = cube_pipeline_state;
+    metal_render_context.line_pipeline_state = line_pipeline_state;
+    // TODO(joon) More robust way to manage these buffers??(i.e asset system?)
+    metal_render_context.voxel_position_buffer = metal_create_managed_buffer(device, megabytes(16));
+    metal_render_context.voxel_color_buffer = metal_create_managed_buffer(device, megabytes(4));
+    metal_render_context.cube_outward_facing_index_buffer = metal_create_managed_buffer(device, sizeof(u32) * array_count(cube_outward_facing_indices));
+    metal_append_to_managed_buffer(&metal_render_context.cube_outward_facing_index_buffer, 
+                                    cube_outward_facing_indices, 
+                                    metal_render_context.cube_outward_facing_index_buffer.max_size);
+    metal_render_context.cube_inward_facing_index_buffer = metal_create_managed_buffer(device, sizeof(u32) * array_count(cube_inward_facing_indices));
+    metal_append_to_managed_buffer(&metal_render_context.cube_inward_facing_index_buffer, 
+                                    cube_inward_facing_indices, 
+                                    metal_render_context.cube_inward_facing_index_buffer.max_size);
 
     CVDisplayLinkRef display_link;
     if(CVDisplayLinkCreateWithActiveCGDisplays(&display_link)== kCVReturnSuccess)
@@ -1281,12 +1366,10 @@ main(void)
         CVDisplayLinkStart(display_link);
     }
 
-    r32 light_angle = 0.f;
-    r32 light_radius = 1000.0f;
-
     PlatformInput platform_input = {};
-    u32 render_push_buffer_size = megabytes(16);
-    u8 *render_push_buffer = (u8 *)malloc(megabytes(16));
+    u32 render_push_buffer_max_size = megabytes(16);
+    u8 *render_push_buffer_base = (u8 *)malloc(render_push_buffer_max_size);
+    u32 render_push_buffer_used = 0;
 
     [app activateIgnoringOtherApps:YES];
     [app run];
@@ -1298,7 +1381,7 @@ main(void)
         platform_input.dt_per_frame = target_seconds_per_frame;
         macos_handle_event(app, window, &platform_input);
 
-        // TODO/joon: check if the focued window is working properly
+        // TODO(joon): check if the focued window is working properly
         b32 is_window_focused = [app keyWindow] && [app mainWindow];
 
         /*
@@ -1308,13 +1391,14 @@ main(void)
             3. With the return value from the displayLinkOutputCallback function, get the absolute time to present
             4. Use presentDrawable:atTime to present at the specific time
         */
-
         @autoreleasepool
         {
-            update_and_render(&platform_api, &platform_input, &platform_memory, render_push_buffer, render_push_buffer_size);
-        }
+            update_and_render(&platform_api, &platform_input, &platform_memory, render_push_buffer_base, render_push_buffer_max_size, &render_push_buffer_used);
 
-        light_angle += 0.01f;
+            // TODO(joon) This really should not be here, because it also diplays the result image to the sceen.
+            // We should pull out the presenting code 'somehow' and put it after we sleep
+            metal_render_and_display(&metal_render_context, render_push_buffer_base, render_push_buffer_used, window_width, window_height);
+        }
 
         u64 time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
 
@@ -1359,6 +1443,8 @@ main(void)
 
         // update the time stamp
         last_time = mach_absolute_time();
+        // TODO(joon) not loving this...
+        render_push_buffer_used = 0;
     }
 
     return 0;

@@ -80,9 +80,10 @@ struct Camera
 
 enum RenderEntryType
 {
-    render_entry_type_voxel,
-    render_entry_type_cube,
-    render_entry_type_line,
+    Render_Entry_Type_Voxel,
+    Render_Entry_Type_Room,
+    Render_Entry_Type_Cube,
+    Render_Entry_Type_Line,
 };
 
 struct RenderEntryHeader
@@ -109,6 +110,16 @@ struct RenderEntryVoxel
     u32 color;
 };
 
+struct RenderEntryRoom
+{
+    RenderEntryHeader header;
+
+    v3 p;
+    // TODO(joon) might be more convinient if we just store half_dim...
+    v3 dim;
+    v3 color;
+};
+
 struct RenderEntryLine
 {
     RenderEntryHeader header;
@@ -120,9 +131,9 @@ struct RenderEntryLine
 
 struct RenderGroup
 {
-    u8 *render_push_buffer;
-    u32 render_push_buffer_used;
-    u32 render_push_buffer_max_size;
+    u8 *push_buffer;
+    u32 push_buffer_used;
+    u32 push_buffer_max_size;
 
     Camera camera;
 };

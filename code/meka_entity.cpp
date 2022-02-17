@@ -1,5 +1,23 @@
 #include "meka_entity.h"
 
+#if 0
+internal
+add_aabb_collision()
+{
+}
+#endif
+
+internal AABB
+add_aabb(v3 center, v3 half_dim)
+{
+    AABB result = {};
+
+    result.center = center;
+    result.half_dim = half_dim;
+
+    return result;
+}
+
 internal Entity *
 add_entity(GameState *game_state, v3 p, v3 dim, EntityType type)
 {
@@ -15,92 +33,58 @@ add_entity(GameState *game_state, v3 p, v3 dim, EntityType type)
 }
 
 internal Entity *
-add_voxel_entity(GameState *game_state, v3 p, u32 color)
+add_normalized_voxel_entity(GameState *game_state, v3 p, v3 color)
 {
-    Entity *entity = add_entity(game_state, p, v3_(1, 1, 1), entity_type_voxel);
+    v3 dim = V3(1, 1, 1);
+
+    Entity *entity = add_entity(game_state, p, dim, Entity_Type_Voxel);
     entity->color = color;
+
+    entity->aabb = add_aabb(V3(), 0.5f*dim);
 
     return entity;
 }
 
-internal Entity*
-add_bullet_entity(GameState *game_state, v3 p, u32 color)
+internal Entity *
+add_normalized_voxel_entity(GameState *game_state, v3 p, u32 color_u32)
 {
-    Entity *entity = add_entity(game_state, p, v3_(1, 1, 1), entity_type_bullet);
-    entity->color = color;
+    v3 color = {};
+    color.r = (f32)((color_u32 >> 0) & 0xff) / 255.0f;
+    color.g = (f32)((color_u32 >> 8) & 0xff) / 255.0f;
+    color.b = (f32)((color_u32 >> 16) & 0xff) / 255.0f;
 
+    Entity *entity = add_normalized_voxel_entity(game_state, p, color);
     return entity;
-}
-
-struct test_collision_point_plane_result
-{
-    b32 collided;
-    b32 t;
-};
-
-// NOTE(joon) p0 and p1 are the points that are in the slabs 
-// TDOO(joon) order of p0 and p1 is important?
-internal test_collision_point_plane_result
-test_collision_point_with_aa_slab(v3 slab_p0, v3 slab_p1, 
-                                v3 delta)
-{
-    test_collision_point_plane_result result = {};
-#if 0
-
-    v3 t0 = hadamard((slab_p0 - ray_origin), inv_ray_dir); // each component represents t against the slab that is aligned for each axis
-    v3 t1 = hadamard((slab_p1 - ray_origin), inv_ray_dir); // each component represents t against the slab that is aligned for each axis
-
-    f32 max_t0 = max_component(t0);
-    f32 min_t1 = min_component(t1);
-    result.collided = (max_t0 <= min_t1);
-    result.collide_p = max_t0;
-#endif
-
-    return result;
 }
 
 internal void
-move_entity(GameState *game_state, Entity *entity, f32 dt_per_frame)
+add_voxel_entities_from_vox_file(GameState *game_state, load_vox_result vox)
 {
-    // NOTE(joon) center of the voxel
-    v3 p_delta = dt_per_frame * v3_(5, 5, 5);
-    v3 new_p = entity->p = p_delta;
-
-    v3 new_entity_corners[8] = 
+    for(u32 voxel_index = 0;
+            voxel_index < vox.voxel_count;
+            ++voxel_index)
     {
-        {new_p.x + 0.5f, new_p.y + 0.5f, new_p.z + 0.5f},
-        {new_p.x + 0.5f, new_p.y - 0.5f, new_p.z + 0.5f},
-        {new_p.x - 0.5f, new_p.y + 0.5f, new_p.z + 0.5f},
-        {new_p.x - 0.5f, new_p.y - 0.5f, new_p.z + 0.5f},
+        // TODO(joon) we also need to take account of the chunk pos?
+        u8 x = vox.xs[voxel_index];
+        u8 y = vox.ys[voxel_index];
+        u8 z = vox.zs[voxel_index];
+        u32 color = vox.palette[vox.colorIDs[voxel_index]];
 
-        {new_p.x + 0.5f, new_p.y + 0.5f, new_p.z - 0.5f},
-        {new_p.x + 0.5f, new_p.y - 0.5f, new_p.z - 0.5f},
-        {new_p.x - 0.5f, new_p.y + 0.5f, new_p.z - 0.5f},
-        {new_p.x - 0.5f, new_p.y - 0.5f, new_p.z - 0.5f},
-    };
-
-    f32 min_t = 1.0f;
-    for(u32 test_entity_index = 0;
-            test_entity_index < game_state->entity_count;
-            ++test_entity_index)
-    {
-        Entity *test_entity = game_state->entities + test_entity_index;
-
-        f32 t = 1.0f;
-        if(test_entity != entity)
-        {
-            for(u32 corner_index = 0;
-                    corner_index < array_count(new_entity_corners);
-                    ++corner_index)
-            {
-                //test_collision_point_with_aa_slab(v3 p0, v3 p1);
-
-                if(min_t > t)
-                {
-                    min_t = t;
-                }
-            }
-        }
-
+        add_normalized_voxel_entity(game_state, V3(x, y, z), color);
     }
+
+    int a = 1;
 }
+
+internal Entity *
+add_room_entity(GameState *game_state, v3 p, v3 dim)
+{
+    Entity *entity = add_entity(game_state, p, dim, Entity_Type_Room);
+    entity->color = V3(0.3f, 0.3f, 0.3f);
+
+    // TODO(joon) : Do we want to use aabb here?
+    entity->aabb = add_aabb(V3(), 0.5f*dim);
+
+    return entity;
+}
+

@@ -28,9 +28,14 @@ struct MetalRenderContext
     id<MTLDepthStencilState> depth_state; // compare <=, write : enabled
 
     id<MTLRenderPipelineState> voxel_pipeline_state;
+    id<MTLRenderPipelineState> cube_pipeline_state;
+    id<MTLRenderPipelineState> line_pipeline_state;
 
     MetalManagedBuffer voxel_position_buffer;
     MetalManagedBuffer voxel_color_buffer;
+
+    MetalManagedBuffer cube_inward_facing_index_buffer;
+    MetalManagedBuffer cube_outward_facing_index_buffer;
 };
 
 #endif

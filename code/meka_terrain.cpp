@@ -9,11 +9,11 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
     u32 random_seed = (u32)rand();
     random_series series = start_random_series(random_seed); 
 
-    i32 min_x = maximum(round_r32_i32((center.x - radius)/dim), 0);
-    i32 max_x = minimum(round_r32_i32((center.x + radius)/dim), x_count);
+    i32 min_x = maximum(round_r32_to_i32((center.x - radius)/dim), 0);
+    i32 max_x = minimum(round_r32_to_i32((center.x + radius)/dim), x_count);
 
-    i32 min_y = maximum(round_r32_i32((center.y - radius)/dim), 0);
-    i32 max_y = minimum(round_r32_i32((center.y + radius)/dim), y_count);
+    i32 min_y = maximum(round_r32_to_i32((center.y - radius)/dim), 0);
+    i32 max_y = minimum(round_r32_to_i32((center.y + radius)/dim), y_count);
     
     i32 center_x_i32 = (i32)((max_x + min_x)/2.0f);
     i32 center_y_i32 = (i32)((max_y + min_y)/2.0f);
@@ -29,7 +29,7 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
             x < max_x;
             x++)
         {
-            r32 distance = dim*length(v2i_(center_x_i32, center_y_i32) - v2i_(x, y));
+            r32 distance = dim*length(V2i(center_x_i32, center_y_i32) - V2i(x, y));
             if(distance <= radius)
             {
                 r32 height = (1.0f - (distance / radius))*max_height;
@@ -78,7 +78,7 @@ generate_sphere_mesh(u32 desired_column_count, u32 desired_row_count)
         {
             r32 cos_theta = cosf(column*rad_per_column);
             r32 sin_theta = sinf(column*rad_per_column);
-            v3 p = radius * cos_phi * v3_(cos_theta,
+            v3 p = radius * cos_phi * V3(cos_theta,
                                         sin_theta,
                                         0);
             p.z = z_for_this_row;
@@ -158,7 +158,7 @@ generate_plane_terrain_mesh(MemoryArena *memory_arena, u32 quad_width, u32 quad_
         {
             r32 random_z = dim*random_between(&series, -0.5f, 0.5f);
             
-            v3 p = v3_(startingX + x*dim, startingY + y*dim, random_z);
+            v3 p = V3(startingX + x*dim, startingY + y*dim, random_z);
             terrain.positions[y*quad_width + x] = p;
         }
     }
@@ -167,7 +167,7 @@ generate_plane_terrain_mesh(MemoryArena *memory_arena, u32 quad_width, u32 quad_
             mountain_index < 12;
             mountain_index++)
     {
-        v2 mountain_center = v2_(random_between(&series, 0, quad_width*dim),
+        v2 mountain_center = V2(random_between(&series, 0, quad_width*dim),
                                 random_between(&series, 0, quad_height*dim));
 
         r32 height = dim*random_between(&series, 5, 25);

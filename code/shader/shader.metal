@@ -5,28 +5,26 @@ using namespace metal;
 #define MEKA_METAL_SHADER
 #include "../meka_metal_shader_shared.h"
 
-#if 0
 struct LineVertexOutput
 {
     float4 clip_p[[position]];
     float3 color;
 };
+
 // NOTE(joon) : line vertex function gets a world position input
 vertex LineVertexOutput
-line_vertex(uint vertexID [[vertex_id]],
-                    constant line_vertex *vertices [[buffer(0)]],
+line_vertex(uint vertex_ID [[vertex_id]],
+                    constant float *vertices [[buffer(0)]],
                     constant PerFrameData *per_frame_data [[buffer(1)]],
-                    constant PerObjectData *per_object_data [[buffer(2)]])
+                    constant float *color [[buffer(2)]])
 {
     LineVertexOutput result = {};
 
-    float3 world_p = vertices[vertexID].p;
+    float3 world_p = float3(vertices[3*vertex_ID + 0], vertices[3*vertex_ID + 1], vertices[3*vertex_ID + 2]);
 
-    result.clip_position = per_frame_data->proj_view*convert_to_float4(world_p, 1.0f);
-    //output.clip_position = convert_to_float4(world_p, 1.0f);
-    //output.clip_position = {10, 0, 0, 1};
+    result.clip_p = (*(constant float4x4 *)&(per_frame_data->proj_view_)) * float4(world_p, 1.0f);
 
-    result.color = per_object_data->color;
+    result.color = *(constant float3 *)color;
 
     return result;
 }
@@ -36,7 +34,6 @@ line_frag(LineVertexOutput vertex_output [[stage_in]])
 {
     return float4(vertex_output.color, 1.0f);
 }
-#endif
 
 
 struct VoxelVertexOutput
@@ -66,7 +63,7 @@ voxel_vertex(uint vertexID [[vertex_id]],
                             voxel_positions[3*instanceID+2] + vertices[3*vertexID+2],
                             1.0f);
 
-    result.clip_p = per_frame_data->proj_view*world_p;
+    result.clip_p = (*(constant float4x4 *)&(per_frame_data->proj_view_)) * world_p;
     result.p = world_p.xyz;
     result.normal = normalize(result.p);
 
@@ -81,6 +78,45 @@ voxel_vertex(uint vertexID [[vertex_id]],
 
 fragment float4 
 voxel_frag(VoxelVertexOutput vertex_output [[stage_in]])
+{
+    float4 result = vertex_output.color;
+
+    return result;
+}
+
+struct CubeVertexOutput
+{
+    float4 clip_p [[position]];
+    float4 color;
+};
+
+// NOTE(joon) : vertex is a prefix for vertex shader
+vertex CubeVertexOutput
+cube_vertex(uint vertexID [[vertex_id]],
+                uint instanceID [[instance_id]],
+                constant float *vertices [[buffer(0)]], 
+                constant PerFrameData *per_frame_data [[buffer(1)]],
+                constant PerObjectData *per_object_data [[buffer(2)]])
+{
+    CubeVertexOutput result = {};
+
+    float4 world_p = *(constant float4x4 *)&(per_object_data->model) * 
+                        float4(vertices[3*vertexID+0], 
+                                vertices[3*vertexID+1],
+                                vertices[3*vertexID+2],
+                                1.0f);
+
+    result.clip_p = (*(constant float4x4 *)&(per_frame_data->proj_view_)) * world_p;
+    result.color = float4(per_object_data->color.r, 
+                          per_object_data->color.g, 
+                          per_object_data->color.b, 
+                          1.0f);
+
+    return result;
+}
+
+fragment float4 
+cube_frag(CubeVertexOutput vertex_output [[stage_in]])
 {
     float4 result = vertex_output.color;
 

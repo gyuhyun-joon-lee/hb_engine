@@ -73,14 +73,14 @@ atan2_(r32 y, r32 x)
 }
 
 inline i32
-round_r32_i32(r32 value)
+round_r32_to_i32(r32 value)
 {
     // TODO(joon) : intrinsic?
     return (i32)roundf(value);
 }
 
 inline u32
-round_r32_u32(r32 value)
+round_r32_to_u32(r32 value)
 {
     // TODO(joon) : intrinsic?
     return (u32)roundf(value);
