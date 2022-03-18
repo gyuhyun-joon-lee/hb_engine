@@ -45,10 +45,8 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
         allocate_voxels_from_vox_file(world, &game_state->voxel_arena, loaded_vox);
 #endif
 #if 1
-        Entity *entity = add_normalized_voxel_entity(game_state, V3(0, 0, 5), V3(1, 0, 0));
-        entity->v = V3(0, 0, -2);
-        entity = add_normalized_voxel_entity(game_state, V3(0, 0, -5), V3(0, 1, 0));
-        entity->v = V3(0, 0, 2);
+        Entity *entity = add_normalized_voxel_entity(game_state, V3(0, 0, 5), V3(1, 0, 0), 1.0f);
+        entity = add_normalized_voxel_entity(game_state, V3(0, 0, 0), V3(0, 1, 0), 1.0f);
 #endif
         //Entity *entity = add_normalized_voxel_entity(game_state, V3(0, 0, 0), V3(1, 0, 0));
         add_room_entity(game_state, V3(), V3(20, 20, 20));

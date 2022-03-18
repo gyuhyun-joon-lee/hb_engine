@@ -16,7 +16,9 @@ struct Entity
     v3 v;
     v3 a;
 
-    // TODO(joon) move this inside the collision group
+    f32 mass; 
+
+    // TODO(joon) move this to the collision group
     AABB aabb;
 
     // TODO(joon) For the voxels, we can have a palette that is relatve to this entity, similiar to the teardown engine

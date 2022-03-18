@@ -1,5 +1,7 @@
 COMPILER = clang 
-ARCHITECTURE = -arch arm64 #TODO(joon): -arch arm64 makes the code slower? #TODO(joon) -march=armv8+simd causes error?
+#ARCHITECTURE = -arch arm64 #TODO(joon): -arch arm64 makes the code slower? #TODO(joon) -march=armv8+simd causes error?
+ARCHITECTURE = -march=armv8+simd #TODO(joon): -arch arm64 makes the code slower? #TODO(joon) causes error?
+#cpu ?
 MAKEFLAGS += --silent
 
 # -O0 = unoptimized, -O2 = compiler optimized

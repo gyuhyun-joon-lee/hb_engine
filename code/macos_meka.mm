@@ -11,6 +11,8 @@
 #include <metalkit/metalkit.h>
 #include <metal/metal.h>
 
+// TODO(joon) introspection?
+
 // NOTE(joon) we need some metal layer even if we use vulkan
 #include "meka_metal_shader_shared.h"
 
@@ -33,7 +35,7 @@ global b32 is_game_running;
 global dispatch_semaphore_t semaphore;
 
 internal u64 
-mach_time_diff_in_nano_seconds(u64 begin, u64 end, r32 nano_seconds_per_tick)
+mach_time_diff_in_nano_seconds(u64 begin, u64 end, f32 nano_seconds_per_tick)
 {
     return (u64)(((end - begin)*nano_seconds_per_tick));
 }
@@ -152,8 +154,8 @@ display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_t
     u32 last_frame_diff = (u32)(output_time->hostTime - last_time);
     u32 current_time_diff = (u32)(output_time->hostTime - current_time->hostTime);
 
-    r32 last_frame_time_elapsed =last_frame_diff/(r32)output_time->videoTimeScale;
-    r32 current_time_elapsed = current_time_diff/(r32)output_time->videoTimeScale;
+    f32 last_frame_time_elapsed =last_frame_diff/(f32)output_time->videoTimeScale;
+    f32 current_time_elapsed = current_time_diff/(f32)output_time->videoTimeScale;
     
     //printf("last frame diff: %.6f, current time diff: %.6f\n",  last_frame_time_elapsed, current_time_elapsed);
 
@@ -180,7 +182,7 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
     rel_mouse_location.x = mouse_location.x - bottom_left_p.x;
     rel_mouse_location.y = mouse_location.y - bottom_left_p.y;
 
-    r32 mouse_speed_when_clipped = 0.08f;
+    f32 mouse_speed_when_clipped = 0.08f;
     if(rel_mouse_location.x >= 0.0f && rel_mouse_location.x < content_rect_dim.x)
     {
         mouse_diff.x = mouse_location.x - last_mouse_p.x;
@@ -661,8 +663,8 @@ macos_initialize_vulkan(RenderContext *render_context, CAMetalLayer *metal_layer
     inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
     VkViewport viewport = {};
-    viewport.width = (r32)surface_capabilities.currentExtent.width;
-    viewport.height = (r32)surface_capabilities.currentExtent.height;
+    viewport.width = (f32)surface_capabilities.currentExtent.width;
+    viewport.height = (f32)surface_capabilities.currentExtent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -1187,9 +1189,43 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
     }
 }
 
+// NOTE(joon): returns the base path where all the folders(code, misc, data) are located
+internal void
+macos_get_base_path(char *dest)
+{
+    NSString *app_path_string = [[NSBundle mainBundle] bundlePath];
+    u32 length = [app_path_string lengthOfBytesUsingEncoding: NSUTF8StringEncoding];
+    unsafe_string_append(dest, 
+                        [app_path_string cStringUsingEncoding: NSUTF8StringEncoding],
+                        length);
+
+    u32 slash_to_delete_count = 2;
+    for(u32 index = length-1;
+            index >= 0;
+            --index)
+    {
+        if(dest[index] == '/')
+        {
+            slash_to_delete_count--;
+            if(slash_to_delete_count == 0)
+            {
+                break;
+            }
+        }
+        else
+        {
+            dest[index] = 0;
+        }
+    }
+}
+
 int 
 main(void)
 { 
+    struct mach_timebase_info mach_time_info;
+    mach_timebase_info(&mach_time_info);
+    f32 nano_seconds_per_tick = ((f32)mach_time_info.numer/(f32)mach_time_info.denom);
+
     u32 random_seed = time(NULL);
     random_series series = start_random_series(random_seed); 
 
@@ -1212,15 +1248,11 @@ main(void)
 
     PlatformReadFileResult font = debug_macos_read_file("/Users/mekalopo/Library/Fonts/InputMonoCompressed-Light.ttf");
 
-    struct mach_timebase_info mach_time_info;
-    mach_timebase_info(&mach_time_info);
-    r32 nano_seconds_per_tick = ((r32)mach_time_info.numer/(r32)mach_time_info.denom);
-
     i32 window_width = 1920;
     i32 window_height = 1080;
 
     u32 target_frames_per_second = 60;
-    r32 target_seconds_per_frame = 1.0f/(r32)target_frames_per_second;
+    f32 target_seconds_per_frame = 1.0f/(f32)target_frames_per_second;
     u32 target_nano_seconds_per_frame = (u32)(target_seconds_per_frame*sec_to_nano_sec);
     NSApplication *app = [NSApplication sharedApplication];
     [app setActivationPolicy :NSApplicationActivationPolicyRegular];
@@ -1241,8 +1273,8 @@ main(void)
 
     // TODO(joon): when connected to the external display, this should be window_width and window_height
     // but if not, this should be window_width/2 and window_height/2. Why?
-    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width, (r32)window_height);
-    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (r32)window_width/2.0f, (r32)window_height/2.0f);
+    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width, (f32)window_height);
+    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width/2.0f, (f32)window_height/2.0f);
 
     NSWindow *window = [[NSWindow alloc] initWithContentRect : window_rect
                                         // Apple window styles : https://developer.apple.com/documentation/appkit/nswindow/stylemask
@@ -1255,6 +1287,9 @@ main(void)
     [window makeKeyAndOrderFront:0];
     [window makeKeyWindow];
     [window makeMainWindow];
+
+    char base_path[256] = {};
+    macos_get_base_path(base_path);
 
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     NSString *name = device.name;
@@ -1278,10 +1313,14 @@ main(void)
 
     NSError *error;
     // TODO(joon) : Put the metallib file inside the app
-    NSString *file_path = @"/Volumes/meka/meka_renderer/code/shader/shader.metallib";
+    char metallib_path[256] = {};
+    unsafe_string_append(metallib_path, base_path);
+    unsafe_string_append(metallib_path, "code/shader/shader.metallib");
+
     // TODO(joon) : maybe just use newDefaultLibrary? If so, figure out where should we put the .metal files
-    id<MTLLibrary> shader_library = [device newLibraryWithFile:(NSString *)file_path 
-                                            error: &error];
+    id<MTLLibrary> shader_library = [device newLibraryWithFile:[[NSString alloc] initWithCString:metallib_path
+                                                                                    encoding:NSUTF8StringEncoding] 
+                                                                error: &error];
     check_ns_error(error);
 
     id<MTLFunction> voxel_vertex = [shader_library newFunctionWithName:@"voxel_vertex"];
@@ -1391,14 +1430,7 @@ main(void)
             3. With the return value from the displayLinkOutputCallback function, get the absolute time to present
             4. Use presentDrawable:atTime to present at the specific time
         */
-        @autoreleasepool
-        {
-            update_and_render(&platform_api, &platform_input, &platform_memory, render_push_buffer_base, render_push_buffer_max_size, &render_push_buffer_used);
-
-            // TODO(joon) This really should not be here, because it also diplays the result image to the sceen.
-            // We should pull out the presenting code 'somehow' and put it after we sleep
-            metal_render_and_display(&metal_render_context, render_push_buffer_base, render_push_buffer_used, window_width, window_height);
-        }
+        update_and_render(&platform_api, &platform_input, &platform_memory, render_push_buffer_base, render_push_buffer_max_size, &render_push_buffer_used);
 
         u64 time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
 
@@ -1427,6 +1459,10 @@ main(void)
         u32 time_passed_in_micro_sec = (u32)(time_passed_in_nano_seconds / 1000);
         f32 time_passed_in_sec = (f32)time_passed_in_micro_sec / 1000000.0f;
         printf("%dms elapsed, fps : %.6f\n", time_passed_in_micro_sec, 1.0f/time_passed_in_sec);
+        @autoreleasepool
+        {
+            metal_render_and_display(&metal_render_context, render_push_buffer_base, render_push_buffer_used, window_width, window_height);
+        }
 
 #if 0
         // NOTE(joon) : debug_printf_all_cycle_counters

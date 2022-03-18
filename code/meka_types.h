@@ -116,6 +116,20 @@ struct v4
     };
 };
 
+struct m3
+{
+    union
+    {
+        struct 
+        {
+            v3 rows[3];
+        };
+
+        // NOTE(joon) row major (e[row][column])
+        f32 e[3][3];
+    };
+};
+
 struct m4
 {
     union
@@ -125,7 +139,7 @@ struct m4
             v4 column[4];
         };
         
-        r32 e[16];
+        f32 e[16];
     };
 };
 

@@ -386,6 +386,64 @@ operator*=(v4 &a, r32 value)
     return a;
 }
 
+// m3
+inline m3
+M3()
+{
+    m3 result = {};
+
+    result.e[0][0] = 1;
+    result.e[1][1] = 1;
+    result.e[2][2] = 1;
+
+    return result;
+}
+
+inline m3
+M3(f32 e00, f32 e01, f32 e02,
+    f32 e10, f32 e11, f32 e12,
+    f32 e20, f32 e21, f32 e22)
+{
+    m3 result = {};
+    result.e[0][0] = e00;
+    result.e[0][1] = e01;
+    result.e[0][2] = e02;
+
+    result.e[1][0] = e10;
+    result.e[1][1] = e11;
+    result.e[1][2] = e12;
+
+    result.e[2][0] = e20;
+    result.e[2][1] = e21;
+    result.e[2][2] = e22;
+
+    return result;
+}
+
+inline m3
+operator+(m3 a, m3 b)
+{
+    m3 result = {};
+
+    result.rows[0] = a.rows[0] + b.rows[0];
+    result.rows[1] = a.rows[1] + b.rows[1];
+    result.rows[2] = a.rows[2] + b.rows[2];
+
+    return result;
+}
+
+inline m3
+operator-(m3 a, m3 b)
+{
+    m3 result = {};
+
+    result.rows[0] = a.rows[0] - b.rows[0];
+    result.rows[1] = a.rows[1] - b.rows[1];
+    result.rows[2] = a.rows[2] - b.rows[2];
+
+    return result;
+}
+
 // return identity matrix
 inline m4
 M4()

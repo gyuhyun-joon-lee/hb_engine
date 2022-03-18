@@ -133,6 +133,36 @@ reverse_bits(u8 value)
     return result;
 }
 
+// NOTE(joon) this function has no bound check
+internal void
+unsafe_string_append(char *dest, const char *source, u32 source_size)
+{
+    while(*dest != '\0')
+    {
+        dest++;
+    }
+
+    while(source_size-- > 0)
+    {
+        *dest++ = *source++;
+    }
+}
+
+// NOTE(joon) this function has no bound check
+internal void
+unsafe_string_append(char *dest, const char *source)
+{
+    while(*dest != '\0')
+    {
+        dest++;
+    }
+    
+    while(*source != '\0')
+    {
+        *dest++ = *source++;
+    }
+}
+
 struct PlatformMemory
 {
     void *permanent_memory;
