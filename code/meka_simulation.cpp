@@ -135,26 +135,37 @@ move_entity(GameState *game_state, Entity *entity, f32 dt_per_frame)
 #endif
 
 internal void
-add_piecewise_mass_particle_connection(MassAgg *mass_agg, u32 particle_index_0, u32 particle_index_1)
+add_piecewise_mass_particle_connection(MemoryArena *arena, MassAgg *mass_agg, u32 particle_index_0, u32 particle_index_1, f32 rest_length)
 {
-    PiecewiseMassParticleConnection *connection = mass_agg->connections + mass_agg->connection_count++;
+    PiecewiseMassParticleConnection *connection = push_struct(arena, PiecewiseMassParticleConnection);
+    if(!mass_agg->connections)
+    {
+        mass_agg->connections = connection;
+    }
+    else
+    {
+        assert(connection == mass_agg->connections + mass_agg->connection_count);
+    }
 
     connection->particle_index_0 = particle_index_0;
     connection->particle_index_1 = particle_index_1;
-}
+    connection->rest_length = rest_length;
 
+    mass_agg->connection_count++;
+}
 
 // NOTE(joon) all the edges are the same sized
 // TODO(joon) pass inv_mass?
 // TODO(joon) pass pointer?
 internal MassAgg
-init_cube_mass_agg(MemoryArena *arena, v3 base_p, f32 dim, f32 mass, f32 elastic_value)
+init_cube_mass_agg(MemoryArena *arena, v3 base_p, f32 dim, f32 total_mass, f32 elastic_value)
 {
     f32 half_dim = 0.5f*dim;
     MassAgg result = {};
 
-    result.particle_count = 8;
+    result.particle_count = 9;
     result.particles = push_array(arena, MassParticle, result.particle_count);
+    f32 particle_mass = total_mass / result.particle_count;
 
     result.particles[0].p = base_p + V3(half_dim, -half_dim, -half_dim);
     result.particles[1].p = base_p + V3(half_dim, half_dim, -half_dim);
@@ -166,105 +177,102 @@ init_cube_mass_agg(MemoryArena *arena, v3 base_p, f32 dim, f32 mass, f32 elastic
     result.particles[6].p = base_p + V3(-half_dim, half_dim, half_dim);
     result.particles[7].p = base_p + V3(-half_dim, -half_dim, half_dim);
 
-    result.elastic_value = 1.0f;
+    // NOTE(joon) center particle to keep the particles from each other
+    result.particles[8].p = base_p;
+
+    result.elastic_value = elastic_value;
 
     for(u32 particle_index = 0;
             particle_index < result.particle_count;
             ++particle_index)
     {
         MassParticle *particle = result.particles + particle_index;
-        particle->inv_mass = 1.0f/mass;
+        particle->inv_mass = safe_ratio(1.0f, particle_mass);
     }
 
-    u32 connection_count = 12;
-    result.connections = push_array(arena, PiecewiseMassParticleConnection, connection_count);
-
+    // NOTE(joon) NO MEMORY ALLOCATION SHOULD HAPPEN WHILE ADDING THE PARTICLE CONNECTIONS
     // TODO(joon) Should we pre-allocate the connections, and use them instead?
-    add_piecewise_mass_particle_connection(&result, 0, 1); 
-    add_piecewise_mass_particle_connection(&result, 1, 2); 
-    add_piecewise_mass_particle_connection(&result, 2, 3); 
-    add_piecewise_mass_particle_connection(&result, 3, 0); 
+    // NOTE(joon) 12(edge connection)
+    add_piecewise_mass_particle_connection(arena, &result, 0, 1, dim); 
+    add_piecewise_mass_particle_connection(arena, &result, 1, 2, dim); 
+    add_piecewise_mass_particle_connection(arena, &result, 2, 3, dim); 
+    add_piecewise_mass_particle_connection(arena, &result, 3, 0, dim); 
 
-    add_piecewise_mass_particle_connection(&result, 4, 5); 
-    add_piecewise_mass_particle_connection(&result, 5, 6); 
-    add_piecewise_mass_particle_connection(&result, 6, 7); 
-    add_piecewise_mass_particle_connection(&result, 7, 4); 
+    add_piecewise_mass_particle_connection(arena, &result, 4, 5, dim); 
+    add_piecewise_mass_particle_connection(arena, &result, 5, 6, dim); 
+    add_piecewise_mass_particle_connection(arena, &result, 6, 7, dim); 
+    add_piecewise_mass_particle_connection(arena, &result, 7, 4, dim); 
 
-    add_piecewise_mass_particle_connection(&result, 0, 4); 
-    add_piecewise_mass_particle_connection(&result, 1, 5); 
-    add_piecewise_mass_particle_connection(&result, 6, 2); 
-    add_piecewise_mass_particle_connection(&result, 7, 3); 
+    add_piecewise_mass_particle_connection(arena, &result, 0, 4, dim); 
+    add_piecewise_mass_particle_connection(arena, &result, 1, 5, dim); 
+    add_piecewise_mass_particle_connection(arena, &result, 6, 2, dim); 
+    add_piecewise_mass_particle_connection(arena, &result, 7, 3, dim); 
 
-    assert(result.connection_count == connection_count);
+    f32 center_to_edge_length = sqrtf(3.0f) * half_dim;
+
+    add_piecewise_mass_particle_connection(arena, &result, 1, 7, 2.0f*center_to_edge_length); 
+    add_piecewise_mass_particle_connection(arena, &result, 0, 6, 2.0f*center_to_edge_length); 
+    add_piecewise_mass_particle_connection(arena, &result, 4, 2, 2.0f*center_to_edge_length); 
+    add_piecewise_mass_particle_connection(arena, &result, 5, 3, 2.0f*center_to_edge_length); 
 
     return result;
 }
 
 internal void
-move_mass_agg(GameState *game_state, MassAgg *mass_agg, f32 dt_per_frame)
+move_mass_agg(GameState *game_state, MassAgg *mass_agg, f32 dt_per_frame, b32 magic)
 {
     // TODO(joon) drag should vary from entity to entity
     f32 drag = 0.9f;
-    // NOTE(joon) gravity is universal for all of the particles, unless there is no collision.
+
+    // TODO(joon) how do we apply 
     for(u32 particle_index = 0;
             particle_index < mass_agg->particle_count;
             ++particle_index)
     {
         MassParticle *particle = mass_agg->particles + particle_index;
-        particle->v.z -= 9.8f * dt_per_frame;
-        particle->v *= drag; // TODO(joon) should we do this before testing the collisions, or after collisions
-    }
 
-    for(u32 particle_index = 0;
-            particle_index < mass_agg->particle_count;
-            ++particle_index)
-    {
-        MassParticle *particle = mass_agg->particles + particle_index;
-        v3 new_p = particle->p + dt_per_frame * particle->v;
-
-#if 0
+        v3 force = V3();
         for(u32 connection_index = 0;
                 connection_index < mass_agg->connection_count;
                 ++connection_index)
         {
             PiecewiseMassParticleConnection *connection = mass_agg->connections + connection_index;
+
+            MassParticle *connected_particle = 0;
+            if(particle_index == connection->particle_index_0)
+            {
+                connected_particle = mass_agg->particles + connection->particle_index_1;
+            }
+            else if(particle_index == connection->particle_index_1)
+            {
+                connected_particle = mass_agg->particles + connection->particle_index_0;
+            }
+
             // TODO(joon) both of the particles that are connectied will check this and try to mitigate this,
             // which might cause some problem
-            if(particle_index == connection->particle_index_0 ||
-                particle_index == connection->particle_index_1)
+            if(connected_particle)
             {
-                // if(the length is bigger than the allowed length)
-                // apply elastic force
+                v3 delta = connected_particle->p - particle->p;
+                f32 delta_length = length(delta);
+                f32 length_diff = delta_length - connection->rest_length;
+
+                // NOTE(joon) hook's law, elastic force = k * length_diff * (connected_particle_p - this_particle_p)
+                force += mass_agg->elastic_value * length_diff * (delta/delta_length); 
             }
         }
-#endif
 
-        particle->p = new_p;
+        if(magic && particle_index == 0)
+        {
+            force += V3(10, 0, 0);
+        }
+
+        // NOTE(joon) a = f/m
+        v3 acc = particle->inv_mass * force;
+        //acc.z -= 9.8f;
+
+        particle->v += dt_per_frame * acc;
+        particle->v *= drag; // TODO(joon) should we do this before testing the collisions, or after collisions
+
+        particle->p += dt_per_frame * particle->v;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

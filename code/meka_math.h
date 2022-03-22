@@ -132,7 +132,7 @@ V3(r32 x, r32 y, r32 z)
     return result;
 }
 
-inline r32
+inline f32
 length(v3 a)
 {
     return sqrtf(a.x*a.x + a.y*a.y + a.z*a.z);
@@ -982,6 +982,20 @@ inline u64
 big_to_little_endian(u64 byte_count)
 {
     u64 result = 0;
+    return result;
+}
+
+inline f32
+safe_ratio(f32 nom, f32 denom)
+{
+    f32 result = Flt_Max;
+
+    f32 epsilon = 0.000001f;
+    if(denom < -epsilon || denom > epsilon)
+    {
+        result = nom / denom;
+    }
+
     return result;
 }
 

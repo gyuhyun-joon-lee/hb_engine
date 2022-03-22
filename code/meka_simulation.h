@@ -47,6 +47,8 @@ struct PiecewiseMassParticleConnection
     u32 particle_index_1;
 
     // TODO(joon) we can also save elastic value here, if we want to have different spring for each connection.
+
+    f32 rest_length;
 };
 
 // TODO(joon) how do we represent a 'connection' between two particles?

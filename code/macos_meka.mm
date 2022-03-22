@@ -278,16 +278,26 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
 
                         else if(key_code == kVK_LeftArrow)
                         {
+                            platform_input->action_left = is_down;
                         }
                         else if(key_code == kVK_RightArrow)
                         {
+                            platform_input->action_right = is_down;
                         }
                         else if(key_code == kVK_UpArrow)
                         {
+                            platform_input->action_up = is_down;
                         }
                         else if(key_code == kVK_DownArrow)
                         {
+                            platform_input->action_down = is_down;
                         }
+
+                        else if(key_code == kVK_Space)
+                        {
+                            platform_input->space = is_down;
+                        }
+
                         else if(key_code == kVK_Return)
                         {
                             if(is_down)
@@ -1143,34 +1153,37 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
                             render_context->cube_inward_facing_index_buffer.buffer, array_count(cube_inward_facing_indices), 1);
 
                     // also draw lines!!!
-                    // TODO(joon) maybe it's more wise to pull the line into seperate entry, and 
-                    // instance draw them just by the position buffer
-                    metal_set_pipeline(render_encoder, render_context->line_pipeline_state);
 
-                    f32 x_axis[] = {0.0f, 0.0f, 0.0f, 100.0f, 0.0f, 0.0f};
-                    v3 x_axis_color = V3(1, 0, 0);
-                    f32 y_axis[] = {0.0f, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f};
-                    v3 y_axis_color = V3(0, 1, 0);
-                    f32 z_axis[] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f};
-                    v3 z_axis_color = V3(0, 0, 1);
-
-                    // x axis
-                    metal_set_vertex_bytes(render_encoder, x_axis, sizeof(f32) * array_count(x_axis), 0);
-                    metal_set_vertex_bytes(render_encoder, &x_axis_color, sizeof(v3), 2);
-                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
-
-                    // y axis
-                    metal_set_vertex_bytes(render_encoder, y_axis, sizeof(f32) * array_count(y_axis), 0);
-                    metal_set_vertex_bytes(render_encoder, &y_axis_color, sizeof(v3), 2);
-                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
-
-                    // z axis
-                    metal_set_vertex_bytes(render_encoder, z_axis, sizeof(f32) * array_count(z_axis), 0);
-                    metal_set_vertex_bytes(render_encoder, &z_axis_color, sizeof(v3), 2);
-                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
                 }break;
             }
         }
+
+        // NOTE(joon) draw axis lines
+        // TODO(joon) maybe it's more wise to pull the line into seperate entry, and 
+        // instance draw them just by the position buffer
+        metal_set_pipeline(render_encoder, render_context->line_pipeline_state);
+
+        f32 x_axis[] = {0.0f, 0.0f, 0.0f, 100.0f, 0.0f, 0.0f};
+        v3 x_axis_color = V3(1, 0, 0);
+        f32 y_axis[] = {0.0f, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f};
+        v3 y_axis_color = V3(0, 1, 0);
+        f32 z_axis[] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f};
+        v3 z_axis_color = V3(0, 0, 1);
+
+        // x axis
+        metal_set_vertex_bytes(render_encoder, x_axis, sizeof(f32) * array_count(x_axis), 0);
+        metal_set_vertex_bytes(render_encoder, &x_axis_color, sizeof(v3), 2);
+        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
+
+        // y axis
+        metal_set_vertex_bytes(render_encoder, y_axis, sizeof(f32) * array_count(y_axis), 0);
+        metal_set_vertex_bytes(render_encoder, &y_axis_color, sizeof(v3), 2);
+        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
+
+        // z axis
+        metal_set_vertex_bytes(render_encoder, z_axis, sizeof(f32) * array_count(z_axis), 0);
+        metal_set_vertex_bytes(render_encoder, &z_axis_color, sizeof(v3), 2);
+        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
 
         if(voxel_instance_count)
         {

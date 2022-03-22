@@ -41,7 +41,7 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
         free_loaded_vox(&loaded_vox);
 
         game_state->mass_agg_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
-        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 0, 0), V3(1, 0, 0), 1.0f, 1.0f, 1.0f);
+        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 0, 0), V3(1, 0, 0), 1.0f, 1.0f, 29.0f);
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + game_state->mass_agg_arena.total_size, megabytes(256));
         game_state->camera.focal_length = 1.0f;
@@ -59,7 +59,7 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
                                     camera->initial_y_axis, camera->along_y,
                                     camera->initial_z_axis, camera->along_z);
 
-    r32 camera_speed = 10.0f * platform_input->dt_per_frame;
+    f32 camera_speed = 10.0f * platform_input->dt_per_frame;
 
     if(platform_input->move_up)
     {
@@ -72,7 +72,7 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
     }
 
 #if 1
-    r32 camera_rotation_speed = 0.5f * platform_input->dt_per_frame;
+    f32 camera_rotation_speed = 5.0f * platform_input->dt_per_frame;
     if(platform_input->action_up)
     {
         camera->along_x += camera_rotation_speed;
@@ -113,7 +113,7 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
             case Entity_Type_Mass_Agg:
             {
                 // TODO(joon) make physics not to be dependent to the framerate?
-                move_mass_agg(game_state, &entity->mass_agg, platform_input->dt_per_frame);
+                move_mass_agg(game_state, &entity->mass_agg, platform_input->dt_per_frame, platform_input->space);
             }break;
         }
     }
