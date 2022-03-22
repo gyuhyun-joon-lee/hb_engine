@@ -37,15 +37,31 @@ struct MassParticle
 {
     f32 inv_mass;
     v3 v;
-    v3 p;
+    v3 p; // this is in world pos, and not relative to the entity p
 };
 
-// TODO(joon) how do we represent 'connection' between two particles?
-struct MassAggregation
+// TODO(joon) we need a fast way to get all of the connections for certain particle.
+struct PiecewiseMassParticleConnection
+{
+    u32 particle_index_0;
+    u32 particle_index_1;
+
+    // TODO(joon) we can also save elastic value here, if we want to have different spring for each connection.
+};
+
+// TODO(joon) how do we represent a 'connection' between two particles?
+struct MassAgg
 {
     // TODO(joon) change this so that it can contain any number of particles
-    MassParticle particles[8];
+    MassParticle *particles;
     u32 particle_count;
+
+    PiecewiseMassParticleConnection *connections; // particle connections
+    u32 connection_count;
+
+    // NOTE(joon) two particles will act like a soft spring, and this is a value 
+    // that is used in hook's law
+    f32 elastic_value;
 };
 
 #endif

@@ -382,7 +382,18 @@ push_room(RenderGroup *render_group, v3 p, v3 dim, v3 color)
     entry->color = color;
 }
 
+// TODO(joon) do we want to collapes this to single line_group or something to save memory(color, type)?
+internal void
+push_line(RenderGroup *render_group, v3 start, v3 end, v3 color)
+{
+    RenderEntryLine *entry = (RenderEntryLine *)(render_group->push_buffer + render_group->push_buffer_used);
+    entry->header.type = Render_Entry_Type_Line;
+    render_group->push_buffer_used += sizeof(*entry);
 
+    entry->start = start;
+    entry->end = end;
+    entry->color = color;
+}
 
 
 

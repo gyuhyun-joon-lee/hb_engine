@@ -77,13 +77,12 @@ metal_append_to_managed_buffer(MetalManagedBuffer *buffer, void *source, u32 sou
 internal void
 metal_flush_managed_buffer(MetalManagedBuffer *buffer)
 {
-    assert(buffer->used != 0);
-    NSRange range = NSMakeRange(0, buffer->used);
-
-    [buffer->buffer didModifyRange:range];
-
-    buffer->used = 0;
-
+    if(buffer->used)
+    {
+        NSRange range = NSMakeRange(0, buffer->used);
+        [buffer->buffer didModifyRange:range];
+        buffer->used = 0;
+    }
 }
 
 // NOTE(joon) wrapping functions

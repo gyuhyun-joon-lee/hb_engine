@@ -19,20 +19,21 @@ add_aabb(v3 center, v3 half_dim)
 }
 
 internal Entity *
-add_entity(GameState *game_state, v3 p, v3 dim, f32 mass, EntityType type)
+add_entity(GameState *game_state, EntityType type)
 {
     Entity *entity = game_state->entities + game_state->entity_count++;
 
     assert(game_state->entity_count <= game_state->max_entity_count);
 
-    entity->p = p;
-    entity->dim = dim;
     entity->type = type;
-    entity->mass = mass;
+    //entity->p = p;
+    //entity->dim = dim;
+    //entity->mass = mass;
 
     return entity;
 }
 
+#if 0
 internal Entity *
 add_normalized_voxel_entity(GameState *game_state, v3 p, v3 color, f32 mass)
 {
@@ -78,7 +79,18 @@ add_voxel_entities_from_vox_file(GameState *game_state, load_vox_result vox)
 
     int a = 1;
 }
+#endif
 
+internal Entity *
+add_cube_mass_agg_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 color, f32 dim, f32 mass, f32 elastic_value)
+{
+    Entity *result = add_entity(game_state, Entity_Type_Mass_Agg);
+    result->mass_agg = init_cube_mass_agg(arena, p, dim, mass, elastic_value); 
+
+    return result;
+}
+
+#if 0
 internal Entity *
 add_room_entity(GameState *game_state, v3 p, v3 dim)
 {
@@ -90,4 +102,5 @@ add_room_entity(GameState *game_state, v3 p, v3 dim)
 
     return entity;
 }
+#endif
 

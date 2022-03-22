@@ -86,11 +86,11 @@ enum RenderEntryType
     Render_Entry_Type_Line,
 };
 
+// TODO(joon) Do we have enough reason to keep this header?
 struct RenderEntryHeader
 {
     // NOTE(joon) This should _always_ come first
     RenderEntryType type;
-    
 };
 
 struct RenderEntryVoxelChunk

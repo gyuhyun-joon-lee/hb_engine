@@ -1089,7 +1089,7 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
 
         metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 1);
 
-        u32 voxel_count = 0;
+        u32 voxel_instance_count = 0;
         for(u32 consumed = sizeof(Camera); // NOTE(joon) The first element of the push buffer is camera
                 consumed < push_buffer_used;
                 )
@@ -1098,15 +1098,31 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
 
             switch(header->type)
             {
+                // TODO(joon) we can also do the similar thing as the voxels,
+                // which is allocating the managed buffer and instance-drawing the lines
+                case Render_Entry_Type_Line:
+                {
+                    RenderEntryLine *entry = (RenderEntryLine *)((u8 *)push_buffer_base + consumed);
+                    metal_set_pipeline(render_encoder, render_context->line_pipeline_state);
+                    f32 start_and_end[6] = {entry->start.x, entry->start.y, entry->start.z, entry->end.x, entry->end.y, entry->end.z};
+
+                    metal_set_vertex_bytes(render_encoder, start_and_end, sizeof(f32) * array_count(start_and_end), 0);
+                    metal_set_vertex_bytes(render_encoder, &entry->color, sizeof(entry->color), 2);
+
+                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
+
+                    consumed += sizeof(*entry);
+                }break;
                 case Render_Entry_Type_Voxel:
                 {
                     RenderEntryVoxel *entry = (RenderEntryVoxel *)((u8 *)push_buffer_base + consumed);
-                    consumed += sizeof(*entry);
 
                     metal_append_to_managed_buffer(&render_context->voxel_position_buffer, &entry->p, sizeof(entry->p));
                     metal_append_to_managed_buffer(&render_context->voxel_color_buffer, &entry->color, sizeof(entry->color));
 
-                    voxel_count++;
+                    voxel_instance_count++;
+
+                    consumed += sizeof(*entry);
                 }break;
 
                 case Render_Entry_Type_Room:
@@ -1156,20 +1172,23 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
             }
         }
 
-        // NOTE(joon) as we are drawing a lot of voxels, we are going to treat the voxels in a special way by
-        // using the instancing.
-        metal_flush_managed_buffer(&render_context->voxel_position_buffer);
-        metal_flush_managed_buffer(&render_context->voxel_color_buffer);
-        
-        metal_set_pipeline(render_encoder, render_context->voxel_pipeline_state);
-        metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
-        metal_set_vertex_buffer(render_encoder, render_context->voxel_position_buffer.buffer, 0, 2);
-        metal_set_vertex_buffer(render_encoder, render_context->voxel_color_buffer.buffer, 0, 3);
+        if(voxel_instance_count)
+        {
+            // NOTE(joon) as we are drawing a lot of voxels, we are going to treat the voxels in a special way by
+            // using the instancing.
+            metal_flush_managed_buffer(&render_context->voxel_position_buffer);
+            metal_flush_managed_buffer(&render_context->voxel_color_buffer);
 
-        //metal_draw_primitives(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(voxel_vertices)/3, 0, voxel_count);
+            metal_set_pipeline(render_encoder, render_context->voxel_pipeline_state);
+            metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
+            metal_set_vertex_buffer(render_encoder, render_context->voxel_position_buffer.buffer, 0, 2);
+            metal_set_vertex_buffer(render_encoder, render_context->voxel_color_buffer.buffer, 0, 3);
 
-        metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
-                            render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), voxel_count);
+            //metal_draw_primitives(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(voxel_vertices)/3, 0, voxel_count);
+
+            metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
+                    render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), voxel_instance_count);
+        }
 #if 0
 - (void)drawIndexedPrimitives:(MTLPrimitiveType)primitiveType 
                    indexCount:(NSUInteger)indexCount 
@@ -1273,8 +1292,8 @@ main(void)
 
     // TODO(joon): when connected to the external display, this should be window_width and window_height
     // but if not, this should be window_width/2 and window_height/2. Why?
-    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width, (f32)window_height);
-    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width/2.0f, (f32)window_height/2.0f);
+    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width, (f32)window_height);
+    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width/2.0f, (f32)window_height/2.0f);
 
     NSWindow *window = [[NSWindow alloc] initWithContentRect : window_rect
                                         // Apple window styles : https://developer.apple.com/documentation/appkit/nswindow/stylemask

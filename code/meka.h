@@ -16,6 +16,8 @@ struct GameState
     // NOTE(joon) voxel related stuffs
     VoxelWorld world;
     MemoryArena voxel_arena;
+
+    MemoryArena mass_agg_arena;
 };
 
 #endif

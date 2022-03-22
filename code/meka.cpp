@@ -13,12 +13,12 @@
 
 #include "meka_mesh_loader.cpp"
 #include "meka_voxel.cpp"
+#include "meka_simulation.cpp"
 #include "meka_entity.cpp"
 #include "meka_terrain.cpp"
 #include "meka_render_group.cpp"
 #include "meka_ray.cpp"
 #include "meka_image_loader.cpp"
-#include "meka_simulation.cpp"
 
 internal void
 update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory,
@@ -39,29 +39,16 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
 
         //add_voxel_entity_from_vox_file(game_state, loaded_vox);
         free_loaded_vox(&loaded_vox);
-#if 0
-        game_state->voxel_arena = start_memory_arena(platform_memory->permanent_memory, megabytes(256));
-        initialize_voxel_world(world);
-        allocate_voxels_from_vox_file(world, &game_state->voxel_arena, loaded_vox);
-#endif
-#if 1
-        Entity *entity = add_normalized_voxel_entity(game_state, V3(0, 0, 5), V3(1, 0, 0), 1.0f);
-        entity = add_normalized_voxel_entity(game_state, V3(0, 0, 0), V3(0, 1, 0), 1.0f);
-#endif
-        //Entity *entity = add_normalized_voxel_entity(game_state, V3(0, 0, 0), V3(1, 0, 0));
-        add_room_entity(game_state, V3(), V3(20, 20, 20));
+
+        game_state->mass_agg_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
+        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 0, 0), V3(1, 0, 0), 1.0f, 1.0f, 1.0f);
         
-        game_state->render_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
+        game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + game_state->mass_agg_arena.total_size, megabytes(256));
         game_state->camera.focal_length = 1.0f;
         game_state->camera.p = V3(-10, 0, 0);
         game_state->camera.initial_z_axis = V3(-1, 0, 0);
         game_state->camera.initial_x_axis = normalize(cross(V3(0, 0, 1), game_state->camera.initial_z_axis));
         game_state->camera.initial_y_axis = normalize(cross(game_state->camera.initial_z_axis, game_state->camera.initial_x_axis));
-
-        //game_state->voxel_position_buffer = mtl_create_managed_buffer(render_context, megabytes(4));
-        //game_state->voxel_color_buffer = mtl_create_managed_buffer(render_context, megabytes(4));
-
-        //RenderMesh cube_mesh = create_render_mesh(render_context, vertices);
 
         game_state->is_initialized = true;
     }
@@ -120,8 +107,14 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
         {
             case Entity_Type_Voxel:
             {
-                move_entity(game_state, entity, platform_input->dt_per_frame);
-            }
+                //move_entity(game_state, entity, platform_input->dt_per_frame);
+            }break;
+
+            case Entity_Type_Mass_Agg:
+            {
+                // TODO(joon) make physics not to be dependent to the framerate?
+                move_mass_agg(game_state, &entity->mass_agg, platform_input->dt_per_frame);
+            }break;
         }
     }
 
@@ -138,11 +131,23 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
         {
             case Entity_Type_Voxel:
             {
-                push_voxel(&render_group, entity->p, entity->color);
+                //push_voxel(&render_group, entity->p, entity->color);
             }break;
             case Entity_Type_Room:
             {
-                push_room(&render_group, entity->p, entity->dim, entity->color);
+                //push_room(&render_group, entity->p, entity->dim, entity->color);
+            }break;
+            case Entity_Type_Mass_Agg:
+            {
+                for(u32 connection_index = 0;
+                        connection_index < entity->mass_agg.connection_count;
+                        ++connection_index)
+                {
+                    PiecewiseMassParticleConnection *connection = entity->mass_agg.connections + connection_index;
+                    MassParticle *particle_0 = entity->mass_agg.particles + connection->particle_index_0;
+                    MassParticle *particle_1 = entity->mass_agg.particles + connection->particle_index_1;
+                    push_line(&render_group, particle_0->p, particle_1->p, V3(1, 1, 1));
+                }
             }break;
         }
     }
