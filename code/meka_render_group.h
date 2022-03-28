@@ -80,9 +80,7 @@ struct Camera
 
 enum RenderEntryType
 {
-    Render_Entry_Type_Voxel,
-    Render_Entry_Type_Room,
-    Render_Entry_Type_Cube,
+    Render_Entry_Type_AABB,
     Render_Entry_Type_Line,
 };
 
@@ -101,22 +99,13 @@ struct RenderEntryVoxelChunk
     u32 chunk_size; // around 0.2mb
 };
 
-struct RenderEntryVoxel
-{
-    RenderEntryHeader header;
-
-    // Every voxel is even sized, so we will not store dim here
-    v3 p;
-    u32 color;
-};
-
-struct RenderEntryRoom
+struct RenderEntryAABB
 {
     RenderEntryHeader header;
 
     v3 p;
-    // TODO(joon) might be more convinient if we just store half_dim...
     v3 dim;
+
     v3 color;
 };
 

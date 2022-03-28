@@ -346,36 +346,15 @@ start_render_group(RenderGroup *render_group, Camera *camera, u8 *render_push_bu
     *push_camera = *camera;
     render_group->push_buffer_used += sizeof(Camera);
 }
-
-
-// rgba -> in memory : abgr
+ 
 internal void
-push_voxel(RenderGroup *render_group, v3 p, v3 color)
+push_aabb(RenderGroup *render_group, v3 p, v3 dim, v3 color)
 {
-    RenderEntryVoxel *entry = (RenderEntryVoxel *)(render_group->push_buffer + render_group->push_buffer_used);
+    RenderEntryAABB *entry = (RenderEntryAABB *)(render_group->push_buffer + render_group->push_buffer_used);
     render_group->push_buffer_used += sizeof(*entry);
     assert(render_group->push_buffer_used <= render_group->push_buffer_max_size);
 
-    entry->header.type = Render_Entry_Type_Voxel;
-    entry->p = p;
-    
-    // TODO(joon) verify if the math is correct
-    u32 color_u32 = (round_r32_to_u32(255.0f*color.r) << 0) |
-                    (round_r32_to_u32(255.0f*color.g) << 8) |
-                    (round_r32_to_u32(255.0f*color.b) << 16) |
-                    (255 << 24);
-
-    entry->color = color_u32;
-}
-
-internal void
-push_room(RenderGroup *render_group, v3 p, v3 dim, v3 color)
-{
-    RenderEntryRoom *entry = (RenderEntryRoom *)(render_group->push_buffer + render_group->push_buffer_used);
-    render_group->push_buffer_used += sizeof(*entry);
-    assert(render_group->push_buffer_used <= render_group->push_buffer_max_size);
-
-    entry->header.type = Render_Entry_Type_Room;
+    entry->header.type = Render_Entry_Type_AABB;
     entry->p = p;
     entry->dim = dim;
     

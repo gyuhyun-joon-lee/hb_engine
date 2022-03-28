@@ -1123,6 +1123,7 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
 
                     consumed += sizeof(*entry);
                 }break;
+#if 0
                 case Render_Entry_Type_Voxel:
                 {
                     RenderEntryVoxel *entry = (RenderEntryVoxel *)((u8 *)push_buffer_base + consumed);
@@ -1134,10 +1135,11 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
 
                     consumed += sizeof(*entry);
                 }break;
+#endif
 
-                case Render_Entry_Type_Room:
+                case Render_Entry_Type_AABB:
                 {
-                    RenderEntryRoom *entry = (RenderEntryRoom *)((u8 *)push_buffer_base + consumed);
+                    RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)push_buffer_base + consumed);
                     consumed += sizeof(*entry);
 
                     m4 model = scale_translate(entry->dim, entry->p);
@@ -1151,9 +1153,6 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
 
                     metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
                             render_context->cube_inward_facing_index_buffer.buffer, array_count(cube_inward_facing_indices), 1);
-
-                    // also draw lines!!!
-
                 }break;
             }
         }

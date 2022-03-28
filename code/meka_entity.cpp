@@ -8,27 +8,26 @@ add_aabb_collision()
 #endif
 
 internal AABB
-add_aabb(v3 center, v3 half_dim)
+init_aabb(v3 center, v3 half_dim, f32 inv_mass)
 {
     AABB result = {};
 
-    result.center = center;
+    result.p = center;
     result.half_dim = half_dim;
+    result.inv_mass = inv_mass;
 
     return result;
 }
 
 internal Entity *
-add_entity(GameState *game_state, EntityType type)
+add_entity(GameState *game_state, EntityType type, u32 flags)
 {
     Entity *entity = game_state->entities + game_state->entity_count++;
 
     assert(game_state->entity_count <= game_state->max_entity_count);
 
     entity->type = type;
-    //entity->p = p;
-    //entity->dim = dim;
-    //entity->mass = mass;
+    entity->flags = flags;
 
     return entity;
 }
@@ -82,25 +81,36 @@ add_voxel_entities_from_vox_file(GameState *game_state, load_vox_result vox)
 #endif
 
 internal Entity *
-add_cube_mass_agg_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 color, f32 dim, f32 mass, f32 elastic_value)
+add_cube_mass_agg_entity(GameState *game_state, MemoryArena *arena, v3 center, v3 dim, v3 color, f32 total_mass, f32 elastic_value)
 {
-    Entity *result = add_entity(game_state, Entity_Type_Mass_Agg);
-    result->mass_agg = init_cube_mass_agg(arena, p, dim, mass, elastic_value); 
+    // TODO(joon) test if mass is infinite, and set the entity flag accordingly
+    Entity *result = add_entity(game_state, Entity_Type_Mass_Agg, Entity_Flag_Movable|Entity_Flag_Collides);
+    result->mass_agg = init_cube_mass_agg(arena, center, dim, total_mass, elastic_value); 
 
     return result;
 }
 
-#if 0
 internal Entity *
-add_room_entity(GameState *game_state, v3 p, v3 dim)
+add_aabb_entity(GameState *game_state, v3 p, v3 dim, v3 color, f32 mass)
 {
-    Entity *entity = add_entity(game_state, p, dim, 1.0f, Entity_Type_Room);
-    entity->color = V3(0.3f, 0.3f, 0.3f);
+    // TODO(joon) test if mass is infinite, and set the entity flag accordingly
+    Entity *result = add_entity(game_state, Entity_Type_Floor, Entity_Flag_Movable|Entity_Flag_Collides);
+    result->color = color;
+    result->aabb = init_aabb(V3(), 0.5f*dim, safe_ratio(1.0f, mass));
 
-    // TODO(joon) : Do we want to use aabb here?
-    entity->aabb = add_aabb(V3(), 0.5f*dim);
-
-    return entity;
+    return result;
 }
-#endif
+
+// NOTE(joon) floor is non_movable entity with infinite mass
+internal Entity *
+add_floor_entity(GameState *game_state, v3 p, v3 dim, v3 color)
+{
+    Entity *result = add_entity(game_state, Entity_Type_AABB, Entity_Flag_Collides);
+    result->aabb = init_aabb(V3(), 0.5f * dim, 0.0f);
+    
+    return result;
+}
+
+
+
 

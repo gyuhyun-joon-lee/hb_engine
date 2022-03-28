@@ -282,8 +282,32 @@ hadamard(v3 a, v3 b)
     return V3(a.x*b.x, a.y*b.y, a.z*b.z);
 }
 
+inline v3
+gather_min_elements(v3 a, v3 b)
+{
+    v3 result = {};
+
+    result.x = minimum(a.x, b.x);
+    result.y = minimum(a.y, b.y);
+    result.z = minimum(a.z, b.z);
+
+    return result;
+}
+
+inline v3
+gather_max_elements(v3 a, v3 b)
+{
+    v3 result = {};
+
+    result.x = maximum(a.x, b.x);
+    result.y = maximum(a.y, b.y);
+    result.z = maximum(a.z, b.z);
+
+    return result;
+}
+
 inline v4
-v4_(r32 x, r32 y, r32 z, r32 w)
+V4(r32 x, r32 y, r32 z, r32 w)
 {
     v4 result = {};
     result.x = x;
@@ -295,7 +319,7 @@ v4_(r32 x, r32 y, r32 z, r32 w)
 }
 
 inline v4
-v4_(v3 xyz, r32 w)
+V4(v3 xyz, r32 w)
 {
     v4 result = {};
     result.xyz = xyz;
@@ -735,10 +759,10 @@ QuarternionRotationM4(v3 axisVector, r32 rad)
     r32 m21 = 2*q2*q3 + 2*q0*q1;
     r32 m22 = 1 - 2*q1*q1 - 2*q2*q2;
 
-    result.column[0] = v4_(m00, m10, m20, 0);
-    result.column[1] = v4_(m01, m11, m21, 0);
-    result.column[2] = v4_(m02, m12, m22, 0);
-    result.column[3] = v4_(0, 0, 0, 1);
+    result.column[0] = V4(m00, m10, m20, 0);
+    result.column[1] = V4(m01, m11, m21, 0);
+    result.column[2] = V4(m02, m12, m22, 0);
+    result.column[3] = V4(0, 0, 0, 1);
 
     return result;
 }
@@ -757,16 +781,16 @@ world_to_camera(v3 camera_world_p,
                     QuarternionRotationM4(initial_camera_y_axis, along_y)*
                     QuarternionRotationM4(initial_camera_x_axis, along_x);
 
-    v3 camera_x_axis = (quarternion*v4_(initial_camera_x_axis, 0)).xyz;
-    v3 camera_y_axis = (quarternion*v4_(initial_camera_y_axis, 0)).xyz;
-    v3 camera_z_axis = (quarternion*v4_(initial_camera_z_axis, 0)).xyz;
+    v3 camera_x_axis = (quarternion*V4(initial_camera_x_axis, 0)).xyz;
+    v3 camera_y_axis = (quarternion*V4(initial_camera_y_axis, 0)).xyz;
+    v3 camera_z_axis = (quarternion*V4(initial_camera_z_axis, 0)).xyz;
 
     // NOTE(joon): Identical with projecting the world space coordinate onto the camera axis vectors
     m4 rotation = {};
-    rotation.column[0] = v4_(camera_x_axis.x, camera_y_axis.x, camera_z_axis.x, 0);
-    rotation.column[1] = v4_(camera_x_axis.y, camera_y_axis.y, camera_z_axis.y, 0);
-    rotation.column[2] = v4_(camera_x_axis.z, camera_y_axis.z, camera_z_axis.z, 0);
-    rotation.column[3] = v4_(0, 0, 0, 1);
+    rotation.column[0] = V4(camera_x_axis.x, camera_y_axis.x, camera_z_axis.x, 0);
+    rotation.column[1] = V4(camera_x_axis.y, camera_y_axis.y, camera_z_axis.y, 0);
+    rotation.column[2] = V4(camera_x_axis.z, camera_y_axis.z, camera_z_axis.z, 0);
+    rotation.column[3] = V4(0, 0, 0, 1);
 
     m4 translation = translate(-camera_world_p.x, -camera_world_p.y, -camera_world_p.z);
 
@@ -784,7 +808,7 @@ camera_to_world(v3 camera_v,
     m4 quarternion = QuarternionRotationM4(initial_camera_z_axis, along_z)*
                     QuarternionRotationM4(initial_camera_y_axis, along_y)*
                     QuarternionRotationM4(initial_camera_x_axis, along_x);
-    v3 world_v = (quarternion*v4_(camera_v, 0)).xyz;
+    v3 world_v = (quarternion*V4(camera_v, 0)).xyz;
 
     return world_v;
 }
@@ -820,10 +844,10 @@ projection(r32 focal_length, r32 aspect_ratio, r32 near, r32 far)
 
     r32 c = clip_space_top_is_one() ? 1.f : 0.f; 
 
-    result.column[0] = v4_(focal_length, 0, 0, 0);
-    result.column[1] = v4_(0, focal_length*aspect_ratio, 0, 0);
-    result.column[2] = v4_(0, 0, c*(near+far)/(far-near), 1);
-    result.column[3] = v4_(0, 0, (-2.0f*far*near)/(far-near), 0);
+    result.column[0] = V4(focal_length, 0, 0, 0);
+    result.column[1] = V4(0, focal_length*aspect_ratio, 0, 0);
+    result.column[2] = V4(0, 0, c*(near+far)/(far-near), 1);
+    result.column[3] = V4(0, 0, (-2.0f*far*near)/(far-near), 0);
 
     return result;
 }
@@ -841,10 +865,10 @@ symmetric_projection(r32 r, r32 t, r32 n, r32 f)
 
     // IMPORTANT : In opengl, t corresponds to 1 -> column[1][1] = n/t
     // while in vulkan, t corresponds to -1 -> columm[1][1] = -n/t
-    result.column[0] = v4_(n/r, 0, 0, 0);
-    result.column[1] = v4_(0, (n/t), 0, 0);
-    result.column[2] = v4_(0, 0, c*(n+f)/(n-f), -1);
-    result.column[3] = v4_(0, 0, (2.0f*f*n)/(n-f), 0);
+    result.column[0] = V4(n/r, 0, 0, 0);
+    result.column[1] = V4(0, (n/t), 0, 0);
+    result.column[2] = V4(0, 0, c*(n+f)/(n-f), -1);
+    result.column[3] = V4(0, 0, (2.0f*f*n)/(n-f), 0);
 
     return result;
 }
@@ -922,7 +946,7 @@ lerp(v3 min, r32 t, v3 max)
 }
 
 inline f32
-max_component(v3 a)
+max_element(v3 a)
 {
     f32 result = maximum(maximum(a.x, a.y), a.z);
 
@@ -930,7 +954,7 @@ max_component(v3 a)
 }
 
 inline f32
-min_component(v3 a)
+min_element(v3 a)
 {
     f32 result = minimum(minimum(a.x, a.y), a.z);
 
@@ -982,6 +1006,24 @@ inline u64
 big_to_little_endian(u64 byte_count)
 {
     u64 result = 0;
+    return result;
+}
+
+// TODO(joon) This function is not actually 'safe'...
+// need better name here
+inline b32
+safe_compare(f32 a, f32 b)
+{
+    b32 result = true;
+
+    f32 d = a - b;
+    f32 epsilon = 0.00001f;
+
+    if(d < -epsilon || d > epsilon)
+    {
+        result = false;
+    }
+
     return result;
 }
 

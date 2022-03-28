@@ -4,8 +4,14 @@
 // TODO(joon) collision volume & group
 struct AABB
 {
-    v3 center; 
+    // _not_ relative to the entity p,
+    // each collision volume can have seperate p and dp
+    v3 p;// center
+    v3 dp;
     v3 half_dim;
+
+    // TODO(joon) this is not a correct place to put mass
+    f32 inv_mass;
 };
 
 struct RigidBody
@@ -36,11 +42,17 @@ struct RigidBody
 struct MassParticle
 {
     f32 inv_mass;
-    v3 v;
     v3 p; // this is in world pos, and not relative to the entity p
+    v3 dp; // velocity
+    
+    // NOTE(joon) this is where we accumulate the force while interacting with 
+    // other particles(i.e elastic force)
+    // IMPORTANT(joon) Should be cleared to 0 every frame!
+    v3 this_frame_force;
 };
 
-// TODO(joon) we need a fast way to get all of the connections for certain particle.
+// TODO(joon) we need a fast way to get all of the connections for certain particle,
+// searching for O(n) worth of time doesn't seem to be a good idea
 struct PiecewiseMassParticleConnection
 {
     u32 particle_index_0;
@@ -51,7 +63,6 @@ struct PiecewiseMassParticleConnection
     f32 rest_length;
 };
 
-// TODO(joon) how do we represent a 'connection' between two particles?
 struct MassAgg
 {
     // TODO(joon) change this so that it can contain any number of particles

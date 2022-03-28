@@ -41,11 +41,14 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
         free_loaded_vox(&loaded_vox);
 
         game_state->mass_agg_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
-        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 0, 0), V3(1, 0, 0), 1.0f, 1.0f, 29.0f);
+        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 0, 0), 1.0f, 10.0f);
+
+        //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
+        add_aabb_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 1.0f), V3(0.7f, 0.7f, 0.7f), Flt_Max);
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + game_state->mass_agg_arena.total_size, megabytes(256));
         game_state->camera.focal_length = 1.0f;
-        game_state->camera.p = V3(-10, 0, 0);
+        game_state->camera.p = V3(-10, 0, 5);
         game_state->camera.initial_z_axis = V3(-1, 0, 0);
         game_state->camera.initial_x_axis = normalize(cross(V3(0, 0, 1), game_state->camera.initial_z_axis));
         game_state->camera.initial_y_axis = normalize(cross(game_state->camera.initial_z_axis, game_state->camera.initial_x_axis));
@@ -105,7 +108,7 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
         Entity *entity = game_state->entities + entity_index;
         switch(entity->type)
         {
-            case Entity_Type_Voxel:
+            case Entity_Type_AABB:
             {
                 //move_entity(game_state, entity, platform_input->dt_per_frame);
             }break;
@@ -113,7 +116,10 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
             case Entity_Type_Mass_Agg:
             {
                 // TODO(joon) make physics not to be dependent to the framerate?
-                move_mass_agg(game_state, &entity->mass_agg, platform_input->dt_per_frame, platform_input->space);
+                if(is_entity_flag_set(entity, Entity_Flag_Movable))
+                {
+                    move_mass_agg_entity(game_state, entity, platform_input->dt_per_frame, platform_input->space);
+                }
             }break;
         }
     }
@@ -129,13 +135,12 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
         Entity *entity = game_state->entities + entity_index;
         switch(entity->type)
         {
-            case Entity_Type_Voxel:
+            case Entity_Type_Floor:
+            case Entity_Type_AABB:
             {
-                //push_voxel(&render_group, entity->p, entity->color);
-            }break;
-            case Entity_Type_Room:
-            {
-                //push_room(&render_group, entity->p, entity->dim, entity->color);
+                push_aabb(&render_group, 
+                          entity->aabb.p, 2.0f*entity->aabb.half_dim, 
+                          entity->color);
             }break;
             case Entity_Type_Mass_Agg:
             {
