@@ -118,13 +118,11 @@ struct RenderEntryLine
     v3 color;
 };
 
+// TODO(joon) Do we even need to keep the concept of 'render group'
 struct RenderGroup
 {
-    u8 *push_buffer;
-    u32 push_buffer_used;
-    u32 push_buffer_max_size;
-
-    Camera camera;
+    // NOTE(joon) provided by the platform layer
+    PlatformRenderPushBuffer *render_push_buffer;
 };
 
 #endif

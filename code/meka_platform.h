@@ -336,6 +336,22 @@ struct thread_work_queue
     platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
 };
 
+struct PlatformRenderPushBuffer
+{
+    // NOTE(joon) provided by the platform layer
+    f32 width_over_height; 
+
+    // NOTE(joon) game code needs to fill these up
+    m4 proj_view;
+    v3 clear_color;
+    u8 *base;
+    u32 total_size;
+    u32 used;
+};
+
+#define GAME_UPDATE_AND_RENDER(name) void (name)(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory, PlatformRenderPushBuffer *platform_render_push_buffer)
+typedef GAME_UPDATE_AND_RENDER(UpdateAndRender);
+
 #ifdef __cplusplus
 }
 #endif

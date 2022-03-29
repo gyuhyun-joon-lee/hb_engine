@@ -121,14 +121,14 @@ struct otf_encoding_subtable_format_4_header
     // NOTE(joon) For the types of endcoding subtable format,
     // https://docs.microsoft.com/en-us/typography/opentype/spec/cmap
     u16 format; // should be 4
-    uint16 length; // This is the length in bytes of the subtable.
-    uint16 language;	// For requirements on use of the language field, see “Use of the language field in 'cmap' subtables” in this document.
-    uint16 twice_of_segment_count; // 2 × segCount.
+    u16 length; // This is the length in bytes of the subtable.
+    u16 language;	// For requirements on use of the language field, see “Use of the language field in 'cmap' subtables” in this document.
+    u16 twice_of_segment_count; // 2 × segCount.
 
     // NOTE(joon) glyph ID search accelerator using the binary tree
-    uint16 search_range; // Maximum power of 2 less than or equal to segCount, times 2 ((2**floor(log2(segCount))) * 2, where “**” is an exponentiation operator)
-    uint16 entry_selector; // Log2 of the maximum power of 2 less than or equal to numTables (log2(searchRange/2), which is equal to floor(log2(numTables)))
-    uint16 range_shift; //segCount times 2, minus searchRange ((segCount * 2) - searchRange)
+    u16 search_range; // Maximum power of 2 less than or equal to segCount, times 2 ((2**floor(log2(segCount))) * 2, where “**” is an exponentiation operator)
+    u16 entry_selector; // Log2 of the maximum power of 2 less than or equal to numTables (log2(searchRange/2), which is equal to floor(log2(numTables)))
+    u16 range_shift; //segCount times 2, minus searchRange ((segCount * 2) - searchRange)
 
     /*
        NOTE(joon) Rest of them looks like this, and we cannot store inside the format header as most of them are variable sized

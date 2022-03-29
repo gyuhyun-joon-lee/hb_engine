@@ -109,7 +109,6 @@ check_png_chunk_header(char *c, const char *header_name)
         *(c+2) == header_name[2] && 
         *(c+3) == header_name[3])
     {
-        printf("%c%c%c%c", header_name[0], header_name[1], header_name[2], header_name[3]);
         c = c+4;
     }
 }

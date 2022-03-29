@@ -418,5 +418,16 @@ move_mass_agg_entity(GameState *game_state, Entity *entity, f32 dt_per_frame, b3
         {
             particle->p += dp;
         }
+
+        // TODO(joon) resolve interpenetration
+        // To do that, we need to get the penetration depth along the contact normal.
+        // p.d > 0 -> penetration, need to resolve
+        // p.d = 0 -> touching each other
+        // p.d < 0 -> no penetration
+        // remember that resolving the interpenetration should happen only once per particle
+        // after the collision iteration.
+
+        // Also, based on the type of two entities, the distance that we should move the entities can differ.
+        // i.e. entity - floor -> entity should move 
     }
 }

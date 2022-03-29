@@ -19,11 +19,15 @@
 #undef internal
 #undef assert
 
+// TODO(joon) meka_shared.h file for files that are shared across platforms?
 #include "meka_types.h"
 #include "meka_platform.h"
+#include "meka_simd.h"
+#include "meka_render_group.h"
+#include "meka_math.h"
+#include "meka_random.h"
 
 #include "meka_metal.cpp"
-#include "meka.cpp"
 
 // TODO(joon): Get rid of global variables?
 global v2 last_mouse_p;
@@ -455,7 +459,7 @@ thread_proc(void *data)
 internal void
 macos_initialize_vulkan(RenderContext *render_context, CAMetalLayer *metal_layer)
 {
-    void *lib = dlopen("../external/vulkan/macos/lib/libvulkan.1.dylib", RTLD_LAZY|RTLD_GLOBAL);
+    void *lib = dlopen("../external/vulkan/macos/lib/libvulkan.1.dylib", RTLD_NOW|RTLD_GLOBAL);
     if(lib)
     {
         vkGetInstanceProcAddr = (VFType(vkGetInstanceProcAddr))dlsym(lib, "vkGetInstanceProcAddr");
@@ -634,7 +638,7 @@ macos_initialize_vulkan(RenderContext *render_context, CAMetalLayer *metal_layer
     VkRenderPass renderpass;
     CheckVkResult(vkCreateRenderPass(device, &renderpass_create_info, 0, &renderpass));
 
-    PlatformReadFileResult vertex_shader_code = debug_macos_read_file("/Volumes/meka/meka_renderer/code/shader/shader.vert.spv");
+    PlatformReadFileResult vertex_shader_code = debug_macos_read_file("/Volumes/meka/meka_engine/code/shader/shader.vert.spv");
     VkShaderModuleCreateInfo vertex_shader_module_create_info = {};
     vertex_shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     vertex_shader_module_create_info.codeSize = vertex_shader_code.size;
@@ -644,7 +648,7 @@ macos_initialize_vulkan(RenderContext *render_context, CAMetalLayer *metal_layer
     CheckVkResult(vkCreateShaderModule(device, &vertex_shader_module_create_info, 0, &vertex_shader_module));
     //platformApi->FreeFileMemory(vertex_shader_code.memory);
 
-    PlatformReadFileResult frag_shader_code = debug_macos_read_file("/Volumes/meka/meka_renderer/code/shader/shader.frag.spv");
+    PlatformReadFileResult frag_shader_code = debug_macos_read_file("/Volumes/meka/meka_engine/code/shader/shader.frag.spv");
     VkShaderModuleCreateInfo frag_shader_module_create_info = {};
     frag_shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     frag_shader_module_create_info.codeSize = frag_shader_code.size;
@@ -669,8 +673,7 @@ macos_initialize_vulkan(RenderContext *render_context, CAMetalLayer *metal_layer
     vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = {};
-    inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO; inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
     VkViewport viewport = {};
     viewport.width = (f32)surface_capabilities.currentExtent.width;
@@ -1057,13 +1060,16 @@ u32 cube_inward_facing_indices[]
 // TODO(joon) Later, we can make this to also 'stream' the meshes(just like the other assets), and put them inside the render mesh
 // so that the graphics API can render them.
 internal void
-metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_base, u32 push_buffer_used, u32 window_width, u32 window_height)
+metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height)
 {
     // NOTE(joon): renderpass descriptor is already configured for this frame
     MTLRenderPassDescriptor *this_frame_descriptor = render_context->view.currentRenderPassDescriptor;
 
     //renderpass_descriptor.colorAttachments[0].texture = ;
-    this_frame_descriptor.colorAttachments[0].clearColor = {0, 0, 0, 1};
+    this_frame_descriptor.colorAttachments[0].clearColor = {render_push_buffer->clear_color.r, 
+                                                            render_push_buffer->clear_color.g, 
+                                                            render_push_buffer->clear_color.b, 
+                                                            1};
     this_frame_descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
     this_frame_descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
 
@@ -1085,26 +1091,17 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
         metal_set_cull_mode(render_encoder, MTLCullModeBack);
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
-        // TODO(joon) pass the matrices, not the camera itself!
-        Camera *camera = (Camera *)(push_buffer_base);
-        f32 width_over_height = (f32)window_width / (f32)window_height;
-        m4 proj = projection(camera->focal_length, width_over_height, 0.1f, 10000.0f);
-        m4 view = world_to_camera(camera->p, 
-                camera->initial_x_axis, camera->along_x, 
-                camera->initial_y_axis, camera->along_y, 
-                camera->initial_z_axis, camera->along_z);
-
         PerFrameData per_frame_data = {};
-        per_frame_data.proj_view_ = proj*camera_rhs_to_lhs(view);
+        per_frame_data.proj_view_ = render_push_buffer->proj_view; // already calculated from the game code
 
         metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 1);
 
         u32 voxel_instance_count = 0;
-        for(u32 consumed = sizeof(Camera); // NOTE(joon) The first element of the push buffer is camera
-                consumed < push_buffer_used;
+        for(u32 consumed = 0;
+                consumed < render_push_buffer->used;
                 )
         {
-            RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)push_buffer_base + consumed);
+            RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_push_buffer->base + consumed);
 
             switch(header->type)
             {
@@ -1112,7 +1109,7 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
                 // which is allocating the managed buffer and instance-drawing the lines
                 case Render_Entry_Type_Line:
                 {
-                    RenderEntryLine *entry = (RenderEntryLine *)((u8 *)push_buffer_base + consumed);
+                    RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
                     metal_set_pipeline(render_encoder, render_context->line_pipeline_state);
                     f32 start_and_end[6] = {entry->start.x, entry->start.y, entry->start.z, entry->end.x, entry->end.y, entry->end.z};
 
@@ -1139,7 +1136,7 @@ metal_render_and_display(MetalRenderContext *render_context, u8 *push_buffer_bas
 
                 case Render_Entry_Type_AABB:
                 {
-                    RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)push_buffer_base + consumed);
+                    RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
                     m4 model = scale_translate(entry->dim, entry->p);
@@ -1250,6 +1247,49 @@ macos_get_base_path(char *dest)
     }
 }
 
+internal time_t
+macos_get_last_modified_time(char *file_name)
+{
+    time_t result = 0; 
+
+    struct stat file_stat = {};
+    stat(file_name, &file_stat); 
+    result = file_stat.st_mtime;
+
+    return result;
+}
+
+struct MacOSGameCode
+{
+    void *library;
+    time_t last_modified_time; // u32 bit integer
+    UpdateAndRender *update_and_render;
+};
+
+internal void
+macos_load_game_code(MacOSGameCode *game_code, char *file_name)
+{
+    // NOTE(joon) dlclose does not actually unload the dll!!!
+    // dll only gets unloaded if there is no object that is referencing the dll.
+    // TODO(joon) library should be remain open? If so, we need another way to 
+    // actually unload the dll so that the fresh dll can be loaded.
+    if(game_code->library)
+    {
+        int error = dlclose(game_code->library);
+        game_code->update_and_render = 0;
+        game_code->last_modified_time = 0;
+        game_code->library = 0;
+    }
+
+    void *library = dlopen(file_name, RTLD_LAZY|RTLD_GLOBAL);
+    if(library)
+    {
+        game_code->library = library;
+        game_code->last_modified_time = macos_get_last_modified_time(file_name);
+        game_code->update_and_render = (UpdateAndRender *)dlsym(library, "update_and_render");
+    }
+}
+
 int 
 main(void)
 { 
@@ -1257,6 +1297,11 @@ main(void)
     mach_timebase_info(&mach_time_info);
     f32 nano_seconds_per_tick = ((f32)mach_time_info.numer/(f32)mach_time_info.denom);
 
+    char *lock_file_path = "/Volumes/meka/meka_engine/build/meka.app/Contents/MacOS/lock.tmp";
+    char *game_code_path = "/Volumes/meka/meka_engine/build/meka.app/Contents/MacOS/meka.dylib";
+    MacOSGameCode macos_game_code = {};
+    macos_load_game_code(&macos_game_code, game_code_path);
+ 
     u32 random_seed = time(NULL);
     random_series series = start_random_series(random_seed); 
 
@@ -1437,9 +1482,12 @@ main(void)
     }
 
     PlatformInput platform_input = {};
-    u32 render_push_buffer_max_size = megabytes(16);
-    u8 *render_push_buffer_base = (u8 *)malloc(render_push_buffer_max_size);
-    u32 render_push_buffer_used = 0;
+
+    PlatformRenderPushBuffer platform_render_push_buffer = {};
+    platform_render_push_buffer.total_size = megabytes(16);
+    platform_render_push_buffer.base = (u8 *)malloc(platform_render_push_buffer.total_size);
+    // TODO(joon) Make sure to update this value whenever we resize the window
+    platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
 
     [app activateIgnoringOtherApps:YES];
     [app run];
@@ -1461,7 +1509,25 @@ main(void)
             3. With the return value from the displayLinkOutputCallback function, get the absolute time to present
             4. Use presentDrawable:atTime to present at the specific time
         */
-        update_and_render(&platform_api, &platform_input, &platform_memory, render_push_buffer_base, render_push_buffer_max_size, &render_push_buffer_used);
+
+        // TODO(joon) : last permission bit should not matter, but double_check?
+        int lock_file = open(lock_file_path, O_RDONLY); 
+        if(lock_file < 0)
+        {
+            if(macos_get_last_modified_time(game_code_path) != macos_game_code.last_modified_time)
+            {
+                macos_load_game_code(&macos_game_code, game_code_path);
+            }
+        }
+        else
+        {
+            close(lock_file);
+        }
+
+        if(macos_game_code.update_and_render)
+        {
+            macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer);
+        }
 
         u64 time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
 
@@ -1492,7 +1558,7 @@ main(void)
         printf("%dms elapsed, fps : %.6f\n", time_passed_in_micro_sec, 1.0f/time_passed_in_sec);
         @autoreleasepool
         {
-            metal_render_and_display(&metal_render_context, render_push_buffer_base, render_push_buffer_used, window_width, window_height);
+            metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height);
         }
 
 #if 0
@@ -1510,8 +1576,6 @@ main(void)
 
         // update the time stamp
         last_time = mach_absolute_time();
-        // TODO(joon) not loving this...
-        render_push_buffer_used = 0;
     }
 
     return 0;

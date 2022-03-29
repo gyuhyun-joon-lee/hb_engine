@@ -1,6 +1,7 @@
 #ifndef MEKA_TYPES_H
 #define MEKA_TYPES_H
 
+#include <stdint.h>
 #include <float.h>
 
 typedef int8_t i8;

@@ -4,6 +4,7 @@
  */
 
 #define Invalid_R32 10000.0f
+#include <string.h> // memset, memcopy, memmove
 
 internal u8 *
 get_closest_carriage_return(u8 *start)

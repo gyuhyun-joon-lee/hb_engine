@@ -335,24 +335,28 @@ internal void
 }
 
 internal void
-start_render_group(RenderGroup *render_group, Camera *camera, u8 *render_push_buffer_base, u32 render_push_buffer_max_size)
+start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_push_buffer, Camera *camera, v3 clear_color)
 {
-    render_group->camera = *camera;
-    render_group->push_buffer = render_push_buffer_base;
-    render_group->push_buffer_max_size = render_push_buffer_max_size;
+    assert(render_push_buffer->base)
+    render_group->render_push_buffer = render_push_buffer;
 
-    // TODO(joon) pass the matrices, not the camera itself!
-    Camera *push_camera = (Camera *)render_push_buffer_base;
-    *push_camera = *camera;
-    render_group->push_buffer_used += sizeof(Camera);
+    m4 proj = projection(camera->focal_length, render_push_buffer->width_over_height, 0.1f, 10000.0f);
+    m4 view = world_to_camera(camera->p, 
+                                    camera->initial_x_axis, camera->along_x, 
+                                    camera->initial_y_axis, camera->along_y, 
+                                    camera->initial_z_axis, camera->along_z);
+    render_push_buffer->proj_view = proj * camera_rhs_to_lhs(view);
+    render_push_buffer->clear_color = clear_color;
+
+    render_group->render_push_buffer->used = 0;
 }
  
 internal void
 push_aabb(RenderGroup *render_group, v3 p, v3 dim, v3 color)
 {
-    RenderEntryAABB *entry = (RenderEntryAABB *)(render_group->push_buffer + render_group->push_buffer_used);
-    render_group->push_buffer_used += sizeof(*entry);
-    assert(render_group->push_buffer_used <= render_group->push_buffer_max_size);
+    RenderEntryAABB *entry = (RenderEntryAABB *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
+    render_group->render_push_buffer->used += sizeof(*entry);
+    assert(render_group->render_push_buffer->used <= render_group->render_push_buffer->total_size);
 
     entry->header.type = Render_Entry_Type_AABB;
     entry->p = p;
@@ -365,9 +369,9 @@ push_aabb(RenderGroup *render_group, v3 p, v3 dim, v3 color)
 internal void
 push_line(RenderGroup *render_group, v3 start, v3 end, v3 color)
 {
-    RenderEntryLine *entry = (RenderEntryLine *)(render_group->push_buffer + render_group->push_buffer_used);
+    RenderEntryLine *entry = (RenderEntryLine *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
     entry->header.type = Render_Entry_Type_Line;
-    render_group->push_buffer_used += sizeof(*entry);
+    render_group->render_push_buffer->used += sizeof(*entry);
 
     entry->start = start;
     entry->end = end;

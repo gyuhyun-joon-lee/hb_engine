@@ -20,9 +20,8 @@
 #include "meka_ray.cpp"
 #include "meka_image_loader.cpp"
 
-internal void
-update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory,
-                    u8 *render_push_buffer_base, u32 render_push_buffer_max_size, u32 *render_push_buffer_used)
+extern "C" 
+GAME_UPDATE_AND_RENDER(update_and_render)
 {
     GameState *game_state = (GameState *)platform_memory->permanent_memory;
     VoxelWorld *world = &game_state->world;
@@ -41,7 +40,7 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
         free_loaded_vox(&loaded_vox);
 
         game_state->mass_agg_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
-        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 0, 0), 1.0f, 10.0f);
+        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 0, 0), 1.0f, 25.0f);
 
         //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
         add_aabb_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 1.0f), V3(0.7f, 0.7f, 0.7f), Flt_Max);
@@ -126,7 +125,7 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
 
     // NOTE(joon) rendering code start
     RenderGroup render_group = {};
-    start_render_group(&render_group, &game_state->camera, render_push_buffer_base, render_push_buffer_max_size);
+    start_render_group(&render_group, platform_render_push_buffer, &game_state->camera, V3(0, 0, 0));
     
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;
@@ -156,8 +155,5 @@ update_and_render(PlatformAPI *platform_api, PlatformInput *platform_input, Plat
             }break;
         }
     }
-
-    // TODO(joon) don't exactly love this...
-    *render_push_buffer_used = render_group.push_buffer_used;
 }
 
