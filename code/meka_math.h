@@ -6,7 +6,7 @@
 #include <math.h>
 
 inline v2
-V2(r32 x, r32 y)
+V2(f32 x, f32 y)
 {
     v2 result = {};
 
@@ -16,7 +16,7 @@ V2(r32 x, r32 y)
     return result;
 }
 
-inline r32
+inline f32
 length(v2 a)
 {
     return sqrtf(a.x*a.x + a.y*a.y);
@@ -27,13 +27,13 @@ V2i(i32 x, i32 y)
 {
     v2 result = {};
 
-    result.x = (r32)x;
-    result.y = (r32)y;
+    result.x = (f32)x;
+    result.y = (f32)y;
 
     return result;
 }
 
-inline r32
+inline f32
 length_square(v2 a)
 {
     return a.x*a.x + a.y*a.y;
@@ -91,7 +91,7 @@ operator-(v2 a, v2 b)
     return result;
 }
 inline v2
-operator/(v2 a, r32 value)
+operator/(v2 a, f32 value)
 {
     v2 result = {};
 
@@ -102,7 +102,7 @@ operator/(v2 a, r32 value)
 }
 
 inline v2
-operator*(r32 value, v2 &a)
+operator*(f32 value, v2 &a)
 {
     v2 result = {};
 
@@ -121,7 +121,7 @@ V3()
 }
 
 inline v3
-V3(r32 x, r32 y, r32 z)
+V3(f32 x, f32 y, f32 z)
 {
     v3 result = {};
 
@@ -194,7 +194,7 @@ operator-(v3 a, v3 b)
     return result;
 }
 inline v3
-operator/(v3 a, r32 value)
+operator/(v3 a, f32 value)
 {
     v3 result = {};
 
@@ -206,7 +206,7 @@ operator/(v3 a, r32 value)
 }
 
 inline v3&
-operator/=(v3 &a, r32 value)
+operator/=(v3 &a, f32 value)
 {
     a.x /= value;
     a.y /= value;
@@ -216,7 +216,7 @@ operator/=(v3 &a, r32 value)
 }
 
 inline v3&
-operator*=(v3 &a, r32 value)
+operator*=(v3 &a, f32 value)
 {
     a.x *= value;
     a.y *= value;
@@ -226,7 +226,7 @@ operator*=(v3 &a, r32 value)
 }
 
 inline v3
-operator*(r32 value, v3 a)
+operator*(f32 value, v3 a)
 {
     v3 result = {};
 
@@ -251,7 +251,7 @@ cross(v3 a, v3 b)
     return result;
 }
 
-inline r32
+inline f32
 length_square(v3 a)
 {
     return a.x*a.x + a.y*a.y + a.z*a.z;
@@ -270,7 +270,7 @@ is_normalized(v3 a)
     return (a.x <= 1.0f && a.y <= 1.0f && a.z <= 1.0f);
 }
 
-inline r32
+inline f32
 dot(v3 a, v3 b)
 {
     return a.x*b.x + a.y*b.y + a.z*b.z;
@@ -307,7 +307,7 @@ gather_max_elements(v3 a, v3 b)
 }
 
 inline v4
-V4(r32 x, r32 y, r32 z, r32 w)
+V4(f32 x, f32 y, f32 z, f32 w)
 {
     v4 result = {};
     result.x = x;
@@ -319,7 +319,7 @@ V4(r32 x, r32 y, r32 z, r32 w)
 }
 
 inline v4
-V4(v3 xyz, r32 w)
+V4(v3 xyz, f32 w)
 {
     v4 result = {};
     result.xyz = xyz;
@@ -328,15 +328,21 @@ V4(v3 xyz, r32 w)
     return result;
 }
 
-inline r32
+inline f32
 length_square(v4 a)
 {
     return a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w;
 }
 
+inline f32
+dot(v4 a, v4 b)
+{
+    f32 result = a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
+    return result;
+}
 
 inline v4
-operator/(v4 a, r32 value)
+operator/(v4 a, f32 value)
 {
     v4 result = {};
 
@@ -348,7 +354,7 @@ operator/(v4 a, r32 value)
     return result;
 }
 
-inline r32
+inline f32
 length(v4 a)
 {
     return sqrtf(length_square(a));
@@ -387,7 +393,7 @@ operator-(v4 &a, v4 &b)
 }
 
 inline v4
-operator*(r32 value, v4 &a)
+operator*(f32 value, v4 &a)
 {
     v4 result = {};
 
@@ -400,7 +406,7 @@ operator*(r32 value, v4 &a)
 }
 
 inline v4&
-operator*=(v4 &a, r32 value)
+operator*=(v4 &a, f32 value)
 {
     a.x *= value;
     a.y *= value;
@@ -408,419 +414,6 @@ operator*=(v4 &a, r32 value)
     a.w *= value;
 
     return a;
-}
-
-// m3
-inline m3
-M3()
-{
-    m3 result = {};
-
-    result.e[0][0] = 1;
-    result.e[1][1] = 1;
-    result.e[2][2] = 1;
-
-    return result;
-}
-
-inline m3
-M3(f32 e00, f32 e01, f32 e02,
-    f32 e10, f32 e11, f32 e12,
-    f32 e20, f32 e21, f32 e22)
-{
-    m3 result = {};
-    result.e[0][0] = e00;
-    result.e[0][1] = e01;
-    result.e[0][2] = e02;
-
-    result.e[1][0] = e10;
-    result.e[1][1] = e11;
-    result.e[1][2] = e12;
-
-    result.e[2][0] = e20;
-    result.e[2][1] = e21;
-    result.e[2][2] = e22;
-
-    return result;
-}
-
-inline m3
-operator+(m3 a, m3 b)
-{
-    m3 result = {};
-
-    result.rows[0] = a.rows[0] + b.rows[0];
-    result.rows[1] = a.rows[1] + b.rows[1];
-    result.rows[2] = a.rows[2] + b.rows[2];
-
-    return result;
-}
-
-inline m3
-operator-(m3 a, m3 b)
-{
-    m3 result = {};
-
-    result.rows[0] = a.rows[0] - b.rows[0];
-    result.rows[1] = a.rows[1] - b.rows[1];
-    result.rows[2] = a.rows[2] - b.rows[2];
-
-    return result;
-}
-
-// return identity matrix
-inline m4
-M4()
-{
-    m4 result = {};
-    result.column[0].e[0] = 1.0f;
-    result.column[1].e[1] = 1.0f;
-    result.column[2].e[2] = 1.0f;
-    result.column[3].e[3] = 1.0f;
-
-    return result;
-}
-
-inline m4
-M4(r32 e00, r32 e01, r32 e02, r32 e03,
-    r32 e10, r32 e11, r32 e12, r32 e13,
-    r32 e20, r32 e21, r32 e22, r32 e23,
-    r32 e30, r32 e31, r32 e32, r32 e33)
-{
-    m4 result = {};
-
-    result.column[0].e[0] = e00;
-    result.column[0].e[1] = e10;
-    result.column[0].e[2] = e20;
-    result.column[0].e[3] = e30;
-
-    result.column[1].e[0] = e01;
-    result.column[1].e[1] = e11;
-    result.column[1].e[2] = e21;
-    result.column[1].e[3] = e31;
-
-    result.column[2].e[0] = e02;
-    result.column[2].e[1] = e12;
-    result.column[2].e[2] = e22;
-    result.column[2].e[3] = e32;
-
-    result.column[3].e[0] = e03;
-    result.column[3].e[1] = e13;
-    result.column[3].e[2] = e23;
-    result.column[3].e[3] = e33;
-
-    return result;
-}
-
-inline m4
-operator+(m4 &a, m4 &b)
-{
-    m4 result = {};
-
-    result.column[0] = a.column[0] + b.column[0];
-    result.column[1] = a.column[1] + b.column[1];
-    result.column[2] = a.column[2] + b.column[2];
-    result.column[3] = a.column[3] + b.column[3];
-
-    return result;
-}
-
-inline m4
-operator-(m4 &a, m4 &b)
-{
-    m4 result = {};
-
-    result.column[0] = a.column[0] - b.column[0];
-    result.column[1] = a.column[1] - b.column[1];
-    result.column[2] = a.column[2] - b.column[2];
-    result.column[3] = a.column[3] - b.column[3];
-
-    return result;
-}
-
-inline m4
-operator*(m4 a, m4 b)
-{
-    m4 result = {};
-
-    result.column[0].e[0] = a.column[0].e[0]*b.column[0].e[0] +
-                            a.column[1].e[0]*b.column[0].e[1] +
-                            a.column[2].e[0]*b.column[0].e[2] +
-                            a.column[3].e[0]*b.column[0].e[3];
-    result.column[0].e[1] = a.column[0].e[1]*b.column[0].e[0] +
-                            a.column[1].e[1]*b.column[0].e[1] +
-                            a.column[2].e[1]*b.column[0].e[2] +
-                            a.column[3].e[1]*b.column[0].e[3];
-    result.column[0].e[2] = a.column[0].e[2]*b.column[0].e[0] +
-                            a.column[1].e[2]*b.column[0].e[1] +
-                            a.column[2].e[2]*b.column[0].e[2] +
-                            a.column[3].e[2]*b.column[0].e[3];
-    result.column[0].e[3] = a.column[0].e[3]*b.column[0].e[0] +
-                            a.column[1].e[3]*b.column[0].e[1] +
-                            a.column[2].e[3]*b.column[0].e[2] +
-                            a.column[3].e[3]*b.column[0].e[3];
-
-    result.column[1].e[0] = a.column[0].e[0]*b.column[1].e[0] +
-                            a.column[1].e[0]*b.column[1].e[1] +
-                            a.column[2].e[0]*b.column[1].e[2] +
-                            a.column[3].e[0]*b.column[1].e[3];
-    result.column[1].e[1] = a.column[0].e[1]*b.column[1].e[0] +
-                            a.column[1].e[1]*b.column[1].e[1] +
-                            a.column[2].e[1]*b.column[1].e[2] +
-                            a.column[3].e[1]*b.column[1].e[3];
-    result.column[1].e[2] = a.column[0].e[2]*b.column[1].e[0] +
-                            a.column[1].e[2]*b.column[1].e[1] +
-                            a.column[2].e[2]*b.column[1].e[2] +
-                            a.column[3].e[2]*b.column[1].e[3];
-    result.column[1].e[3] = a.column[0].e[3]*b.column[1].e[0] +
-                            a.column[1].e[3]*b.column[1].e[1] +
-                            a.column[2].e[3]*b.column[1].e[2] +
-                            a.column[3].e[3]*b.column[1].e[3];
-
-    result.column[2].e[0] = a.column[0].e[0]*b.column[2].e[0] +
-                            a.column[1].e[0]*b.column[2].e[1] +
-                            a.column[2].e[0]*b.column[2].e[2] +
-                            a.column[3].e[0]*b.column[2].e[3];
-    result.column[2].e[1] = a.column[0].e[1]*b.column[2].e[0] +
-                            a.column[1].e[1]*b.column[2].e[1] +
-                            a.column[2].e[1]*b.column[2].e[2] +
-                            a.column[3].e[1]*b.column[2].e[3];
-    result.column[2].e[2] = a.column[0].e[2]*b.column[2].e[0] +
-                            a.column[1].e[2]*b.column[2].e[1] +
-                            a.column[2].e[2]*b.column[2].e[2] +
-                            a.column[3].e[2]*b.column[2].e[3];
-    result.column[2].e[3] = a.column[0].e[3]*b.column[2].e[0] +
-                            a.column[1].e[3]*b.column[2].e[1] +
-                            a.column[2].e[3]*b.column[2].e[2] +
-                            a.column[3].e[3]*b.column[2].e[3];
-
-    result.column[3].e[0] = a.column[0].e[0]*b.column[3].e[0] +
-                            a.column[1].e[0]*b.column[3].e[1] +
-                            a.column[2].e[0]*b.column[3].e[2] +
-                            a.column[3].e[0]*b.column[3].e[3];
-    result.column[3].e[1] = a.column[0].e[1]*b.column[3].e[0] +
-                            a.column[1].e[1]*b.column[3].e[1] +
-                            a.column[2].e[1]*b.column[3].e[2] +
-                            a.column[3].e[1]*b.column[3].e[3];
-    result.column[3].e[2] = a.column[0].e[2]*b.column[3].e[0] +
-                            a.column[1].e[2]*b.column[3].e[1] +
-                            a.column[2].e[2]*b.column[3].e[2] +
-                            a.column[3].e[2]*b.column[3].e[3];
-    result.column[3].e[3] = a.column[0].e[3]*b.column[3].e[0] +
-                            a.column[1].e[3]*b.column[3].e[1] +
-                            a.column[2].e[3]*b.column[3].e[2] +
-                            a.column[3].e[3]*b.column[3].e[3];
-
-
-    return result;
-}
-
-inline m4
-operator*(r32 value, m4 &b)
-{
-    m4 result = {};
-    result.column[0] = value*b.column[0];
-    result.column[1] = value*b.column[1];
-    result.column[2] = value*b.column[2];
-    result.column[3] = value*b.column[3];
-
-    return result;
-}
-
-inline v4
-operator*(m4 m, v4 v)
-{
-    v4 result = {};
-    result.x = m.column[0].e[0]*v.x + 
-            m.column[1].e[0]*v.y +
-            m.column[2].e[0]*v.z +
-            m.column[3].e[0]*v.w;
-
-    result.y = m.column[0].e[1]*v.x + 
-            m.column[1].e[1]*v.y +
-            m.column[2].e[1]*v.z +
-            m.column[3].e[1]*v.w;
-
-    result.z = m.column[0].e[2]*v.x + 
-            m.column[1].e[2]*v.y +
-            m.column[2].e[2]*v.z +
-            m.column[3].e[2]*v.w;
-
-    result.w = m.column[0].e[3]*v.x + 
-            m.column[1].e[3]*v.y +
-            m.column[2].e[3]*v.z +
-            m.column[3].e[3]*v.w;
-
-    return result;
-}
-
-
-
-inline m4
-scale(v3 scale)
-{
-    m4 result = M4();
-
-    result.column[0].e[0] *= scale.x;
-    result.column[1].e[1] *= scale.y;
-    result.column[2].e[2] *= scale.z;
-    
-    return result;
-}
-
-inline m4
-scale(r32 x, r32 y, r32 z)
-{
-    return scale(V3(x, y, z));
-}
-
-inline m4
-translate(v3 translate)
-{
-    m4 result = M4();
-
-    result.column[3].xyz = translate;
-
-    return result;
-}
-
-inline m4
-scale_translate(v3 scale, v3 translate)
-{
-    m4 result = M4();
-
-    result.column[0].e[0] *= scale.x;
-    result.column[1].e[1] *= scale.y;
-    result.column[2].e[2] *= scale.z;
-    result.column[3].xyz = translate;
-
-    return result;
-}
-
-inline m4
-translate(r32 x, r32 y, r32 z)
-{
-    return translate(V3(x, y, z));
-}
-
-/*
- * Rotation matrix along one axis using Quarternion(&q is a unit quarternion)
- * 1-2y^2-2z^2      2xy-2sz      2xz+2sy
- * 2xy+2sz          1-2x^2-2z^2  2yz-2sx
- * 2xz-2sy          2yz+2sx      1-2x^2-2y^2
- *
-*/
-inline v3
-QuarternionRotation(v3 axisVector, r32 rad, v3 vectorToRotate)
-{
-    v3 result = {};
-
-    // Quarternion q = q0 + q1*i + q2*j + q3*k, or s + xi + yj + zk
-    r32 q0 = cosf(rad/2);
-    r32 q1 = axisVector.x*sinf(rad/2);
-    r32 q2 = axisVector.y*sinf(rad/2);
-    r32 q3 = axisVector.z*sinf(rad/2);
-
-    r32 m00 = 1.0f - 2*q2*q2 - 2*q3*q3;
-    r32 m01 = 2*q1*q2 - 2*q0*q3;
-    r32 m02 = 2*q1*q3 + 2*q0*q2;
-    r32 m10 = 2*q1*q2 + 2*q0*q3;
-    r32 m11 = 1.0f - 2*q1*q1 - 2*q3*q3;
-    r32 m12 = 2*q2*q3 - 2*q0*q1;
-    r32 m20 = 2*q1*q3 - 2*q0*q2;
-    r32 m21 = 2*q2*q3 + 2*q0*q1;
-    r32 m22 = 1 - 2*q1*q1 - 2*q2*q2;
-
-    result.x = m00*vectorToRotate.x + m01*vectorToRotate.y + m02*vectorToRotate.z;
-    result.y = m10*vectorToRotate.x + m11*vectorToRotate.y + m12*vectorToRotate.z;
-    result.z = m20*vectorToRotate.x + m21*vectorToRotate.y + m22*vectorToRotate.z;
-
-    return result;
-}
-
-inline m4
-QuarternionRotationM4(v3 axisVector, r32 rad)
-{
-    m4 result = {};
-
-    // Quarternion q = q0 + q1*i + q2*j + q3*k, or s + xi + yj + zk
-    r32 q0 = cosf(rad/2);
-    r32 q1 = axisVector.x*sinf(rad/2);
-    r32 q2 = axisVector.y*sinf(rad/2);
-    r32 q3 = axisVector.z*sinf(rad/2);
-
-    r32 m00 = 1.0f - 2*q2*q2 - 2*q3*q3;
-    r32 m01 = 2*q1*q2 - 2*q0*q3;
-    r32 m02 = 2*q1*q3 + 2*q0*q2;
-    r32 m10 = 2*q1*q2 + 2*q0*q3;
-    r32 m11 = 1.0f - 2*q1*q1 - 2*q3*q3;
-    r32 m12 = 2*q2*q3 - 2*q0*q1;
-    r32 m20 = 2*q1*q3 - 2*q0*q2;
-    r32 m21 = 2*q2*q3 + 2*q0*q1;
-    r32 m22 = 1 - 2*q1*q1 - 2*q2*q2;
-
-    result.column[0] = V4(m00, m10, m20, 0);
-    result.column[1] = V4(m01, m11, m21, 0);
-    result.column[2] = V4(m02, m12, m22, 0);
-    result.column[3] = V4(0, 0, 0, 1);
-
-    return result;
-}
-
-// NOTE(joon): RHS/initial view direction is 1, 0, 0(in world space)
-inline m4
-world_to_camera(v3 camera_world_p, 
-                v3 initial_camera_x_axis, r32 along_x, 
-                v3 initial_camera_y_axis, r32 along_y, 
-                v3 initial_camera_z_axis, r32 along_z)
-{
-    // quarternion does not guarantee the rotation order independency(this buggd me quite a while)
-    // so in here, we will assume that the order of rotation is always x->y->z
-    // as long as we are begin consistent, we should be fine.
-    m4 quarternion = QuarternionRotationM4(initial_camera_z_axis, along_z)*
-                    QuarternionRotationM4(initial_camera_y_axis, along_y)*
-                    QuarternionRotationM4(initial_camera_x_axis, along_x);
-
-    v3 camera_x_axis = (quarternion*V4(initial_camera_x_axis, 0)).xyz;
-    v3 camera_y_axis = (quarternion*V4(initial_camera_y_axis, 0)).xyz;
-    v3 camera_z_axis = (quarternion*V4(initial_camera_z_axis, 0)).xyz;
-
-    // NOTE(joon): Identical with projecting the world space coordinate onto the camera axis vectors
-    m4 rotation = {};
-    rotation.column[0] = V4(camera_x_axis.x, camera_y_axis.x, camera_z_axis.x, 0);
-    rotation.column[1] = V4(camera_x_axis.y, camera_y_axis.y, camera_z_axis.y, 0);
-    rotation.column[2] = V4(camera_x_axis.z, camera_y_axis.z, camera_z_axis.z, 0);
-    rotation.column[3] = V4(0, 0, 0, 1);
-
-    m4 translation = translate(-camera_world_p.x, -camera_world_p.y, -camera_world_p.z);
-
-    return rotation*translation;
-} 
-
-// NOTE(joon): Assumes that the lookat dir is always (1, 0, 0) in camera space
-// this is required because the only thing we have is the angles
-inline v3
-camera_to_world(v3 camera_v, 
-                v3 initial_camera_x_axis, r32 along_x, 
-                v3 initial_camera_y_axis, r32 along_y, 
-                v3 initial_camera_z_axis, r32 along_z)
-{
-    m4 quarternion = QuarternionRotationM4(initial_camera_z_axis, along_z)*
-                    QuarternionRotationM4(initial_camera_y_axis, along_y)*
-                    QuarternionRotationM4(initial_camera_x_axis, along_x);
-    v3 world_v = (quarternion*V4(camera_v, 0)).xyz;
-
-    return world_v;
-}
-
-inline m4
-camera_rhs_to_lhs(m4 view_matrix)
-{
-    view_matrix.column[0].e[2] *= -1.0f;
-    view_matrix.column[1].e[2] *= -1.0f;
-    view_matrix.column[2].e[2] *= -1.0f;
-    view_matrix.column[3].e[2] *= -1.0f;
-    return view_matrix;
 }
 
 inline b32
@@ -836,47 +429,340 @@ clip_space_top_is_one(void)
     return result;
 }
 
+inline m3x3
+M3x3(f32 e00, f32 e01, f32 e02,
+    f32 e10, f32 e11, f32 e12, 
+    f32 e20, f32 e21, f32 e22,
+    f32 e30, f32 e31, f32 e32)
+{
+    m3x3 result = {};
+    result.rows[0] = {e00, e01, e02};
+    result.rows[1] = {e10, e11, e12};
+    result.rows[2] = {e20, e21, e22};
+
+    return result;
+}
+
+// NOTE(joon) returns identity matrix
+inline m3x3
+M3x3(void)
+{
+    m3x3 result = {};
+
+    result.e[0][0] = 1.0f;
+    result.e[1][1] = 1.0f;
+    result.e[2][2] = 1.0f;
+
+    return result;
+}
+
+inline m3x3
+operator *(m3x3 a, m3x3 b)
+{
+    m3x3 result = {}; 
+    result.e[0][0] = a.e[0][0]*b.e[0][0] + a.e[0][1]*b.e[1][0] + a.e[0][2]*b.e[2][0];
+    result.e[0][1] = a.e[0][0]*b.e[0][1] + a.e[0][1]*b.e[1][1] + a.e[0][2]*b.e[2][1];
+    result.e[0][2] = a.e[0][0]*b.e[0][2] + a.e[0][1]*b.e[1][2] + a.e[0][2]*b.e[2][2];
+
+    result.e[1][0] = a.e[1][0]*b.e[0][0] + a.e[1][1]*b.e[1][0] + a.e[1][2]*b.e[2][0];
+    result.e[1][1] = a.e[1][0]*b.e[0][1] + a.e[1][1]*b.e[1][1] + a.e[1][2]*b.e[2][1];
+    result.e[1][2] = a.e[1][0]*b.e[0][2] + a.e[1][1]*b.e[1][2] + a.e[1][2]*b.e[2][2];
+
+    result.e[2][0] = a.e[2][0]*b.e[0][0] + a.e[2][1]*b.e[1][0] + a.e[2][2]*b.e[2][0];
+    result.e[2][1] = a.e[2][0]*b.e[0][1] + a.e[2][1]*b.e[1][1] + a.e[2][2]*b.e[2][1];
+    result.e[2][2] = a.e[2][0]*b.e[0][2] + a.e[2][1]*b.e[1][2] + a.e[2][2]*b.e[2][2];
+
+    return result;
+}
+
+inline m3x3
+operator +(m3x3 a, m3x3 b)
+{
+    m3x3 result = {};
+
+    result.rows[0] = a.rows[0] + b.rows[0];
+    result.rows[1] = a.rows[1] + b.rows[1];
+    result.rows[2] = a.rows[2] + b.rows[2];
+
+    return result;
+}
+
+inline m3x3
+operator -(m3x3 a, m3x3 b)
+{
+    m3x3 result = {};
+
+    result.rows[0] = a.rows[0] - b.rows[0];
+    result.rows[1] = a.rows[1] - b.rows[1];
+    result.rows[2] = a.rows[2] - b.rows[2];
+
+    return result;
+}
+
+inline m3x3
+transpose(m3x3 m)
+{
+    m3x3 result = {};
+
+    for(u32 column = 0;
+            column < 3;
+            ++column)
+    {
+        for(u32 row = 0;
+                row < 3;
+                ++row)
+        {
+            result.e[row][column] = m.e[column][row];
+        }
+    }
+
+    return result;
+}
+
+inline v3
+operator *(m3x3 a, v3 b)
+{
+    v3 result = {};
+
+    result.x = dot(a.rows[0], b);
+    result.y = dot(a.rows[1], b);
+    result.z = dot(a.rows[2], b);
+
+    return result;
+}
+
+// NOTE(joon) rotate along x axis
+inline m3x3
+x_rotation(f32 rad)
+{
+    // same as 2d rotation, without x value changing
+    // cos -sin
+    // sin cos
+    f32 cos = cosf(rad);
+    f32 sin = sinf(rad);
+
+    m3x3 result = M3x3();
+    result.e[1][1] = cos;
+    result.e[1][2] = -sin;
+
+    result.e[2][1] = sin;
+    result.e[2][2] = cos;
+
+    return result;
+}
+
+// NOTE(joon) rotate along y axis
+inline m3x3
+y_rotation(f32 rad)
+{
+    // same as 2d rotation, without y value changing
+    // cos -sin
+    // sin cos
+    f32 cos = cosf(rad);
+    f32 sin = sinf(rad);
+
+    m3x3 result = 
+    {
+        {
+            cos, 0.0f, sin,
+            0.0f, 1.0f, 0.0f,
+            -sin, 0.0f, cos
+        }
+    };
+
+    return result;
+}
+
+// NOTE(joon) rotate along z axis
+inline m3x3 
+z_rotation(f32 rad)
+{
+    // same as 2d rotation, without x value changing
+    // cos -sin
+    // sin cos
+    f32 cos = cosf(rad);
+    f32 sin = sinf(rad);
+
+    m3x3 result = M3x3();
+    result.e[0][0] = cos;
+    result.e[0][1] = -sin;
+
+    result.e[1][0] = sin;
+    result.e[1][1] = cos;
+
+    return result;
+}
+
 // NOTE/Joon : This assumes that the window width is always 1m
-inline m4
-projection(r32 focal_length, r32 aspect_ratio, r32 near, r32 far)
+inline m4x4
+projection(f32 focal_length, f32 aspect_ratio, f32 near, f32 far)
 {
-    m4 result = {};
+    m4x4 result = {};
 
-    r32 c = clip_space_top_is_one() ? 1.f : 0.f; 
+    f32 c = clip_space_top_is_one() ? 1.f : 0.f; 
 
-    result.column[0] = V4(focal_length, 0, 0, 0);
-    result.column[1] = V4(0, focal_length*aspect_ratio, 0, 0);
-    result.column[2] = V4(0, 0, c*(near+far)/(far-near), 1);
-    result.column[3] = V4(0, 0, (-2.0f*far*near)/(far-near), 0);
+    result.rows[0] = V4(focal_length, 0, 0, 0);
+    result.rows[1] = V4(0, focal_length*aspect_ratio, 0, 0);
+    result.rows[2] = V4(0, 0, c*(near+far)/(far-near), (-2.0f*far*near)/(far-near));
+    result.rows[3] = V4(0, 0, 1, 0);
 
     return result;
 }
 
-// r = frustumHalfWidth
-// t = frustumHalfHeight
-// n = near plane z value
-// f = far plane z value
-inline m4
-symmetric_projection(r32 r, r32 t, r32 n, r32 f)
+inline m4x4
+M4x4(f32 e00, f32 e01, f32 e02, f32 e03,
+    f32 e10, f32 e11, f32 e12, f32 e13,
+    f32 e20, f32 e21, f32 e22, f32 e23,
+    f32 e30, f32 e31, f32 e32, f32 e33)
 {
-    m4 result = {};
-
-    r32 c = clip_space_top_is_one() ? 1.f : 0.f; 
-
-    // IMPORTANT : In opengl, t corresponds to 1 -> column[1][1] = n/t
-    // while in vulkan, t corresponds to -1 -> columm[1][1] = -n/t
-    result.column[0] = V4(n/r, 0, 0, 0);
-    result.column[1] = V4(0, (n/t), 0, 0);
-    result.column[2] = V4(0, 0, c*(n+f)/(n-f), -1);
-    result.column[3] = V4(0, 0, (2.0f*f*n)/(n-f), 0);
+    m4x4 result = {};
+    result.rows[0] = {e00, e01, e02, e03};
+    result.rows[1] = {e10, e11, e12, e13};
+    result.rows[2] = {e20, e21, e22, e23};
+    result.rows[3] = {e30, e31, e32, e33};
 
     return result;
 }
 
-inline r32 
-clamp(r32 min, r32 value, r32 max)
+inline m4x4
+M4x4(void)
 {
-    r32 result = value;
+    m4x4 result = {};
+
+    result.e[0][0] = 1.0f;
+    result.e[1][1] = 1.0f;
+    result.e[2][2] = 1.0f;
+    result.e[3][3] = 1.0f;
+
+    return result;
+}
+
+inline m4x4
+operator *(m4x4 a, m4x4 b)
+{
+    m4x4 result = {}; 
+    result.e[0][0] = a.e[0][0]*b.e[0][0] + a.e[0][1]*b.e[1][0] + a.e[0][2]*b.e[2][0] + a.e[0][3]*b.e[3][0];
+    result.e[0][1] = a.e[0][0]*b.e[0][1] + a.e[0][1]*b.e[1][1] + a.e[0][2]*b.e[2][1] + a.e[0][3]*b.e[3][1];
+    result.e[0][2] = a.e[0][0]*b.e[0][2] + a.e[0][1]*b.e[1][2] + a.e[0][2]*b.e[2][2] + a.e[0][3]*b.e[3][2];
+    result.e[0][3] = a.e[0][0]*b.e[0][3] + a.e[0][1]*b.e[1][3] + a.e[0][2]*b.e[2][3] + a.e[0][3]*b.e[3][3];
+
+    result.e[1][0] = a.e[1][0]*b.e[0][0] + a.e[1][1]*b.e[1][0] + a.e[1][2]*b.e[2][0] + a.e[1][3]*b.e[3][0];
+    result.e[1][1] = a.e[1][0]*b.e[0][1] + a.e[1][1]*b.e[1][1] + a.e[1][2]*b.e[2][1] + a.e[1][3]*b.e[3][1];
+    result.e[1][2] = a.e[1][0]*b.e[0][2] + a.e[1][1]*b.e[1][2] + a.e[1][2]*b.e[2][2] + a.e[1][3]*b.e[3][2];
+    result.e[1][3] = a.e[1][0]*b.e[0][3] + a.e[1][1]*b.e[1][3] + a.e[1][2]*b.e[2][3] + a.e[1][3]*b.e[3][3];
+
+    result.e[2][0] = a.e[2][0]*b.e[0][0] + a.e[2][1]*b.e[1][0] + a.e[2][2]*b.e[2][0] + a.e[2][3]*b.e[3][0];
+    result.e[2][1] = a.e[2][0]*b.e[0][1] + a.e[2][1]*b.e[1][1] + a.e[2][2]*b.e[2][1] + a.e[2][3]*b.e[3][1];
+    result.e[2][2] = a.e[2][0]*b.e[0][2] + a.e[2][1]*b.e[1][2] + a.e[2][2]*b.e[2][2] + a.e[2][3]*b.e[3][2];
+    result.e[2][3] = a.e[2][0]*b.e[0][3] + a.e[2][1]*b.e[1][3] + a.e[2][2]*b.e[2][3] + a.e[2][3]*b.e[3][3];
+
+    result.e[3][0] = a.e[3][0]*b.e[0][0] + a.e[3][1]*b.e[1][0] + a.e[3][2]*b.e[2][0] + a.e[3][3]*b.e[3][0];
+    result.e[3][1] = a.e[3][0]*b.e[0][1] + a.e[3][1]*b.e[1][1] + a.e[3][2]*b.e[2][1] + a.e[3][3]*b.e[3][1];
+    result.e[3][2] = a.e[3][0]*b.e[0][2] + a.e[3][1]*b.e[1][2] + a.e[3][2]*b.e[2][2] + a.e[3][3]*b.e[3][2];
+    result.e[3][3] = a.e[3][0]*b.e[0][3] + a.e[3][1]*b.e[1][3] + a.e[3][2]*b.e[2][3] + a.e[3][3]*b.e[3][3];
+
+    return result;
+}
+
+inline m4x4
+operator +(m4x4 a, m4x4 b)
+{
+    m4x4 result = {};
+
+    result.rows[0] = a.rows[0] + b.rows[0];
+    result.rows[1] = a.rows[1] + b.rows[1];
+    result.rows[2] = a.rows[2] + b.rows[2];
+    result.rows[3] = a.rows[3] + b.rows[3];
+
+    return result;
+}
+
+inline m4x4
+operator -(m4x4 a, m4x4 b)
+{
+    m4x4 result = {};
+
+    result.rows[0] = a.rows[0] - b.rows[0];
+    result.rows[1] = a.rows[1] - b.rows[1];
+    result.rows[2] = a.rows[2] - b.rows[2];
+    result.rows[3] = a.rows[3] - b.rows[3];
+
+    return result;
+}
+
+inline m4x4
+scale(f32 x, f32 y, f32 z, f32 w = 1.0f)
+{
+    m4x4 result = {};
+    result.e[0][0] = x;
+    result.e[1][1] = y;
+    result.e[2][2] = z;
+    result.e[3][3] = w;
+
+    return result;
+}
+
+inline m4x4
+scale(v3 xyz)
+{
+    return scale(xyz.x, xyz.y, xyz.z);
+}
+
+inline m4x4
+translate(f32 x, f32 y, f32 z, f32 w = 1.0f)
+{
+    m4x4 result = M4x4();
+    result.e[0][3] = x;
+    result.e[1][3] = y;
+    result.e[2][3] = z;
+    result.e[3][3] = w;
+
+    return result;
+}
+
+inline m4x4
+translate(v3 xyz)
+{
+    return translate(xyz.x, xyz.y, xyz.z);
+}
+
+inline m4x4
+transpose(m4x4 m)
+{
+    m4x4 result = {};
+
+    for(u32 column = 0;
+            column < 4;
+            ++column)
+    {
+        for(u32 row = 0;
+                row < 4;
+                ++row)
+        {
+            result.e[row][column] = m.e[column][row];
+        }
+    }
+
+    return result;
+}
+
+inline v4
+operator *(m4x4 a, v4 b)
+{
+    v4 result = {};
+
+    result.x = dot(a.rows[0], b);
+    result.y = dot(a.rows[1], b);
+    result.z = dot(a.rows[2], b);
+    result.w = dot(a.rows[3], b);
+
+    return result;
+}
+
+inline f32 
+clamp(f32 min, f32 value, f32 max)
+{
+    f32 result = value;
     if(result < min)
     {
         result = min;
@@ -888,8 +774,8 @@ clamp(r32 min, r32 value, r32 max)
 
     return result;
 }
-inline r32 
-clamp01(r32 value)
+inline f32 
+clamp01(f32 value)
 {
     return clamp(0.0f, value, 1.0f);
 }
@@ -927,14 +813,14 @@ clamp(i32 min, i32 value, i32 max)
     return result;
 }
 
-inline r32
-lerp(r32 min, r32 t, r32 max)
+inline f32
+lerp(f32 min, f32 t, f32 max)
 {
     return min + t*(max-min);
 }
 
 inline v3
-lerp(v3 min, r32 t, v3 max)
+lerp(v3 min, f32 t, v3 max)
 {
     v3 result = {};
 

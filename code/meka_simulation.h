@@ -49,6 +49,7 @@ struct MassParticle
     // other particles(i.e elastic force)
     // IMPORTANT(joon) Should be cleared to 0 every frame!
     v3 this_frame_force;
+    v3 this_frame_ddp;
 };
 
 // TODO(joon) we need a fast way to get all of the connections for certain particle,

@@ -2,8 +2,20 @@
 
 using namespace metal;
 
-#define MEKA_METAL_SHADER
-#include "../meka_metal_shader_shared.h"
+// NOTE(joon) this is a consequence of not having a shared file
+// between metal and the platform code.. which is a rabbit hole
+// that I do not want to go inside :(
+struct PerFrameData
+{
+    float4 proj_view[4];
+};
+
+struct PerObjectData
+{
+    float4 model[4];
+    float4 color;
+};
+
 
 struct LineVertexOutput
 {
@@ -22,7 +34,7 @@ line_vertex(uint vertex_ID [[vertex_id]],
 
     float3 world_p = float3(vertices[3*vertex_ID + 0], vertices[3*vertex_ID + 1], vertices[3*vertex_ID + 2]);
 
-    result.clip_p = (*(constant float4x4 *)&(per_frame_data->proj_view_)) * float4(world_p, 1.0f);
+    result.clip_p = (*(constant float4x4 *)&(per_frame_data->proj_view)) * float4(world_p, 1.0f);
 
     result.color = *(constant float3 *)color;
 
@@ -53,7 +65,7 @@ voxel_vertex(uint vertexID [[vertex_id]],
                 constant float *vertices [[buffer(0)]], 
                 constant PerFrameData *per_frame_data [[buffer(1)]],
                 constant float *voxel_positions[[buffer(2)]],
-                constant u32 *voxel_colors[[buffer(3)]])
+                constant uint *voxel_colors[[buffer(3)]])
 {
     VoxelVertexOutput result = {};
 
@@ -63,7 +75,7 @@ voxel_vertex(uint vertexID [[vertex_id]],
                             voxel_positions[3*instanceID+2] + vertices[3*vertexID+2],
                             1.0f);
 
-    result.clip_p = (*(constant float4x4 *)&(per_frame_data->proj_view_)) * world_p;
+    result.clip_p = (*(constant float4x4 *)&(per_frame_data->proj_view)) * world_p;
     result.p = world_p.xyz;
     result.normal = normalize(result.p);
 
@@ -106,11 +118,12 @@ cube_vertex(uint vertexID [[vertex_id]],
                                 vertices[3*vertexID+2],
                                 1.0f);
 
-    result.clip_p = (*(constant float4x4 *)&(per_frame_data->proj_view_)) * world_p;
-    result.color = float4(per_object_data->color.r, 
-                          per_object_data->color.g, 
-                          per_object_data->color.b, 
-                          1.0f);
+    result.clip_p = (*(constant float4x4 *)&(per_frame_data->proj_view)) * world_p;
+    //result.color = float4(per_object_data->color.r, 
+                          //per_object_data->color.g, 
+                          //per_object_data->color.b, 
+                          //1.0f);
+    result.color = float4(1, 0, 0, 1);
 
     return result;
 }

@@ -24,58 +24,16 @@ struct raw_mesh
     u32 texcoord_index_count;
 };
 
-// TODO(joon) pack a bunch of host coherent & visible buffer, save the offset of each of them, and then
-// pass to the GPU?
-struct Uniform
-{
-    // TODO(joon) move to per object uniform buffer
-    m4 model;
-    m4 proj_view;
-
-    alignas(16) v3 light_p;
-};
-
-/*
-   NOTE(joon): Here's how we construct the camera
-   Initial camera axis : 
-    camera_x : (0, -1, 0)
-    camera_y : (0, 0, 1)
-    camera_z : (-1, 0, 0)
-
-    lookat dir : (1, 0, 0)
-
-    This gives us more reasonable world coordinate when we move from camera space to world space 
-*/
 // TODO(joon) make this to be entirely quarternion-based
 struct Camera
 {
-    // TODO(joon): dont need to store these values, when we finalize the camera code?
-    v3 initial_x_axis;
-    v3 initial_y_axis;
-    v3 initial_z_axis;
+    // These are the rotation angle in camera space
+    f32 pitch; // x
+    f32 yaw; // y
+    f32 roll; // z
 
     v3 p;
-
     f32 focal_length;
-
-    union
-    {
-        struct
-        {
-            r32 along_x;
-            r32 along_y;
-            r32 along_z;
-        };
-
-        struct
-        {
-            r32 roll; 
-            r32 pitch; 
-            r32 yaw;  
-        };
-
-        r32 e[3];
-    };
 };
 
 enum RenderEntryType
@@ -123,6 +81,18 @@ struct RenderGroup
 {
     // NOTE(joon) provided by the platform layer
     PlatformRenderPushBuffer *render_push_buffer;
+};
+
+// TODO(joon) move the shader related structs(i.e uniform) into seperate file? (meka_shader.h)
+struct PerFrameData
+{
+    alignas(16) m4x4 proj_view;
+};
+
+struct PerObjectData
+{
+    alignas(16) m4x4 model;
+    alignas(16) v3 color;
 };
 
 #endif

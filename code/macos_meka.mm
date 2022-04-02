@@ -13,9 +13,6 @@
 
 // TODO(joon) introspection?
 
-// NOTE(joon) we need some metal layer even if we use vulkan
-#include "meka_metal_shader_shared.h"
-
 #undef internal
 #undef assert
 
@@ -1092,7 +1089,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
         PerFrameData per_frame_data = {};
-        per_frame_data.proj_view_ = render_push_buffer->proj_view; // already calculated from the game code
+        per_frame_data.proj_view = render_push_buffer->proj_view; // already calculated from the game code
 
         metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 1);
 
@@ -1139,17 +1136,18 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
-                    m4 model = scale_translate(entry->dim, entry->p);
+                    m4x4 model = translate(entry->p) * scale(entry->dim);
+                    model = transpose(model);
                     PerObjectData per_object_data = {};
-                    per_object_data.model_ = model;
-                    per_object_data.color_ = entry->color;
+                    per_object_data.model = model;
+                    per_object_data.color = entry->color;
 
                     metal_set_pipeline(render_encoder, render_context->cube_pipeline_state);
                     metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 2);
 
                     metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
-                            render_context->cube_inward_facing_index_buffer.buffer, array_count(cube_inward_facing_indices), 1);
+                            render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), 1);
                 }break;
             }
         }
@@ -1349,8 +1347,8 @@ main(void)
 
     // TODO(joon): when connected to the external display, this should be window_width and window_height
     // but if not, this should be window_width/2 and window_height/2. Why?
-    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width, (f32)window_height);
-    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width/2.0f, (f32)window_height/2.0f);
+    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width, (f32)window_height);
+    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width/2.0f, (f32)window_height/2.0f);
 
     NSWindow *window = [[NSWindow alloc] initWithContentRect : window_rect
                                         // Apple window styles : https://developer.apple.com/documentation/appkit/nswindow/stylemask

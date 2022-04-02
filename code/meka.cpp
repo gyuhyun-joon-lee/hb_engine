@@ -40,29 +40,48 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         free_loaded_vox(&loaded_vox);
 
         game_state->mass_agg_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
-        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 0, 0), 1.0f, 25.0f);
+        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 25.0f);
+        //add_flat_triangle_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 1, 1), 1.0f, 15.0f);
 
         //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
-        add_aabb_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 1.0f), V3(0.7f, 0.7f, 0.7f), Flt_Max);
+        add_floor_entity(game_state, V3(0, 0, -0.5f), V3(100.0f, 100.0f, 1.0f), V3(0.7f, 0.7f, 0.7f));
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + game_state->mass_agg_arena.total_size, megabytes(256));
         game_state->camera.focal_length = 1.0f;
         game_state->camera.p = V3(-10, 0, 5);
-        game_state->camera.initial_z_axis = V3(-1, 0, 0);
-        game_state->camera.initial_x_axis = normalize(cross(V3(0, 0, 1), game_state->camera.initial_z_axis));
-        game_state->camera.initial_y_axis = normalize(cross(game_state->camera.initial_z_axis, game_state->camera.initial_x_axis));
+#if 0
+        // NOTE(joon) camera is looking at the (0, 0, 0)
+        game_state->camera.z_axis = normalize(game_state->camera.p);
+        // TODO(joon) Does not work if the camera.z = 0, 0, 1
+        game_state->camera.x_axis = normalize(cross(V3(0, 0, 1), game_state->camera.z_axis));
+        game_state->camera.y_axis = normalize(cross(game_state->camera.z_axis, game_state->camera.x_axis));
+#endif
 
         game_state->is_initialized = true;
     }
 
     Camera *camera= &game_state->camera;
 
-    v3 camera_dir = camera_to_world(-camera->initial_z_axis, camera->initial_x_axis, camera->along_x, 
-                                    camera->initial_y_axis, camera->along_y,
-                                    camera->initial_z_axis, camera->along_z);
+    f32 camera_rotation_speed = 5.0f * platform_input->dt_per_frame;
+    if(platform_input->action_up)
+    {
+        camera->pitch += camera_rotation_speed;
+    }
+    if(platform_input->action_down)
+    {
+        camera->pitch -= camera_rotation_speed;
+    }
+    if(platform_input->action_left)
+    {
+        camera->roll += camera_rotation_speed;
+    }
+    if(platform_input->action_right)
+    {
+        camera->roll -= camera_rotation_speed;
+    }
 
+    v3 camera_dir = get_camera_lookat(camera);
     f32 camera_speed = 10.0f * platform_input->dt_per_frame;
-
     if(platform_input->move_up)
     {
         camera->p += camera_speed*camera_dir;
@@ -72,26 +91,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         camera->p -= camera_speed*camera_dir;
     }
-
-#if 1
-    f32 camera_rotation_speed = 5.0f * platform_input->dt_per_frame;
-    if(platform_input->action_up)
-    {
-        camera->along_x += camera_rotation_speed;
-    }
-    if(platform_input->action_down)
-    {
-        camera->along_x -= camera_rotation_speed;
-    }
-    if(platform_input->action_left)
-    {
-        camera->along_y += camera_rotation_speed;
-    }
-    if(platform_input->action_right)
-    {
-        camera->along_y -= camera_rotation_speed;
-    }
-#endif
 
     b32 shoot_projectile = false;
     if(platform_input->space)
@@ -123,6 +122,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
+    // NOTE(joon) d
+
     // NOTE(joon) rendering code start
     RenderGroup render_group = {};
     start_render_group(&render_group, platform_render_push_buffer, &game_state->camera, V3(0, 0, 0));
@@ -150,7 +151,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     PiecewiseMassParticleConnection *connection = entity->mass_agg.connections + connection_index;
                     MassParticle *particle_0 = entity->mass_agg.particles + connection->particle_index_0;
                     MassParticle *particle_1 = entity->mass_agg.particles + connection->particle_index_1;
-                    push_line(&render_group, particle_0->p, particle_1->p, V3(1, 1, 1));
+                    push_line(&render_group, particle_0->p, particle_1->p, entity->color);
                 }
             }break;
         }

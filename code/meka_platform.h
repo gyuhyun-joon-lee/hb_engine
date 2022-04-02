@@ -342,8 +342,9 @@ struct PlatformRenderPushBuffer
     f32 width_over_height; 
 
     // NOTE(joon) game code needs to fill these up
-    m4 proj_view;
+    m4x4 proj_view;
     v3 clear_color;
+
     u8 *base;
     u32 total_size;
     u32 used;

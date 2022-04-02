@@ -7,18 +7,6 @@ add_aabb_collision()
 }
 #endif
 
-internal AABB
-init_aabb(v3 center, v3 half_dim, f32 inv_mass)
-{
-    AABB result = {};
-
-    result.p = center;
-    result.half_dim = half_dim;
-    result.inv_mass = inv_mass;
-
-    return result;
-}
-
 internal Entity *
 add_entity(GameState *game_state, EntityType type, u32 flags)
 {
@@ -86,6 +74,17 @@ add_cube_mass_agg_entity(GameState *game_state, MemoryArena *arena, v3 center, v
     // TODO(joon) test if mass is infinite, and set the entity flag accordingly
     Entity *result = add_entity(game_state, Entity_Type_Mass_Agg, Entity_Flag_Movable|Entity_Flag_Collides);
     result->mass_agg = init_cube_mass_agg(arena, center, dim, total_mass, elastic_value); 
+    result->color = color;
+
+    return result;
+}
+
+internal Entity *
+add_flat_triangle_mass_agg_entity(GameState *game_state, MemoryArena *arena, v3 color, f32 total_mass, f32 elastic_value)
+{
+    Entity *result = add_entity(game_state, Entity_Type_Mass_Agg, Entity_Flag_Movable|Entity_Flag_Collides);
+    result->mass_agg = init_flat_triangle_mass_agg(arena, total_mass, elastic_value); 
+    result->color = color;
 
     return result;
 }
@@ -96,7 +95,7 @@ add_aabb_entity(GameState *game_state, v3 p, v3 dim, v3 color, f32 mass)
     // TODO(joon) test if mass is infinite, and set the entity flag accordingly
     Entity *result = add_entity(game_state, Entity_Type_Floor, Entity_Flag_Movable|Entity_Flag_Collides);
     result->color = color;
-    result->aabb = init_aabb(V3(), 0.5f*dim, safe_ratio(1.0f, mass));
+    result->aabb = init_aabb(p, 0.5f*dim, safe_ratio(1.0f, mass));
 
     return result;
 }
@@ -105,8 +104,8 @@ add_aabb_entity(GameState *game_state, v3 p, v3 dim, v3 color, f32 mass)
 internal Entity *
 add_floor_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 {
-    Entity *result = add_entity(game_state, Entity_Type_AABB, Entity_Flag_Collides);
-    result->aabb = init_aabb(V3(), 0.5f * dim, 0.0f);
+    Entity *result = add_entity(game_state, Entity_Type_Floor, Entity_Flag_Collides);
+    result->aabb = init_aabb(p, 0.5f * dim, 0.0f);
     
     return result;
 }

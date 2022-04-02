@@ -334,18 +334,81 @@ internal void
      end_temp_memory(&mesh_construction_temp_memory);
 }
 
+// NOTE(joon) To move the world space position into camera space,
+// 1. We first translate the position so that the origin of the camera space
+// in world coordinate is (0, 0, 0). We can achieve this by  simply subtracing the camera position
+// from the world position.
+// 2. We then project the translated position into the 3 camera axes. This is done simply by using a dot product.
+//
+// To pack this into a single matrix, we need to multiply the translation by the camera axis matrix,
+// because otherwise it will be projection first and then translation -> which is completely different from
+// doing the translation and the projection.
+internal m4x4
+camera_transform(Camera *camera)
+{
+    m4x4 result = {};
+
+    // TODO(joon) I don't quite understand why I need this - for z and x rotation
+    m3x3 camera_local_rotation = z_rotation(-camera->roll) * y_rotation(camera->yaw) * x_rotation(-camera->pitch);
+
+    // NOTE(joon) camera aligns with the world coordinate in default.
+    v3 local_camera_x_axis = normalize(camera_local_rotation * V3(1, 0, 0));
+    v3 local_camera_y_axis = normalize(camera_local_rotation * V3(0, 1, 0));
+    v3 local_camera_z_axis = normalize(camera_local_rotation * V3(0, 0, 1));
+
+    // NOTE(joon) to pack the rotation & translation into one matrix(with an order of translation and the rotation),
+    // we need to first multiply the translation by the rotation matrix
+    v3 multiplied_translation = V3(dot(local_camera_x_axis, -camera->p), 
+                                    dot(local_camera_y_axis, -camera->p),
+                                    dot(local_camera_z_axis, -camera->p));
+
+    result.rows[0] = V4(local_camera_x_axis, multiplied_translation.x);
+    result.rows[1] = V4(local_camera_y_axis, multiplied_translation.y);
+    result.rows[2] = V4(local_camera_z_axis, multiplied_translation.z);
+    result.rows[3] = V4(0.0f, 0.0f, 0.0f, 1.0f);
+
+    return result;
+}
+
+internal v3
+get_camera_lookat(Camera *camera)
+{
+    // TODO(joon) I don't quite understand why I need this - for z and x rotation
+    m3x3 camera_local_rotation = z_rotation(-camera->roll) * y_rotation(camera->yaw) * x_rotation(-camera->pitch);
+
+    v3 result = camera_local_rotation * V3(0, 0, 1); 
+
+    return result;
+}
+
+// TODO(joon) probably buggy
+#if 0
+internal v3
+camera_to_world(Camera *camera, v3 v)
+{
+    m3x3 camera_to_world_rotation = x_rotation(-camera->pitch) * y_rotation(-camera->yaw) * z_rotation(-camera->roll);
+
+    v3 camera_x_axis = camera_to_world_rotation * V3(1, 0, 0);
+    v3 camera_y_axis = camera_to_world_rotation * V3(0, 1, 0);
+    v3 camera_z_axis = camera_to_world_rotation * V3(0, 0, 1);
+
+    v3 result = v.x * camera_x_axis + v.y*camera_y_axis+ v.z*camera_z_axis;
+    return result;
+}
+#endif
+
 internal void
 start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_push_buffer, Camera *camera, v3 clear_color)
 {
     assert(render_push_buffer->base)
     render_group->render_push_buffer = render_push_buffer;
 
-    m4 proj = projection(camera->focal_length, render_push_buffer->width_over_height, 0.1f, 10000.0f);
-    m4 view = world_to_camera(camera->p, 
-                                    camera->initial_x_axis, camera->along_x, 
-                                    camera->initial_y_axis, camera->along_y, 
-                                    camera->initial_z_axis, camera->along_z);
-    render_push_buffer->proj_view = proj * camera_rhs_to_lhs(view);
+    // TODO(joon) we can push the camera transform as a render entry
+    m4x4 proj = projection(camera->focal_length, render_push_buffer->width_over_height, 0.1f, 10000.0f);
+    m4x4 view = camera_transform(camera);
+    m4x4 proj_view = transpose(proj * view);
+
+    render_push_buffer->proj_view = proj_view;
     render_push_buffer->clear_color = clear_color;
 
     render_group->render_push_buffer->used = 0;
