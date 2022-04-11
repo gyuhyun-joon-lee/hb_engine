@@ -983,8 +983,7 @@ parse_obj_tokens(MemoryArena *memory_arena, u8 *file, size_t file_size)
     // because malloc will return the pointer whether the count is zero or not
 
     // Do not allow only one of them being NULL 
-    assert((result.normal_count != 0 && result.normal_index_count != 0) ||
-            (result.normal_count == 0 && result.normal_index_count == 0));
+    //assert((result.normal_count != 0 && result.normal_index_count != 0) ||(result.normal_count == 0 && result.normal_index_count == 0));
     if(result.normal_count != 0)
     {
         result.normals = (v3 *)push_array(memory_arena, v3, result.normal_count);
@@ -995,8 +994,7 @@ parse_obj_tokens(MemoryArena *memory_arena, u8 *file, size_t file_size)
     }
 
     // Do not allow only one of them being NULL 
-    assert((result.texcoord_count != 0 && result.texcoord_index_count != 0) ||
-            (result.texcoord_count == 0 && result.texcoord_index_count == 0));
+    //assert((result.texcoord_count != 0 && result.texcoord_index_count != 0) || (result.texcoord_count == 0 && result.texcoord_index_count == 0));
     if(result.texcoord_count != 0)
     {
         result.texcoords = (v2 *)push_array(memory_arena, v2, result.texcoord_count);
@@ -1076,7 +1074,7 @@ parse_obj_tokens(MemoryArena *memory_arena, u8 *file, size_t file_size)
                             }
                             else if(property_indicator == 1)
                             {
-                                result.texcoord_indices[texcoord_index_count++] = token.value_i32 - 1;
+                                //result.texcoord_indices[texcoord_index_count++] = token.value_i32 - 1;
                             }
                             else
                             {
@@ -1115,7 +1113,7 @@ parse_obj_tokens(MemoryArena *memory_arena, u8 *file, size_t file_size)
 
     assert(index_count == result.index_count);
     assert(normal_index_count == result.normal_index_count);
-    assert(texcoord_index_count == result.texcoord_index_count);
+    //assert(texcoord_index_count == result.texcoord_index_count);
 
     return result;
 }

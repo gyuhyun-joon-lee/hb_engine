@@ -117,18 +117,12 @@ struct v4
     };
 };
 
-struct m3
+struct Quat
 {
-    union
-    {
-        struct 
-        {
-            v3 rows[3];
-        };
-
-        // NOTE(joon) row major (e[row][column])
-        f32 e[3][3];
-    };
+    f32 w;
+    f32 x;
+    f32 y;
+    f32 z;
 };
 
 struct m4
@@ -143,6 +137,23 @@ struct m4
         f32 e[16];
     };
 };
+
+// row major
+struct m3x3
+{
+    union
+    {
+        struct
+        {
+            v3 rows[3];
+        };
+
+        // [row][column]
+        f32 e[3][3];
+    };
+};
+
+
 
 // NOTE(joon) row major
 // e[0][0] e[0][1] e[0][2] e[0][3]
@@ -162,20 +173,4 @@ struct m4x4
         f32 e[4][4];
     };
 };
-
-// row major
-struct m3x3
-{
-    union
-    {
-        struct
-        {
-            v3 rows[3];
-        };
-
-        // [row][column]
-        f32 e[3][3];
-    };
-};
-
 #endif

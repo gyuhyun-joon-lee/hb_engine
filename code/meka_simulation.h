@@ -14,30 +14,6 @@ struct AABB
     f32 inv_mass;
 };
 
-struct RigidBody
-{
-    // constant
-    f32 mass;
-    m3 I_body;
-    m3 inv_I_body;
-
-    // state
-    v3 pos;
-
-    m3 rotation; // TODO(joon) replace this with quarternions
-    v3 P; // linear momentum, P = m * v, P' = F = m * a
-    v3 L; // angular momentum, L = I * w
-
-    // derived
-    m3 inv_I; // I = R * I_body * RT, inv_I = R * inv_I_body * RT
-    v3 v; // linear velocity
-    v3 w; // angular velocity
-
-    // computed
-    v3 F; // force
-    v3 T; // torque
-};
-
 // NOTE(joon) used inside mass aggregation physics
 struct MassParticle
 {
@@ -52,12 +28,22 @@ struct MassParticle
     v3 this_frame_ddp;
 };
 
-// TODO(joon) we need a fast way to get all of the connections for certain particle,
-// searching for O(n) worth of time doesn't seem to be a good idea
+struct ParticleFace
+{
+    // NOTE(joon) these are the indices to the particles, in counter clockwise order.
+    u32 ID_0;
+    u32 ID_1;
+    u32 ID_2;
+
+    // NOTE(joon) outward normal
+    v3 normal;
+};
+
+// TODO(joon) we need a fast way to get all of the connections for certain particle. Maybe hashing?
 struct PiecewiseMassParticleConnection
 {
-    u32 particle_index_0;
-    u32 particle_index_1;
+    u32 ID_0;
+    u32 ID_1;
 
     // TODO(joon) we can also save elastic value here, if we want to have different spring for each connection.
 
@@ -70,11 +56,13 @@ struct MassAgg
     MassParticle *particles;
     u32 particle_count;
 
-    PiecewiseMassParticleConnection *connections; // particle connections
+    ParticleFace *faces;
+    u32 face_count;
+
+    PiecewiseMassParticleConnection *connections;
     u32 connection_count;
 
-    // NOTE(joon) two particles will act like a soft spring, and this is a value 
-    // that is used in hook's law
+    // NOTE(joon) used in hooks law
     f32 elastic_value;
 };
 

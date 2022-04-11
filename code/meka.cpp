@@ -39,14 +39,26 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         //add_voxel_entity_from_vox_file(game_state, loaded_vox);
         free_loaded_vox(&loaded_vox);
 
-        game_state->mass_agg_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
-        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 25.0f);
+        game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
+
+        game_state->mass_agg_arena = start_memory_arena((u8 *)platform_memory->transient_memory + game_state->transient_arena.total_size, megabytes(256));
+        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 15.0f);
         //add_flat_triangle_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 1, 1), 1.0f, 15.0f);
 
         //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
         add_floor_entity(game_state, V3(0, 0, -0.5f), V3(100.0f, 100.0f, 1.0f), V3(0.7f, 0.7f, 0.7f));
+
+        PlatformReadFileResult cow_obj_file = platform_api->read_file("/Volumes/meka/meka_engine/data/low_poly_cow.obj");
+        raw_mesh cow_mesh = parse_obj_tokens(&game_state->transient_arena, cow_obj_file.memory, cow_obj_file.size);
+        // TODO(joon) : Find out why increasing the elastic value make the entity fly away!!!
+        add_mass_agg_entity_from_mesh(game_state, &game_state->mass_agg_arena, V3(0, 5, 30), V3(1, 1, 1), 
+                                    cow_mesh.positions, cow_mesh.position_count, cow_mesh.indices, cow_mesh.index_count, 5.0f, 15.0f);
         
-        game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + game_state->mass_agg_arena.total_size, megabytes(256));
+        game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
+                                                    game_state->transient_arena.total_size + 
+                                                    game_state->mass_agg_arena.total_size, 
+                                                    megabytes(256));
+
         game_state->camera.focal_length = 1.0f;
         game_state->camera.p = V3(-10, 0, 5);
 #if 0
@@ -122,8 +134,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    // NOTE(joon) d
-
     // NOTE(joon) rendering code start
     RenderGroup render_group = {};
     start_render_group(&render_group, platform_render_push_buffer, &game_state->camera, V3(0, 0, 0));
@@ -149,8 +159,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         ++connection_index)
                 {
                     PiecewiseMassParticleConnection *connection = entity->mass_agg.connections + connection_index;
-                    MassParticle *particle_0 = entity->mass_agg.particles + connection->particle_index_0;
-                    MassParticle *particle_1 = entity->mass_agg.particles + connection->particle_index_1;
+
+                    MassParticle *particle_0 = entity->mass_agg.particles + connection->ID_0;
+                    MassParticle *particle_1 = entity->mass_agg.particles + connection->ID_1;
                     push_line(&render_group, particle_0->p, particle_1->p, entity->color);
                 }
             }break;

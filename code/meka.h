@@ -17,6 +17,9 @@ struct GameState
     VoxelWorld world;
     MemoryArena voxel_arena;
 
+    // NOTE(joon) Where all non permanent things should go inside
+    MemoryArena transient_arena; 
+
     MemoryArena mass_agg_arena;
 };
 
