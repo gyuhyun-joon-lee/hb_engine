@@ -624,6 +624,9 @@ enum obj_token_type
     obj_token_type_hyphen,
     obj_token_type_newline, // unfortunately, this is the only way to parse the obj files
 
+    // NOTE(joon) not supported or ignored
+    obj_token_type_s,
+    obj_token_type_off,
     obj_token_type_eof,
 };
 
@@ -704,6 +707,7 @@ peek_token(obj_tokenizer *tokenizer, b32 should_advance)
 
     eat_all_white_spaces(tokenizer);
     
+    // NOTE(joon) Instead of chekcing only a single character, check a string instead!
     u32 advance = 0;
     if(tokenizer->at != tokenizer->end)
     {
@@ -731,6 +735,12 @@ peek_token(obj_tokenizer *tokenizer, b32 should_advance)
             case 'f':
             {
                 result.type = obj_token_type_f;
+                advance = 1;
+            }break;
+
+            case 's':
+            {
+                result.type = obj_token_type_s;
                 advance = 1;
             }break;
 

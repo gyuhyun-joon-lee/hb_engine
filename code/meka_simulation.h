@@ -14,6 +14,12 @@ struct AABB
     f32 inv_mass;
 };
 
+struct ParticleConnection
+{
+    u32 opponenet_ID;
+    f32 rest_length;
+};
+
 // NOTE(joon) used inside mass aggregation physics
 struct MassParticle
 {
@@ -26,6 +32,10 @@ struct MassParticle
     // IMPORTANT(joon) Should be cleared to 0 every frame!
     v3 this_frame_force;
     v3 this_frame_ddp;
+
+    // NOTE(joon) Direct connections will be always gathered when simulating the particle.
+    //u32 direct_connection_count;
+    //ParticleConnection direct_connections;
 };
 
 struct ParticleFace
@@ -45,25 +55,26 @@ struct PiecewiseMassParticleConnection
     u32 ID_0;
     u32 ID_1;
 
-    // TODO(joon) we can also save elastic value here, if we want to have different spring for each connection.
-
     f32 rest_length;
 };
 
 struct MassAgg
 {
-    // TODO(joon) change this so that it can contain any number of particles
     MassParticle *particles;
     u32 particle_count;
 
     ParticleFace *faces;
     u32 face_count;
 
+    // TODO(joon) any way to collapse face and connection?
     PiecewiseMassParticleConnection *connections;
     u32 connection_count;
 
-    // NOTE(joon) used in hooks law
+    // NOTE(joon) hooks law
     f32 elastic_value;
+
+    // NOTE(joon) this is a imaginary sphere that will prevent certain particle to go through the 
+    f32 inner_sphere_r;
 };
 
 #endif

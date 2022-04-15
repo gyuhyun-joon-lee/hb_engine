@@ -97,23 +97,41 @@ move_entity(GameState *game_state, Entity *entity, f32 dt_per_frame)
 internal void
 add_piecewise_mass_particle_connection(MemoryArena *arena, MassAgg *mass_agg, u32 ID_0, u32 ID_1)
 {
-    // TODO(joon) These allocations should always happen sequentially!
-    PiecewiseMassParticleConnection *connection = push_struct(arena, PiecewiseMassParticleConnection);
-    if(!mass_agg->connections)
+    assert(ID_0 < mass_agg->particle_count && ID_1 < mass_agg->particle_count);
+
+    b32 should_add_connection = true;
+    for(u32 connection_index = 0;
+            connection_index < mass_agg->connection_count;
+            ++connection_index)
     {
-        mass_agg->connections = connection;
-    }
-    else
-    {
-        assert(connection == mass_agg->connections + mass_agg->connection_count);
+        PiecewiseMassParticleConnection *connection = mass_agg->connections + connection_index;
+        if((connection->ID_0 == ID_0 && connection->ID_1 == ID_1) ||
+            (connection->ID_1 == ID_0 && connection->ID_0 == ID_1))
+        {
+            should_add_connection = false;
+        }
     }
 
-    connection->ID_0 = ID_0;
-    connection->ID_1 = ID_1;
-    connection->rest_length = length(mass_agg->particles[ID_0].p -
-                                    mass_agg->particles[ID_1].p);
+    if(should_add_connection)
+    {
+        // TODO(joon) These allocations should always happen sequentially!
+        PiecewiseMassParticleConnection *connection = push_struct(arena, PiecewiseMassParticleConnection);
+        if(!mass_agg->connections)
+        {
+            mass_agg->connections = connection;
+        }
+        else
+        {
+            assert(connection == mass_agg->connections + mass_agg->connection_count);
+        }
 
-    mass_agg->connection_count++;
+        connection->ID_0 = ID_0;
+        connection->ID_1 = ID_1;
+        connection->rest_length = length(mass_agg->particles[ID_0].p -
+                                        mass_agg->particles[ID_1].p);
+
+        mass_agg->connection_count++;
+    }
 }
 
 internal void
@@ -180,6 +198,7 @@ init_flat_triangle_mass_agg(MemoryArena *arena, f32 total_mass, f32 elastic_valu
     return result;
 }
 
+// TODO(joon) 
 // TODO(joon) pass inv_mass?
 // TODO(joon) pass pointer?
 internal MassAgg
@@ -188,7 +207,8 @@ init_cube_mass_agg(MemoryArena *arena, v3 center, v3 dim, f32 total_mass, f32 el
     v3 half_dim = 0.5f*dim;
     MassAgg result = {};
 
-    result.particle_count = 16;
+    // TODO(joon) add particles in a same way as we add the connections
+    result.particle_count = 8;
     result.particles = push_array(arena, MassParticle, result.particle_count);
     f32 particle_mass = total_mass / result.particle_count;
 
@@ -202,17 +222,10 @@ init_cube_mass_agg(MemoryArena *arena, v3 center, v3 dim, f32 total_mass, f32 el
     result.particles[6].p = center + V3(-half_dim.x, half_dim.y, half_dim.z);
     result.particles[7].p = center + V3(-half_dim.x, -half_dim.y, half_dim.z);
 
-    result.particles[8].p = center + 0.5f * V3(half_dim.x, -half_dim.y, -half_dim.z);
-    result.particles[9].p = center + 0.5f * V3(half_dim.x, half_dim.y, -half_dim.z);
-    result.particles[10].p = center + 0.5f * V3(-half_dim.x, half_dim.y, -half_dim.z);
-    result.particles[11].p = center + 0.5f * V3(-half_dim.x, -half_dim.y, -half_dim.z);
-
-    result.particles[12].p = center + 0.5f * V3(half_dim.x, -half_dim.y, half_dim.z);
-    result.particles[13].p = center + 0.5f * V3(half_dim.x, half_dim.y, half_dim.z);
-    result.particles[14].p = center + 0.5f * V3(-half_dim.x, half_dim.y, half_dim.z);
-    result.particles[15].p = center + 0.5f * V3(-half_dim.x, -half_dim.y, half_dim.z);
-
     result.elastic_value = elastic_value;
+
+    // TODO(joon) this is just a test code
+    result.inner_sphere_r = 0.8f * sqrtf(3) * half_dim.x;
 
     for(u32 particle_index = 0;
             particle_index < result.particle_count;
@@ -222,62 +235,43 @@ init_cube_mass_agg(MemoryArena *arena, v3 center, v3 dim, f32 total_mass, f32 el
         particle->inv_mass = safe_ratio(1.0f, particle_mass);
     }
 
-    // NOTE(joon) NO MEMORY ALLOCATION SHOULD HAPPEN WHILE ADDING THE PARTICLE CONNECTIONS
-    // TODO(joon) Should we pre-allocate the connections, and use them instead?
-
-    // NOTE(joon) edge connections
-    add_piecewise_mass_particle_connection(arena, &result, 0, 1);
-    add_piecewise_mass_particle_connection(arena, &result, 1, 2); 
-    add_piecewise_mass_particle_connection(arena, &result, 2, 3); 
-    add_piecewise_mass_particle_connection(arena, &result, 3, 0); 
-
-    add_piecewise_mass_particle_connection(arena, &result, 4, 5); 
-    add_piecewise_mass_particle_connection(arena, &result, 5, 6); 
-    add_piecewise_mass_particle_connection(arena, &result, 6, 7); 
-    add_piecewise_mass_particle_connection(arena, &result, 7, 4); 
-
-    add_piecewise_mass_particle_connection(arena, &result, 0, 4); 
-    add_piecewise_mass_particle_connection(arena, &result, 1, 5); 
-    add_piecewise_mass_particle_connection(arena, &result, 6, 2); 
-    add_piecewise_mass_particle_connection(arena, &result, 7, 3); 
-
-    // NOTE(joon) inner edge connections
-    add_piecewise_mass_particle_connection(arena, &result, 8, 9);
-    add_piecewise_mass_particle_connection(arena, &result, 9, 10); 
-    add_piecewise_mass_particle_connection(arena, &result, 10, 11); 
-    add_piecewise_mass_particle_connection(arena, &result, 11, 8); 
-
-    add_piecewise_mass_particle_connection(arena, &result, 12, 13); 
-    add_piecewise_mass_particle_connection(arena, &result, 13, 14); 
-    add_piecewise_mass_particle_connection(arena, &result, 14, 15); 
-    add_piecewise_mass_particle_connection(arena, &result, 15, 12); 
-
-    add_piecewise_mass_particle_connection(arena, &result, 8, 12); 
-    add_piecewise_mass_particle_connection(arena, &result, 9, 13); 
-    add_piecewise_mass_particle_connection(arena, &result, 10, 14); 
-    add_piecewise_mass_particle_connection(arena, &result, 11, 15); 
-
-    // NOTE(joon) Outer model and inner model connection
-    add_piecewise_mass_particle_connection(arena, &result, 0, 8); 
-    add_piecewise_mass_particle_connection(arena, &result, 1, 9); 
-    add_piecewise_mass_particle_connection(arena, &result, 2, 10); 
-    add_piecewise_mass_particle_connection(arena, &result, 3, 11); 
-    add_piecewise_mass_particle_connection(arena, &result, 4, 12); 
-    add_piecewise_mass_particle_connection(arena, &result, 5, 13); 
-    add_piecewise_mass_particle_connection(arena, &result, 6, 14); 
-    add_piecewise_mass_particle_connection(arena, &result, 7, 15); 
+    // TODO(joon) Does not work with concave form of particles
+    // TODO(joon) This is generating far too many connections, in a pretty long time
+    for(u32 i = 0;
+            i < result.particle_count;
+            ++i)
+    {
+        for(u32 j = i + 1;
+                j < result.particle_count;
+                ++j)
+        {
+            add_piecewise_mass_particle_connection(arena, &result, i, j);
+        }
+    }
 
     return result;
 }
 
+// TODO(joon) only works for convex meshes
 internal MassAgg
-init_mass_agg_from_mesh(MemoryArena *arena, v3 center, v3 *vertices, u32 vertex_count, u32 *indices, u32 index_count,
+init_mass_agg_from_mesh(MemoryArena *arena, v3 center, v3 *vertices, u32 vertex_count, u32 *indices, u32 index_count, v3 scale, 
                                     f32 total_mass, f32 elastic_value)
 {
     MassAgg result = {};
 
+    v3 vertex_center = V3();
+    for(u32 vertex_index = 0;
+            vertex_index < vertex_count;
+            ++vertex_index)
+    {
+        v3 *vertex = vertices + vertex_index;
+        vertex_center += *vertex;
+    }
+
+    vertex_center /= (f32)vertex_count;
+
     result.elastic_value = elastic_value;
-    result.particle_count = vertex_count;
+    result.particle_count = vertex_count + 1;
     result.particles = push_array(arena, MassParticle, result.particle_count);
 
     f32 each_particle_mass = total_mass / result.particle_count;
@@ -289,7 +283,7 @@ init_mass_agg_from_mesh(MemoryArena *arena, v3 center, v3 *vertices, u32 vertex_
         *particle = {};
         // TODO(joon) We don't need safe ratio here, we are not even passing the inv mass 
         particle->inv_mass = safe_ratio(1.0f, each_particle_mass);
-        particle->p = center + 0.005f * vertices[particle_index];
+        particle->p = center + hadamard(scale, vertices[particle_index]);
         particle->dp = V3(0, 0, 0);
     }
 
@@ -305,50 +299,18 @@ init_mass_agg_from_mesh(MemoryArena *arena, v3 center, v3 *vertices, u32 vertex_
                           indices[3 * face_index + 1], 
                           indices[3 * face_index + 2]);
     }
-    
-    for(u32 face_index = 0;
-            face_index < face_count; 
-            ++face_index)
+
+    // TODO(joon) Only works if the shape is convex.
+    // TODO(joon) This should be throughly tested!
+    for(u32 i = 0;
+            i < result.particle_count;
+            ++i)
     {
-        ParticleFace *face = result.faces + face_index;
-
-        b32 connection_0_1_exist = false;
-        b32 connection_1_2_exist = false;
-        b32 connection_2_0_exist = false;
-
-        for(u32 connection_index = 0;
-                connection_index < result.connection_count;
-                ++connection_index)
+        for(u32 j = i + 1;
+                j < result.particle_count;
+                ++j)
         {
-            PiecewiseMassParticleConnection *connection = result.connections + connection_index;
-            if((connection->ID_0 == face->ID_0 && connection->ID_1 == face->ID_1) ||
-                (connection->ID_0 == face->ID_1 && connection->ID_1 == face->ID_0))
-            {
-                connection_0_1_exist = true;
-            }
-            if((connection->ID_0 == face->ID_1 && connection->ID_1 == face->ID_2) ||
-                (connection->ID_0 == face->ID_2 && connection->ID_1 == face->ID_1))
-            {
-                connection_1_2_exist = true;
-            }
-            if((connection->ID_0 == face->ID_0 && connection->ID_1 == face->ID_2) ||
-                (connection->ID_0 == face->ID_2 && connection->ID_1 == face->ID_0))
-            {
-                connection_2_0_exist = true;
-            }
-        }
-
-        if(!connection_0_1_exist)
-        {
-            add_piecewise_mass_particle_connection(arena, &result, face->ID_0, face->ID_1);
-        }
-        if(!connection_1_2_exist)
-        {
-            add_piecewise_mass_particle_connection(arena, &result, face->ID_1, face->ID_2);
-        }
-        if(!connection_2_0_exist)
-        {
-            add_piecewise_mass_particle_connection(arena, &result, face->ID_2, face->ID_0);
+            add_piecewise_mass_particle_connection(arena, &result, i, j);
         }
     }
 
@@ -401,6 +363,25 @@ coll_test_ray_aabb(AABB *aabb, v3 ray_origin, v3 ray_dir)
         result.hit_normal = V3(0, 0, 1);
         //result_hit_normal = ;
     }
+
+    return result;
+}
+
+internal v3
+get_mass_agg_center(MassAgg *mass_agg)
+{
+    v3 result = V3();
+
+    // NOTE(joon) first, apply gravity to start collision
+    for(u32 particle_index = 0;
+            particle_index < mass_agg->particle_count;
+            ++particle_index)
+    {
+        MassParticle *particle = mass_agg->particles + particle_index;
+        result += particle->p;
+    }
+
+    result /= (f32)mass_agg->particle_count;
 
     return result;
 }

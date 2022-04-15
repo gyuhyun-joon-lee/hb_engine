@@ -81,11 +81,11 @@ add_cube_mass_agg_entity(GameState *game_state, MemoryArena *arena, v3 center, v
 
 internal Entity *
 add_mass_agg_entity_from_mesh(GameState *game_state, MemoryArena *arena, v3 center, v3 color, v3 *vertices, u32 vertex_count, u32 *indices, u32 index_count,
-                              f32 total_mass, f32 elastic_value)
+                              v3 scale, f32 total_mass, f32 elastic_value)
 {
     Entity *result = add_entity(game_state, Entity_Type_Mass_Agg, Entity_Flag_Movable|Entity_Flag_Collides);
 
-    result->mass_agg = init_mass_agg_from_mesh(arena, center, vertices, vertex_count, indices, index_count, total_mass, elastic_value); 
+    result->mass_agg = init_mass_agg_from_mesh(arena, center, vertices, vertex_count, indices, index_count, scale, total_mass, elastic_value); 
     result->color = color;
 
     return result;

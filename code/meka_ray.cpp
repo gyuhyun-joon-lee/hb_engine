@@ -67,7 +67,7 @@ struct world
 };
 #endif
 
-struct ray_intersect_result
+struct RayIntersectResult
 {
     // NOTE(joon): instead of having a boolean value inside the struct, this value will be initialized to a negative value
     // and when we want to check if there was a hit, we just check if hit_t >= 0.0f 
@@ -78,7 +78,7 @@ struct ray_intersect_result
 
 // TODO(joon) : This works for both inward & outward normals, 
 // but we might only want to test it against the outward normal
-internal ray_intersect_result
+internal RayIntersectResult
 ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_origin, v3 ray_dir)
 {
     /*
@@ -100,7 +100,7 @@ ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_origin, v3 ray_dir)
     */
     r32 hit_t_threshold = 0.0001f;
 
-    ray_intersect_result result = {};
+    RayIntersectResult result = {};
     result.hit_t = -1.0f;
 
     v3 e1 = v1 - v0;
@@ -134,10 +134,10 @@ ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_origin, v3 ray_dir)
 }
 
 
-internal ray_intersect_result
+internal RayIntersectResult
 ray_intersect_with_plane(v3 normal, r32 d, v3 ray_origin, v3 ray_dir)
 {
-    ray_intersect_result result = {};
+    RayIntersectResult result = {};
     result.hit_t = -1.0f;
     r32 hit_t_threshold = 0.0001f;
 
@@ -158,12 +158,12 @@ ray_intersect_with_plane(v3 normal, r32 d, v3 ray_origin, v3 ray_dir)
 }
 
 // NOTE(joon) : c(center of the sphere), r(radius of the sphere)
-internal ray_intersect_result
+internal RayIntersectResult
 ray_intersect_with_sphere(v3 center, r32 r, v3 ray_origin, v3 ray_dir)
 {
     r32 hit_t_threshold = 0.0001f;
 
-    ray_intersect_result result = {};
+    RayIntersectResult result = {};
     result.hit_t = -1.0f;
     
     v3 rel_ray_origin = ray_origin - center;
@@ -748,7 +748,7 @@ render_raytraced_image_tile(raytracer_data *data)
                     {
                         plane *plane = world->planes + plane_index;
 
-                        ray_intersect_result intersect_result = ray_intersect_with_plane(plane->normal, plane->d, ray_origin, ray_dir);
+                        RayIntersectResult intersect_result = ray_intersect_with_plane(plane->normal, plane->d, ray_origin, ray_dir);
                         
                         if(intersect_result.hit_t >= 0.0f && intersect_result.hit_t < min_hit_t)
                         {
@@ -767,7 +767,7 @@ render_raytraced_image_tile(raytracer_data *data)
                     {
                         sphere *sphere = world->spheres + sphere_index;
 
-                        ray_intersect_result intersect_result = ray_intersect_with_sphere(sphere->center, sphere->radius, ray_origin, ray_dir);
+                        RayIntersectResult intersect_result = ray_intersect_with_sphere(sphere->center, sphere->radius, ray_origin, ray_dir);
                         
                         if(intersect_result.hit_t >= 0.0f && intersect_result.hit_t < min_hit_t)
                         {
@@ -785,7 +785,7 @@ render_raytraced_image_tile(raytracer_data *data)
                     {
                         triangle *triangle = world->triangles + triangle_index;
 
-                        ray_intersect_result intersect_result = ray_intersect_with_triangle(triangle->v0, triangle->v1, triangle->v2, ray_origin, ray_dir);
+                        RayIntersectResult intersect_result = ray_intersect_with_triangle(triangle->v0, triangle->v1, triangle->v2, ray_origin, ray_dir);
                         
                         if(intersect_result.hit_t >= 0.0f && intersect_result.hit_t < min_hit_t)
                         {
