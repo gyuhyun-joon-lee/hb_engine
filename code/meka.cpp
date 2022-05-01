@@ -42,7 +42,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
 
         game_state->mass_agg_arena = start_memory_arena((u8 *)platform_memory->transient_memory + game_state->transient_arena.total_size, megabytes(256));
-        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 15.0f);
+        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 7.0f);
         //add_flat_triangle_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 1, 1), 1.0f, 15.0f);
 
         //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
@@ -53,14 +53,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         raw_mesh cow_mesh = parse_obj_tokens(&game_state->transient_arena, cow_obj_file.memory, cow_obj_file.size);
         // TODO(joon) : Find out why increasing the elastic value make the entity fly away!!!
         add_mass_agg_entity_from_mesh(game_state, &game_state->mass_agg_arena, V3(0, 5, 30), V3(1, 1, 1), 
-                                    cow_mesh.positions, cow_mesh.position_count, cow_mesh.indices, cow_mesh.index_count, V3(0.5f, 0.5f, 0.5f), 5.0f, 15.0f);
+                                    cow_mesh.positions, cow_mesh.position_count, cow_mesh.indices, cow_mesh.index_count, V3(0.001f, 0.001f, 0.001f), 5.0f, 0.1f);
 #endif
 
-        PlatformReadFileResult oh_obj_file = platform_api->read_file("/Volumes/meka/meka_engine/data/octahedron.obj");
+        PlatformReadFileResult oh_obj_file = platform_api->read_file("/Volumes/meka/meka_engine/data/dodecahedron.obj");
         raw_mesh oh_mesh = parse_obj_tokens(&game_state->transient_arena, oh_obj_file.memory, oh_obj_file.size);
         // TODO(joon) : Find out why increasing the elastic value make the entity fly away!!!
         add_mass_agg_entity_from_mesh(game_state, &game_state->mass_agg_arena, V3(0, 5, 30), V3(1, 1, 1), 
-                                    oh_mesh.positions, oh_mesh.position_count, oh_mesh.indices, oh_mesh.index_count, V3(0.5f, 0.5f, 0.5f), 5.0f, 100.0f);
+                                    oh_mesh.positions, oh_mesh.position_count, oh_mesh.indices, oh_mesh.index_count, V3(0.5f, 0.5f, 0.5f), 5.0f, 10.0f);
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
                                                     game_state->transient_arena.total_size + 
@@ -69,12 +69,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         game_state->camera.focal_length = 1.0f;
         game_state->camera.p = V3(-10, 0, 5);
-#if 0
-        // NOTE(joon) camera is looking at the (0, 0, 0)
-        // TODO(joon) Does not work if the camera.z = 0, 0, 1
-        game_state->camera.x_axis = normalize(cross(V3(0, 0, 1), game_state->camera.z_axis));
-        game_state->camera.y_axis = normalize(cross(game_state->camera.z_axis, game_state->camera.x_axis));
-#endif
 
         game_state->is_initialized = true;
     }

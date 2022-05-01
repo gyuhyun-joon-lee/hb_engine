@@ -5,6 +5,37 @@
 // TODO(joon) : Someday we will get remove of math.h, too :)
 #include <math.h>
 
+// TODO(joon) This function is not actually 'safe'...
+// need better name here
+inline b32
+compare_with_epsilon(f32 a, f32 b, f32 epsilon = 0.00001f)
+{
+    b32 result = true;
+
+    f32 d = a - b;
+
+    if(d < -epsilon || d > epsilon)
+    {
+        result = false;
+    }
+
+    return result;
+}
+
+inline f32
+safe_ratio(f32 nom, f32 denom)
+{
+    f32 result = Flt_Max;
+
+    f32 epsilon = 0.000001f;
+    if(denom < -epsilon || denom > epsilon)
+    {
+        result = nom / denom;
+    }
+
+    return result;
+}
+
 inline v2
 V2(f32 x, f32 y)
 {
@@ -432,8 +463,7 @@ clip_space_top_is_one(void)
 inline m3x3
 M3x3(f32 e00, f32 e01, f32 e02,
     f32 e10, f32 e11, f32 e12, 
-    f32 e20, f32 e21, f32 e22,
-    f32 e30, f32 e31, f32 e32)
+    f32 e20, f32 e21, f32 e22)
 {
     m3x3 result = {};
     result.rows[0] = {e00, e01, e02};
@@ -527,6 +557,47 @@ operator *(m3x3 a, v3 b)
     result.x = dot(a.rows[0], b);
     result.y = dot(a.rows[1], b);
     result.z = dot(a.rows[2], b);
+
+    return result;
+}
+
+inline m3x3&
+operator *=(m3x3 &m, f32 value)
+{
+    m.rows[0] *= value;
+    m.rows[1] *= value;
+    m.rows[2] *= value;
+
+    return m;
+}
+
+inline m3x3
+inverse(m3x3 m)
+{
+    m3x3 result = {};
+    f32 det = m.e[0][0]*m.e[1][1]*m.e[2][2] + 
+              m.e[1][0]*m.e[2][1]*m.e[0][2] + 
+              m.e[2][0]*m.e[0][1]*m.e[1][2] - 
+              m.e[0][0]*m.e[2][1]*m.e[1][2] - 
+              m.e[2][0]*m.e[1][1]*m.e[0][2] - 
+              m.e[1][0]*m.e[0][1]*m.e[2][2];
+
+    if(!compare_with_epsilon(det, 0.0f))
+    {
+        result.e[0][0] = m.e[1][1]*m.e[2][2] - m.e[1][2]*m.e[2][1];
+        result.e[0][1] = m.e[0][2]*m.e[2][1] - m.e[0][1]*m.e[2][2];
+        result.e[0][2] = m.e[0][1]*m.e[1][2] - m.e[0][2]*m.e[1][1];
+
+        result.e[1][0] = m.e[1][2]*m.e[2][0] - m.e[1][0]*m.e[2][2];
+        result.e[1][1] = m.e[0][0]*m.e[2][2] - m.e[0][2]*m.e[2][0];
+        result.e[1][2] = m.e[0][2]*m.e[1][0] - m.e[0][0]*m.e[1][2];
+
+        result.e[2][0] = m.e[1][0]*m.e[2][1] - m.e[1][1]*m.e[2][0];
+        result.e[2][1] = m.e[0][1]*m.e[2][0] - m.e[0][0]*m.e[2][1];
+        result.e[2][2] = m.e[0][0]*m.e[1][1] - m.e[0][1]*m.e[1][0];
+
+        result *= (1.0f/det);
+    }
 
     return result;
 }
@@ -633,6 +704,18 @@ M4x4(void)
     result.e[1][1] = 1.0f;
     result.e[2][2] = 1.0f;
     result.e[3][3] = 1.0f;
+
+    return result;
+}
+
+inline m4x4
+M4x4(m3x3 m)
+{
+    m4x4 result = {};
+
+    result.rows[0] = V4(m.rows[0], 0.0f);
+    result.rows[1] = V4(m.rows[1], 0.0f);
+    result.rows[2] = V4(m.rows[2], 0.0f);
 
     return result;
 }
@@ -895,34 +978,35 @@ big_to_little_endian(u64 byte_count)
     return result;
 }
 
-// TODO(joon) This function is not actually 'safe'...
-// need better name here
-inline b32
-safe_compare(f32 a, f32 b)
+
+// TODO(joon) might be a better term for this...
+inline f32
+length_square(Quat q)
 {
-    b32 result = true;
-
-    f32 d = a - b;
-    f32 epsilon = 0.00001f;
-
-    if(d < -epsilon || d > epsilon)
-    {
-        result = false;
-    }
+    f32 result = length_square(q.v) + q.s*q.s;
 
     return result;
 }
 
-inline f32
-safe_ratio(f32 nom, f32 denom)
+// TODO(joon) double check whether this is an orthogonal matrix
+// so that inverse matrix == tranpose matrix
+inline m3x3
+rotation_quat_to_m3x3(Quat q)
 {
-    f32 result = Flt_Max;
+    assert(compare_with_epsilon(length_square(q), 1.0f));
 
-    f32 epsilon = 0.000001f;
-    if(denom < -epsilon || denom > epsilon)
-    {
-        result = nom / denom;
-    }
+    m3x3 result = {};
+    result.e[0][0] = 1 - 2.0f*(q.y*q.y + q.z*q.z);
+    result.e[0][1] = 2.0f*(q.x*q.y + q.z*q.s);
+    result.e[0][2] = 2.0f*(q.x*q.z - q.y*q.s);
+
+    result.e[1][0] = 2.0f*(q.x*q.y - q.z*q.s);
+    result.e[1][1] = 1 - 2.0f*(q.x*q.x + q.z*q.z);
+    result.e[1][2] = 2.0f*(q.y*q.z - q.x*q.s);
+
+    result.e[2][0] = 2.0f*(q.x*q.z - q.y*q.s);
+    result.e[2][1] = 2.0f*(q.y*q.z - q.x*q.s);
+    result.e[2][2] = 1 - 2.0f*(q.x*q.x + q.y*q.y);
 
     return result;
 }

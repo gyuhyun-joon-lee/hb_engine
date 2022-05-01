@@ -19,15 +19,6 @@ test_aabb_aabb(AABB *a, AABB *b)
     return result;
 }
 
-internal v3
-compute_force(f32 mass, v3 a)
-{
-    v3 result = {};
-    result = mass * a;
-
-    return result;
-}
-
 internal AABB
 init_aabb(v3 center, v3 half_dim, f32 inv_mass)
 {
@@ -575,3 +566,38 @@ move_mass_agg_entity(GameState *game_state, Entity *entity, f32 dt_per_frame, b3
     }
 }
 
+internal void
+get_transform_matrix(m4x4 *transform_matrix, v3 p, Quat orientation)
+{
+    m3x3 rotation_matrix = rotation_quat_to_m3x3(orientation);
+    *transform_matrix = M4x4(rotation_matrix);
+    transform_matrix->e[0][3] = p.x;
+    transform_matrix->e[1][3] = p.y;
+    transform_matrix->e[2][3] = p.z;
+
+    // TODO(joon) should we initialize the e[3][3] element to 0 or 1?
+}
+
+/*
+    NOTE(joon) inertia tensor
+    Moment of inertia, which replaces the mass in F = ma in the subsequent equation t(torque) = I(moment of inertia) * w(angular v),
+    can be represented in a m3x3 matrix called intertia tensor
+    |Ix  -Ixy -Ixz|
+    |-Ixy Iy  -Iyz|
+    |-Ixz  -Iyz  Iz|
+
+    where Iab = sum(mi * pi.a * pi.b) (for principle axes x, y, and z, we just put the same axis in both a and b)
+*/
+
+// TODO(joon) also add initial rotation
+internal RigidBody
+init_rigid_body(v3 p, f32 inv_mass, m3x3 inertia_tensor)
+{
+    RigidBody result = {};
+    result.p = p;
+    result.inv_mass = inv_mass;
+
+    result.inv_intertia_tensor = inverse(inertia_tensor);
+
+    return result;
+}

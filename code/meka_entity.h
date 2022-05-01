@@ -7,6 +7,7 @@ enum EntityType
     Entity_Type_AABB,
     Entity_Type_Floor,
     Entity_Type_Mass_Agg,
+    Entity_Type_Cube,
 };
 
 enum EntityFlag
@@ -27,6 +28,7 @@ struct Entity
     // TODO(joon) some kind of entity system, 
     // so that we don't have to store entity_specific things in all of the entities
     MassAgg mass_agg;
+    RigidBody rigid_body;
     AABB aabb; 
 };
 

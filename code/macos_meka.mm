@@ -12,7 +12,6 @@
 #include <metal/metal.h>
 
 // TODO(joon) introspection?
-
 #undef internal
 #undef assert
 

@@ -20,54 +20,6 @@ add_entity(GameState *game_state, EntityType type, u32 flags)
     return entity;
 }
 
-#if 0
-internal Entity *
-add_normalized_voxel_entity(GameState *game_state, v3 p, v3 color, f32 mass)
-{
-    v3 dim = V3(1, 1, 1);
-
-    Entity *entity = add_entity(game_state, p, dim, mass, Entity_Type_Voxel);
-    entity->color = color;
-
-    entity->aabb = add_aabb(V3(), 0.5f*dim);
-
-    //entity->rigid_body = ;
-
-    return entity;
-}
-
-internal Entity *
-add_normalized_voxel_entity(GameState *game_state, v3 p, u32 color_u32, f32 mass)
-{
-    v3 color = {};
-    color.r = (f32)((color_u32 >> 0) & 0xff) / 255.0f;
-    color.g = (f32)((color_u32 >> 8) & 0xff) / 255.0f;
-    color.b = (f32)((color_u32 >> 16) & 0xff) / 255.0f;
-
-    Entity *entity = add_normalized_voxel_entity(game_state, p, color, mass);
-    return entity;
-}
-
-internal void
-add_voxel_entities_from_vox_file(GameState *game_state, load_vox_result vox)
-{
-    for(u32 voxel_index = 0;
-            voxel_index < vox.voxel_count;
-            ++voxel_index)
-    {
-        // TODO(joon) we also need to take account of the chunk pos?
-        u8 x = vox.xs[voxel_index];
-        u8 y = vox.ys[voxel_index];
-        u8 z = vox.zs[voxel_index];
-        u32 color = vox.palette[vox.colorIDs[voxel_index]];
-
-        add_normalized_voxel_entity(game_state, V3(x, y, z), color, 1.0f);
-    }
-
-    int a = 1;
-}
-#endif
-
 internal Entity *
 add_cube_mass_agg_entity(GameState *game_state, MemoryArena *arena, v3 center, v3 dim, v3 color, f32 total_mass, f32 elastic_value)
 {
@@ -119,6 +71,22 @@ add_floor_entity(GameState *game_state, v3 p, v3 dim, v3 color)
     Entity *result = add_entity(game_state, Entity_Type_Floor, Entity_Flag_Collides);
     result->aabb = init_aabb(p, 0.5f * dim, 0.0f);
     
+    return result;
+}
+
+internal Entity *
+add_cube_rigid_body(GameState *game_state, v3 p, v3 dim, v3 color, f32 mass)
+{
+    Entity *result = add_entity(game_state, Entity_Type_Cube, Entity_Flag_Movable|Entity_Flag_Collides);
+    result->color = color;
+
+    m3x3 intertia_tensor = 
+        M3x3(mass*(dim.y*dim.y + dim.z*dim.z)/12.0f, 0, 0,
+            0, mass*(dim.x*dim.x + dim.z*dim.z)/12.0f, 0,
+            0, 0, mass*(dim.x*dim.x + dim.y*dim.y)/12.0f);
+
+    result->rigid_body = init_rigid_body(p, safe_ratio(1.0f, mass), intertia_tensor);
+
     return result;
 }
 

@@ -40,6 +40,7 @@ enum RenderEntryType
 {
     Render_Entry_Type_AABB,
     Render_Entry_Type_Line,
+    Render_Entry_Type_Particle_Faces,
 };
 
 // TODO(joon) Do we have enough reason to keep this header?
@@ -75,6 +76,15 @@ struct RenderEntryLine
     v3 end;
     v3 color;
 };
+
+#if 0
+struct RenderEntryParticleFaces
+{
+    RenderEntryHeader header;
+    ParticleFaces *faces;
+    u32 face_count;
+};
+#endif
 
 // TODO(joon) Do we even need to keep the concept of 'render group'
 struct RenderGroup

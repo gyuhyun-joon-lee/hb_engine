@@ -77,4 +77,23 @@ struct MassAgg
     f32 inner_sphere_r;
 };
 
+struct RigidBody
+{
+    f32 inv_mass;
+    //f32 linear_damp;
+    // NOTE(joon) updated each frame using the equation 
+    // o = o + (dt*angular_v*o)/2
+    Quat orientation; 
+
+    m3x3 inv_intertia_tensor; // NOTE(joon) in local space, need to convert it to world space
+    //f32 angular_damp;
+
+    v3 p;
+    v3 dp;
+
+    // NOTE(joon) Should be a pure quaternion
+    // updated by the net torque,t = I*angular_v
+    v3 angular_v;
+};
+
 #endif

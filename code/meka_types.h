@@ -19,9 +19,7 @@ typedef uintptr_t uintptr;
 
 typedef float r32;
 typedef float f32;
-#ifndef MEKA_METAL_SHADER
 typedef double r64;
-#endif
 
 #define Flt_Min FLT_MIN
 #define Flt_Max FLT_MAX
@@ -119,10 +117,22 @@ struct v4
 
 struct Quat
 {
-    f32 w;
-    f32 x;
-    f32 y;
-    f32 z;
+    union
+    {
+        f32 w;
+
+        f32 x;
+        f32 y;
+        f32 z;
+
+        struct
+        {
+            // NOTE(joon) ordered pair representation of the quaternion
+            // q = [s, v] = S + Vx*i + Vy*j + Vz*k
+            f32 s; // scalar
+            v3 v; // vector
+        };
+    };
 };
 
 struct m4
@@ -153,8 +163,6 @@ struct m3x3
     };
 };
 
-
-
 // NOTE(joon) row major
 // e[0][0] e[0][1] e[0][2] e[0][3]
 // e[1][0] e[1][1] e[1][2] e[1][3]
@@ -173,4 +181,5 @@ struct m4x4
         f32 e[4][4];
     };
 };
+
 #endif

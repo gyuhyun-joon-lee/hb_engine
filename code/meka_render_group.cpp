@@ -334,6 +334,30 @@ internal void
      end_temp_memory(&mesh_construction_temp_memory);
 }
 
+/* 
+   NOTE(joon) Rotation matrix
+   Let's say that we have a tranform matrix that looks like this
+   |xa ya za|
+   |xb yb zb|
+   |xc yc zc|
+
+   This means that whenever we multiply point with this, we are projecting the point into a coordinate system
+   with three axes : [xa ya za], [xb yb zb], [xb yb zb] by taking a dot product.
+   Common example for this would be world to camera transform matrix.
+
+   Let's now setup the matrix in the other way by transposing the matrix above. 
+   |xa xb xc|
+   |ya yb yc|
+   |za zb zc|
+   Whenever we multiply a point by this, the result would be p.x*[xa ya za] + p.y*[xb yb zb] + p.z*[xc yc zc]
+   Common example for this would be camera to world matrix, where we have a point in camera space and 
+   we want to get what the p would be in world coordinates 
+
+   As you can see, two matrix is doing the exact opposite thing, which means they are inverse matrix to each other.
+   This make sense, as the rotation matrix is an orthogonal matrix(both rows and the columns are unit vectors),
+   so that the inverse = transpose
+*/
+
 // NOTE(joon) To move the world space position into camera space,
 // 1. We first translate the position so that the origin of the camera space
 // in world coordinate is (0, 0, 0). We can achieve this by  simply subtracing the camera position
@@ -406,7 +430,7 @@ start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_p
     // TODO(joon) we can push the camera transform as a render entry
     m4x4 proj = projection(camera->focal_length, render_push_buffer->width_over_height, 0.1f, 10000.0f);
     m4x4 view = camera_transform(camera);
-    m4x4 proj_view = transpose(proj * view);
+    m4x4 proj_view = transpose(proj * view); // Change to column major
 
     render_push_buffer->proj_view = proj_view;
     render_push_buffer->clear_color = clear_color;
@@ -428,7 +452,7 @@ push_aabb(RenderGroup *render_group, v3 p, v3 dim, v3 color)
     entry->color = color;
 }
 
-// TODO(joon) do we want to collapes this to single line_group or something to save memory(color, type)?
+// TODO(joon) do we want to collape this to single line_group or something to save memory(color, type)?
 internal void
 push_line(RenderGroup *render_group, v3 start, v3 end, v3 color)
 {
@@ -440,6 +464,18 @@ push_line(RenderGroup *render_group, v3 start, v3 end, v3 color)
     entry->end = end;
     entry->color = color;
 }
+
+#if 0
+internal void
+push_particle_faces(RenderGroup *render_group, v3 v_0, v3 v_1, v3 v_2, v3 color)
+{
+    RenderEntryParticleFaces *entry = (RenderEntryParticleFaces *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
+    entry->header.type = Render_Entry_Type_Particle_Faces;
+    render_group->render_push_buffer->used += sizeof(*entry);
+
+    entry->faces = ;
+}
+#endif
 
 
 
