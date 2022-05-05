@@ -53,29 +53,20 @@ add_flat_triangle_mass_agg_entity(GameState *game_state, MemoryArena *arena, v3 
     return result;
 }
 
-internal Entity *
-add_aabb_entity(GameState *game_state, v3 p, v3 dim, v3 color, f32 mass)
-{
-    // TODO(joon) test if mass is infinite, and set the entity flag accordingly
-    Entity *result = add_entity(game_state, Entity_Type_Floor, Entity_Flag_Movable|Entity_Flag_Collides);
-    result->color = color;
-    result->aabb = init_aabb(p, 0.5f*dim, safe_ratio(1.0f, mass));
-
-    return result;
-}
-
 // NOTE(joon) floor is non_movable entity with infinite mass
 internal Entity *
 add_floor_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 {
     Entity *result = add_entity(game_state, Entity_Type_Floor, Entity_Flag_Collides);
     result->aabb = init_aabb(p, 0.5f * dim, 0.0f);
+
+    result->color = color;
     
     return result;
 }
 
 internal Entity *
-add_cube_rigid_body(GameState *game_state, v3 p, v3 dim, v3 color, f32 mass)
+add_cube_rigid_body_entity(GameState *game_state, v3 p, v3 dim, v3 color, f32 mass)
 {
     Entity *result = add_entity(game_state, Entity_Type_Cube, Entity_Flag_Movable|Entity_Flag_Collides);
     result->color = color;
@@ -85,7 +76,7 @@ add_cube_rigid_body(GameState *game_state, v3 p, v3 dim, v3 color, f32 mass)
             0, mass*(dim.x*dim.x + dim.z*dim.z)/12.0f, 0,
             0, 0, mass*(dim.x*dim.x + dim.y*dim.y)/12.0f);
 
-    result->rigid_body = init_rigid_body(p, safe_ratio(1.0f, mass), intertia_tensor);
+    result->rigid_body = init_rigid_body(p, dim, safe_ratio(1.0f, mass), intertia_tensor);
 
     return result;
 }

@@ -20,6 +20,12 @@
 #include "meka_render_group.cpp"
 #include "meka_image_loader.cpp"
 
+/*
+    TODO(joon)
+    - Render Font using one of the graphics API
+        - If we are going to use the packed texture, how should we correctly sample from it in the shader?
+*/
+
 extern "C" 
 GAME_UPDATE_AND_RENDER(update_and_render)
 {
@@ -28,7 +34,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     if(!game_state->is_initialized)
     {
         // TODO(joon) entity arena?
-        game_state->max_entity_count = 160000;
+        game_state->max_entity_count = 1024;
         game_state->entities = (Entity *)malloc(sizeof(Entity) * game_state->max_entity_count);
 
         //PlatformReadFileResult vox_file = platform_api->read_file("/Volumes/meka/meka_renderer/data/vox/chr_knight.vox");
@@ -42,40 +48,40 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
 
         game_state->mass_agg_arena = start_memory_arena((u8 *)platform_memory->transient_memory + game_state->transient_arena.total_size, megabytes(256));
-        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 7.0f);
         //add_flat_triangle_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 1, 1), 1.0f, 15.0f);
 
         //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
-        add_floor_entity(game_state, V3(0, 0, -0.5f), V3(100.0f, 100.0f, 1.0f), V3(0.7f, 0.7f, 0.7f));
+        add_floor_entity(game_state, V3(0, 0, -0.5f), V3(100.0f, 100.0f, 1.0f), V3(0.8f, 0.1f, 0.1f));
+
+        add_cube_rigid_body_entity(game_state, V3(0, 0, 2.0f), V3(1.0f, 1.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), 5.0f);
 
 #if 0
+        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 7.0f);
         PlatformReadFileResult cow_obj_file = platform_api->read_file("/Volumes/meka/meka_engine/data/low_poly_cow.obj");
         raw_mesh cow_mesh = parse_obj_tokens(&game_state->transient_arena, cow_obj_file.memory, cow_obj_file.size);
         // TODO(joon) : Find out why increasing the elastic value make the entity fly away!!!
         add_mass_agg_entity_from_mesh(game_state, &game_state->mass_agg_arena, V3(0, 5, 30), V3(1, 1, 1), 
                                     cow_mesh.positions, cow_mesh.position_count, cow_mesh.indices, cow_mesh.index_count, V3(0.001f, 0.001f, 0.001f), 5.0f, 0.1f);
-#endif
-
         PlatformReadFileResult oh_obj_file = platform_api->read_file("/Volumes/meka/meka_engine/data/dodecahedron.obj");
         raw_mesh oh_mesh = parse_obj_tokens(&game_state->transient_arena, oh_obj_file.memory, oh_obj_file.size);
         // TODO(joon) : Find out why increasing the elastic value make the entity fly away!!!
         add_mass_agg_entity_from_mesh(game_state, &game_state->mass_agg_arena, V3(0, 5, 30), V3(1, 1, 1), 
                                     oh_mesh.positions, oh_mesh.position_count, oh_mesh.indices, oh_mesh.index_count, V3(0.5f, 0.5f, 0.5f), 5.0f, 10.0f);
+#endif
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
                                                     game_state->transient_arena.total_size + 
                                                     game_state->mass_agg_arena.total_size, 
                                                     megabytes(256));
 
-        game_state->camera.focal_length = 1.0f;
-        game_state->camera.p = V3(-10, 0, 5);
-
+        game_state->camera = init_camera(V3(-10, 0, 5), V3(0, 0, 0), 1.0f);
+        
         game_state->is_initialized = true;
     }
 
     Camera *camera= &game_state->camera;
+    f32 camera_rotation_speed = 2.0f * platform_input->dt_per_frame;
 
-    f32 camera_rotation_speed = 5.0f * platform_input->dt_per_frame;
     if(platform_input->action_up)
     {
         camera->pitch += camera_rotation_speed;
@@ -126,6 +132,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     move_mass_agg_entity(game_state, entity, platform_input->dt_per_frame, platform_input->space);
                 }
             }break;
+
+            case Entity_Type_Cube:
+            {
+                quat rot = Quat(V3(0, 0, 1), 0.01f);
+                entity->rigid_body.orientation = rot * entity->rigid_body.orientation * inverse(rot);
+            }break;
         }
     }
 
@@ -159,6 +171,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     MassParticle *particle_1 = entity->mass_agg.particles + connection->ID_1;
                     push_line(&render_group, particle_0->p, particle_1->p, entity->color);
                 }
+            }break;
+
+            case Entity_Type_Cube:
+            {
+                push_cube(&render_group, entity->rigid_body.p, entity->rigid_body.dim, entity->color, entity->rigid_body.orientation);
             }break;
         }
     }

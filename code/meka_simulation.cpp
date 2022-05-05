@@ -567,7 +567,7 @@ move_mass_agg_entity(GameState *game_state, Entity *entity, f32 dt_per_frame, b3
 }
 
 internal void
-get_transform_matrix(m4x4 *transform_matrix, v3 p, Quat orientation)
+get_transform_matrix(m4x4 *transform_matrix, v3 p, quat orientation)
 {
     m3x3 rotation_matrix = rotation_quat_to_m3x3(orientation);
     *transform_matrix = M4x4(rotation_matrix);
@@ -588,14 +588,15 @@ get_transform_matrix(m4x4 *transform_matrix, v3 p, Quat orientation)
 
     where Iab = sum(mi * pi.a * pi.b) (for principle axes x, y, and z, we just put the same axis in both a and b)
 */
-
-// TODO(joon) also add initial rotation
+// TODO(joon) also add initial orietation
 internal RigidBody
-init_rigid_body(v3 p, f32 inv_mass, m3x3 inertia_tensor)
+init_rigid_body(v3 p, v3 dim, f32 inv_mass, m3x3 inertia_tensor)
 {
     RigidBody result = {};
     result.p = p;
+    result.dim = dim;
     result.inv_mass = inv_mass;
+    result.orientation = Quat(0, V3(1, 0, 0));
 
     result.inv_intertia_tensor = inverse(inertia_tensor);
 

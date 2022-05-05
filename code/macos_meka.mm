@@ -24,6 +24,7 @@
 #include "meka_random.h"
 
 #include "meka_metal.cpp"
+#include "meka_render_group.cpp"
 
 // TODO(joon): Get rid of global variables?
 global v2 last_mouse_p;
@@ -404,9 +405,9 @@ macos_do_thread_work_item(thread_work_queue *queue, u32 thread_index)
     if(queue->work_index != queue->add_index)
     {
         int original_work_index = queue->work_index;
-        int expected_work_index = original_work_index + 1;
+        int desired_work_index = original_work_index + 1;
 
-        if(OSAtomicCompareAndSwapIntBarrier(original_work_index, expected_work_index, &queue->work_index))
+        if(OSAtomicCompareAndSwapIntBarrier(original_work_index, desired_work_index, &queue->work_index))
         {
             thread_work_item *item = queue->items + original_work_index;
             item->callback(item->data);
@@ -451,607 +452,58 @@ thread_proc(void *data)
     return 0;
 }
 
-#if MEKA_VULKAN
-internal void
-macos_initialize_vulkan(RenderContext *render_context, CAMetalLayer *metal_layer)
-{
-    void *lib = dlopen("../external/vulkan/macos/lib/libvulkan.1.dylib", RTLD_NOW|RTLD_GLOBAL);
-    if(lib)
-    {
-        vkGetInstanceProcAddr = (VFType(vkGetInstanceProcAddr))dlsym(lib, "vkGetInstanceProcAddr");
-    }
-    else
-    {
-        invalid_code_path;
-    }
-
-    resolve_pre_instance_functions();
-
-    char *desired_layers[] = 
-    {
-#if MEKA_DEBUG
-        "VK_LAYER_KHRONOS_validation" 
-#endif
-    };
-    vk_check_desired_layers_support(desired_layers, array_count(desired_layers));
-
-    char *desired_extensions[] =
-    {
-#if MEKA_DEBUG
-        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-#endif
-        VK_KHR_SURFACE_EXTENSION_NAME,
-        VK_EXT_METAL_SURFACE_EXTENSION_NAME,
-        "VK_KHR_get_physical_device_properties2",
-        //"VK_KHR_dynamic_rendering", // TODO(joon) sometimes in the future....
-    };
-    vk_check_desired_extensions_support(desired_extensions, array_count(desired_extensions));
-
-    VkInstance instance = vk_create_instance(desired_layers, array_count(desired_layers), desired_extensions, array_count(desired_extensions));
-
-    resolve_instance_functions(instance);
-
-    // NOTE(joon) create debug messenger
-    CreateDebugMessenger(instance);
-
-    VkPhysicalDevice physical_device = find_physical_device(instance);
-    VkPhysicalDeviceProperties property;
-    vkGetPhysicalDeviceProperties(physical_device, &property);
-    u32 uniform_buffer_alignment = property.limits.minUniformBufferOffsetAlignment;
-
-    VkMetalSurfaceCreateInfoEXT surface_create_info = {};
-    surface_create_info.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
-    surface_create_info.pNext = 0;
-    surface_create_info.flags = 0;
-    surface_create_info.pLayer = metal_layer;
-    VkSurfaceKHR surface;
-    CheckVkResult(vkCreateMetalSurfaceEXT(instance, &surface_create_info, 0, &surface));
-
-    vk_queue_families queue_families = get_supported_queue_familes(physical_device, surface);
-    VkDevice device = vk_create_device(physical_device, surface, &queue_families);
-
-    ResolveDeviceLevelFunctions(device);
-
-    VkQueue graphics_queue;
-    VkQueue transfer_queue;
-    VkQueue present_queue;
-    vkGetDeviceQueue(device, queue_families.graphicsQueueFamilyIndex, 0, &graphics_queue);
-    vkGetDeviceQueue(device, queue_families.presentQueueFamilyIndex, 0, &present_queue);
-    vkGetDeviceQueue(device, queue_families.transferQueueFamilyIndex, 0, &transfer_queue);
-
-    VkFormat surface_format_candidates[] = {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_SRGB};
-
-    VkSurfaceFormatKHR surface_format = vk_select_surface_format(physical_device, surface, surface_format_candidates, array_count(surface_format_candidates));
-
-    vk_check_desired_present_mode_support(physical_device, surface, VK_PRESENT_MODE_FIFO_KHR);
-
-    VkSurfaceCapabilitiesKHR surface_capabilities;
-    CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities));
-
-    VkSwapchainCreateInfoKHR swapchain_create_info = {};
-    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    //swapchain_create_info.flags; // TODO(joon) : might be worth looking into protected image?
-    swapchain_create_info.surface = surface;
-    swapchain_create_info.minImageCount = surface_capabilities.minImageCount + 1;
-    if(swapchain_create_info.minImageCount > surface_capabilities.maxImageCount)
-    {
-        swapchain_create_info.minImageCount = surface_capabilities.maxImageCount;
-    }
-    if(surface_capabilities.maxImageCount == 0)
-    {
-        // NOTE(joon) ; If the maxImageCount is 0, means there is no limit for the maximum image count
-        swapchain_create_info.minImageCount = 3;
-    }
-    swapchain_create_info.imageFormat = surface_format.format;
-    swapchain_create_info.imageColorSpace = surface_format.colorSpace;
-    swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    swapchain_create_info.imageExtent = surface_capabilities.currentExtent;
-    swapchain_create_info.imageArrayLayers = 1; // non-stereoscopic
-    swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchain_create_info.queueFamilyIndexCount = 1;
-    swapchain_create_info.pQueueFamilyIndices = &queue_families.graphicsQueueFamilyIndex; // TODO(joon) why are we just using the graphics queue?
-    swapchain_create_info.preTransform = surface_capabilities.currentTransform;
-    // TODO(joon) : surface_capabilities also return supported alpha composite, so we should check that one too
-    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; 
-    swapchain_create_info.clipped = VK_TRUE;
-
-    VkSwapchainKHR swapchain;
-    vkCreateSwapchainKHR(device, &swapchain_create_info, 0, &swapchain);
-
-    // NOTE(joon) : You _have to_ query first and then get the images, otherwise vulkan always returns VK_INCOMPLETE
-    u32 swapchain_image_count;
-    CheckVkResult(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, 0));
-    VkImage *swapchain_images = (VkImage *)malloc(swapchain_image_count*sizeof(VkImage)); // TODO(joon) maybe get rid of this dynamic allocation
-    CheckVkResult(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, swapchain_images));
-
-    VkImageView *swapchain_image_views = (VkImageView *)malloc(swapchain_image_count*sizeof(VkImageView));
-    for(u32 swapchain_image_index = 0;
-        swapchain_image_index < swapchain_image_count;
-        ++swapchain_image_index)
-    {
-        VkImageViewCreateInfo image_view_create_info = {};
-        image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        image_view_create_info.image = swapchain_images[swapchain_image_index];
-        image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        image_view_create_info.format = surface_format.format;
-        image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        image_view_create_info.subresourceRange.baseMipLevel = 0;
-        image_view_create_info.subresourceRange.levelCount = 1;
-        image_view_create_info.subresourceRange.baseArrayLayer = 0;
-        image_view_create_info.subresourceRange.layerCount = 1;
-
-        CheckVkResult(vkCreateImageView(device, &image_view_create_info, 0, swapchain_image_views + swapchain_image_index));
-    }
-
-    VkAttachmentReference color_attachemnt_ref = {};
-    color_attachemnt_ref.attachment = 0; // index
-    color_attachemnt_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // TODO(joon) : Check this value!
-
-    VkAttachmentReference depthStencil_ref = {};
-    depthStencil_ref.attachment = 1; // index
-    depthStencil_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass_desc = {};
-    subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass_desc.colorAttachmentCount = 1;
-    subpass_desc.pColorAttachments = &color_attachemnt_ref;
-    subpass_desc.pDepthStencilAttachment = &depthStencil_ref;
-
-    // NOTE(joon) color attachment
-    VkAttachmentDescription renderpass_attachments[2] = {};
-    renderpass_attachments[0].format = surface_format.format;
-    renderpass_attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    renderpass_attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // This will enable the renderpass clear value
-    renderpass_attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // If we are not recording the command buffer every single time, OP_STORE should be specified
-    renderpass_attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    renderpass_attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    renderpass_attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    renderpass_attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    // NOTE(joon) depth attachment
-    renderpass_attachments[1].format = VK_FORMAT_D32_SFLOAT;
-    renderpass_attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-    renderpass_attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // This will enable the renderpass clear value
-    renderpass_attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE; // If we are not recording the command buffer every single time, OP_STORE should be specified
-    renderpass_attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    renderpass_attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    renderpass_attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    renderpass_attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    // NOTE(joon): Not an official information, but pipeline is always optimized
-    // for using specific subpass with specific renderpass, not for using 
-    // multiple subpasses
-    VkRenderPassCreateInfo renderpass_create_info = {};
-    renderpass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderpass_create_info.attachmentCount = array_count(renderpass_attachments);
-    renderpass_create_info.pAttachments = renderpass_attachments;
-    renderpass_create_info.subpassCount = 1;
-    renderpass_create_info.pSubpasses = &subpass_desc;
-    //renderpass_create_info.dependencyCount = 0;
-    //renderpass_create_info.pDependencies = ;
-    
-    VkRenderPass renderpass;
-    CheckVkResult(vkCreateRenderPass(device, &renderpass_create_info, 0, &renderpass));
-
-    PlatformReadFileResult vertex_shader_code = debug_macos_read_file("/Volumes/meka/meka_engine/code/shader/shader.vert.spv");
-    VkShaderModuleCreateInfo vertex_shader_module_create_info = {};
-    vertex_shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    vertex_shader_module_create_info.codeSize = vertex_shader_code.size;
-    vertex_shader_module_create_info.pCode = (u32 *)vertex_shader_code.memory;
-
-    VkShaderModule vertex_shader_module;
-    CheckVkResult(vkCreateShaderModule(device, &vertex_shader_module_create_info, 0, &vertex_shader_module));
-    //platformApi->FreeFileMemory(vertex_shader_code.memory);
-
-    PlatformReadFileResult frag_shader_code = debug_macos_read_file("/Volumes/meka/meka_engine/code/shader/shader.frag.spv");
-    VkShaderModuleCreateInfo frag_shader_module_create_info = {};
-    frag_shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    frag_shader_module_create_info.codeSize = frag_shader_code.size;
-    frag_shader_module_create_info.pCode = (u32 *)frag_shader_code.memory;
-
-    VkShaderModule frag_shader_module;
-    CheckVkResult(vkCreateShaderModule(device, &frag_shader_module_create_info, 0, &frag_shader_module));
-    //platformApi->FreeFileMemory(frag_shader_code.memory);
-
-    VkPipelineShaderStageCreateInfo stage_create_info[2] = {};
-    stage_create_info[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stage_create_info[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stage_create_info[0].module = vertex_shader_module;
-    stage_create_info[0].pName = "main";
-
-    stage_create_info[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stage_create_info[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    stage_create_info[1].module = frag_shader_module;
-    stage_create_info[1].pName = "main";
-
-    VkPipelineVertexInputStateCreateInfo vertexInputState = {};
-    vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = {};
-    inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO; inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-    VkViewport viewport = {};
-    viewport.width = (f32)surface_capabilities.currentExtent.width;
-    viewport.height = (f32)surface_capabilities.currentExtent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissor = {};
-    scissor.extent.width = surface_capabilities.currentExtent.width;
-    scissor.extent.height = surface_capabilities.currentExtent.height;
-
-    VkPipelineViewportStateCreateInfo viewportState = {};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.pViewports = &viewport;
-    viewportState.scissorCount = 1;
-    viewportState.pScissors = &scissor;
-
-    VkPipelineRasterizationStateCreateInfo rasterizationState = {};
-    rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizationState.depthClampEnable = false;
-    rasterizationState.rasterizerDiscardEnable = false; // TODO(joon) :If enabled, the rasterizer will discard some vertices, but don't know what's the policy for that
-    rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT; // which triangle should be discarded
-    rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterizationState.depthBiasEnable = false;
-    rasterizationState.lineWidth = 1.0f;
-
-    VkPipelineMultisampleStateCreateInfo multisampleState = {};
-    multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT ;
-
-    VkPipelineDepthStencilStateCreateInfo depthStencilState = {};
-    depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencilState.depthTestEnable = true;
-    depthStencilState.depthWriteEnable = true;
-    depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
-    depthStencilState.depthBoundsTestEnable = false;
-    VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-    colorBlendAttachment.blendEnable = false;
-    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-    colorBlendAttachment.colorWriteMask =   VK_COLOR_COMPONENT_R_BIT |
-                                            VK_COLOR_COMPONENT_G_BIT |
-                                            VK_COLOR_COMPONENT_B_BIT |
-                                            VK_COLOR_COMPONENT_A_BIT;
-
-    VkPipelineColorBlendStateCreateInfo colorBlendState = {};
-    colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlendState.logicOpEnable = false;
-    colorBlendState.logicOp = VK_LOGIC_OP_COPY;
-    colorBlendState.attachmentCount = 1;
-    colorBlendState.pAttachments = &colorBlendAttachment;
-    
-#if 1
-    VkDescriptorSetLayoutBinding layout_bindings[2] = {};
-    layout_bindings[0].binding = 0;
-    layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    layout_bindings[0].descriptorCount = 1;
-    layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    layout_bindings[1].binding = 1;
-    layout_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    layout_bindings[1].descriptorCount = 1;
-    layout_bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {};
-    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; // descriptor sets must not be allocated with this layout
-    layoutCreateInfo.bindingCount = array_count(layout_bindings);
-    layoutCreateInfo.pBindings = layout_bindings;
-
-    VkDescriptorSetLayout setLayout;
-    vkCreateDescriptorSetLayout(device, &layoutCreateInfo, 0, &setLayout);
-#endif
-    VkPushConstantRange pushConstantRange[1] = {};
-    pushConstantRange[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    pushConstantRange[0].offset = 0;
-    pushConstantRange[0].size = sizeof(m4);
-
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
-    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
-    pipelineLayoutCreateInfo.pSetLayouts = &setLayout;
-    pipelineLayoutCreateInfo.pushConstantRangeCount = array_count(pushConstantRange);  // TODO(joon) : Look into this more to use push constant
-    pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRange;
-
-    VkPipelineLayout pipeline_layout;
-    CheckVkResult(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, 0, &pipeline_layout));
-
-    VkDynamicState dynamic_states[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }; 
-    VkPipelineDynamicStateCreateInfo dynamic_state = {};
-    dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO; 
-    dynamic_state.dynamicStateCount = array_count(dynamic_states);
-    dynamic_state.pDynamicStates = dynamic_states;
-
-    VkGraphicsPipelineCreateInfo graphics_pipeline_create_info = {};
-    graphics_pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    graphics_pipeline_create_info.stageCount = 2;
-    graphics_pipeline_create_info.pStages = stage_create_info;
-    graphics_pipeline_create_info.pVertexInputState = &vertexInputState; // vertices are pushed using pushDescriptorSet
-    graphics_pipeline_create_info.pInputAssemblyState = &inputAssemblyState;
-    graphics_pipeline_create_info.pViewportState = &viewportState;
-    graphics_pipeline_create_info.pRasterizationState = &rasterizationState;
-    graphics_pipeline_create_info.pMultisampleState = &multisampleState;
-    graphics_pipeline_create_info.pDepthStencilState = &depthStencilState;
-    graphics_pipeline_create_info.pColorBlendState = &colorBlendState;
-    graphics_pipeline_create_info.pDynamicState = &dynamic_state;
-    graphics_pipeline_create_info.layout = pipeline_layout;
-    graphics_pipeline_create_info.renderPass = renderpass;
-    graphics_pipeline_create_info.subpass = 0;
-
-    VkPipeline graphics_pipeline;
-    CheckVkResult(vkCreateGraphicsPipelines(device, 0, 1, &graphics_pipeline_create_info, 0, &graphics_pipeline));
-
-    // NOTE(joon) now it's safe to destroy the shader modules
-    vkDestroyShaderModule(device, vertex_shader_module, 0);
-    vkDestroyShaderModule(device, frag_shader_module, 0);
-
-    VkImageCreateInfo image_create_info = {};
-    image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.format = VK_FORMAT_D32_SFLOAT;
-    image_create_info.extent.width = surface_capabilities.currentExtent.width;
-    image_create_info.extent.height = surface_capabilities.currentExtent.height;
-    image_create_info.extent.depth = 1;
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 1;
-    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    VkImage depth_image;
-    CheckVkResult(vkCreateImage(device, &image_create_info, 0, &depth_image));
-
-    // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    VkMemoryRequirements memory_requirements;
-    vkGetImageMemoryRequirements(device, depth_image, &memory_requirements);
-
-    u32 usable_memory_index_for_depth_image = vk_get_usable_memory_index(physical_device, device, memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    VkMemoryAllocateInfo memory_allocate_info = {};
-    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memory_allocate_info.allocationSize = memory_requirements.size;
-    memory_allocate_info.memoryTypeIndex = usable_memory_index_for_depth_image;
-
-    VkDeviceMemory depth_image_memory;
-    CheckVkResult(vkAllocateMemory(device, &memory_allocate_info, 0, &depth_image_memory));
-
-    CheckVkResult(vkBindImageMemory(device, depth_image, depth_image_memory, 0));
-
-    VkImageViewCreateInfo image_view_create_info = {};
-    image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    image_view_create_info.image = depth_image;
-    image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    image_view_create_info.format = VK_FORMAT_D32_SFLOAT;
-    image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    image_view_create_info.subresourceRange.levelCount = 1;
-    image_view_create_info.subresourceRange.layerCount = 1;
-
-    VkImageView depth_image_view;
-    CheckVkResult(vkCreateImageView(device, &image_view_create_info, 0, &depth_image_view));
-
-    VkFramebuffer *framebuffers = (VkFramebuffer *)malloc(swapchain_image_count * sizeof(VkFramebuffer)); 
-    for(u32 framebuffer_index = 0;
-        framebuffer_index < swapchain_image_count;
-        ++framebuffer_index)
-    {
-        VkImageView attachments[2] = {};
-        attachments[0] = swapchain_image_views[framebuffer_index];
-        attachments[1] = depth_image_view;
-
-        VkFramebufferCreateInfo framebuffer_create_info = {};
-        framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebuffer_create_info.renderPass = renderpass;
-        framebuffer_create_info.attachmentCount = array_count(attachments);
-        framebuffer_create_info.pAttachments = attachments;
-        framebuffer_create_info.width = surface_capabilities.currentExtent.width;
-        framebuffer_create_info.height = surface_capabilities.currentExtent.height;
-        framebuffer_create_info.layers = 1;
-
-        CheckVkResult(vkCreateFramebuffer(device, &framebuffer_create_info, 0, framebuffers + framebuffer_index));
-    }
-
-    // NOTE(joon) : command buffers inside the pool can only be submitted to the specified queue
-    // graphics related command buffers- 
-    // graphics related command buffers -> graphics queue
-    // transfer related command buffers -> transfer queue
-    VkCommandPoolCreateInfo command_pool_create_info = {};
-    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    //commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    command_pool_create_info.queueFamilyIndex = queue_families.graphicsQueueFamilyIndex;
-
-    VkCommandPool graphics_command_pool;
-    CheckVkResult(vkCreateCommandPool(device, &command_pool_create_info, 0, &graphics_command_pool));
-
-    VkCommandBufferAllocateInfo command_buffer_allocate_info = {};
-    command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    command_buffer_allocate_info.commandPool = graphics_command_pool;
-    command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    command_buffer_allocate_info.commandBufferCount = swapchain_image_count;
-
-    VkCommandBuffer *graphics_command_buffers = (VkCommandBuffer *)malloc(sizeof(VkCommandBuffer) * swapchain_image_count);
-    CheckVkResult(vkAllocateCommandBuffers(device, &command_buffer_allocate_info, graphics_command_buffers));
-
-#if 0
-    // TODO(joon) : If possible, make this to use transfer queue(and command pool)!
-    VkCommandBuffer transfer_commadn_pool;
-    commandBufferAllocateInfo = {};
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.commandPool = graphicsCommandPool;
-    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAllocateInfo.commandBufferCount = 1;
-    CheckVkResult(vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &transferCommandBuffer));
-#endif
-    
-    VkSemaphore *ready_to_render_semaphores = (VkSemaphore *)malloc(sizeof(VkSemaphore) * swapchain_image_count);
-    VkSemaphore *ready_to_present_semaphores = (VkSemaphore *)malloc(sizeof(VkSemaphore) * swapchain_image_count);
-    for(u32 semaphore_index = 0;
-        semaphore_index < swapchain_image_count;
-        ++semaphore_index)
-    {
-        VkSemaphoreCreateInfo semaphore_create_info = {};
-        semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        CheckVkResult(vkCreateSemaphore(device, &semaphore_create_info, 0, ready_to_render_semaphores + semaphore_index));
-        CheckVkResult(vkCreateSemaphore(device, &semaphore_create_info, 0, ready_to_present_semaphores + semaphore_index));
-    }
-
-    VkFence *ready_to_render_fences = (VkFence *)malloc(sizeof(VkFence) * swapchain_image_count);
-    VkFence *ready_to_present_fences = (VkFence *)malloc(sizeof(VkFence) * swapchain_image_count);
-    for(u32 fence_index = 0;
-        fence_index < swapchain_image_count;
-        ++fence_index)
-    {
-        VkFenceCreateInfo  fenceCreateInfo = {};
-        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        
-        CheckVkResult(vkCreateFence(device, &fenceCreateInfo, 0, ready_to_render_fences + fence_index));
-        CheckVkResult(vkCreateFence(device, &fenceCreateInfo, 0, ready_to_present_fences + fence_index));
-    }
-
-    // TODO(joon) : Correct this image memory barrier, and also find out what pipeline stage we should be using
-#if 0
-    for(u32 swapchainImageIndex = 0;
-        swapchainImageIndex < swapchainImageCount;
-        ++swapchainImageIndex)
-    {
-        VkImageMemoryBarrier imageMemoryBarrier = {};
-        imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE_KHR;
-        imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // No queue transfer occurs
-        imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imageMemoryBarrier.image = swapchainImages[swapchainImageIndex];
-        imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-        imageMemoryBarrier.subresourceRange.levelCount = 1; // vk_remaining_mip_levels?
-        imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-        imageMemoryBarrier.subresourceRange.layerCount = 1; // vk_remaining_array_levels?
-        
-        vkCmdPipelineBarrier(transferCommandBuffer,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    1,
-                                    &imageMemoryBarrier);
-#endif
-    render_context->instance = instance;
-    render_context->physical_device = physical_device;
-    render_context->device = device;
-
-    render_context->swapchain = swapchain;
-    render_context->swapchain_image_count = swapchain_image_count;
-
-    render_context->framebuffers = framebuffers;
-
-    render_context->renderpass = renderpass;
-    render_context->pipeline = graphics_pipeline;
-    render_context->pipeline_layout = pipeline_layout;
-
-    render_context->ready_to_render_semaphores = ready_to_render_semaphores;
-    render_context->ready_to_present_semaphores = ready_to_present_semaphores;
-
-    render_context->ready_to_render_fences = ready_to_render_fences;
-    render_context->ready_to_present_fences = ready_to_present_fences;
-
-    render_context->graphics_command_buffers = graphics_command_buffers;
-
-    render_context->uniform_buffer_alignment = uniform_buffer_alignment;
-
-    render_context->graphics_queue = graphics_queue;
-    //VkQueue transfer_queue;
-    //VkQueue present_queue;
-
-    render_context->current_image_index = 0;
-
-    render_context->uniform_buffer = vk_create_uniform_buffer(physical_device, device, 
-                                                            sizeof(Uniform), swapchain_image_count, uniform_buffer_alignment);
-}
-#endif
-
 f32 cube_vertices[] = 
 {
-    0.5f, 0.5f, 0.5f,
-    -0.5f, 0.5f, 0.5f,
-    0.5f, -0.5f, 0.5f,
-    -0.5f, -0.5f, 0.5f, 
-
+    0.5f, -0.5f, -0.5f,
     0.5f, 0.5f, -0.5f,
     -0.5f, 0.5f, -0.5f,
-    0.5f, -0.5f, -0.5f,
     -0.5f, -0.5f, -0.5f, 
+
+    0.5f, -0.5f, 0.5f,
+    0.5f, 0.5f, 0.5f,
+    -0.5f, 0.5f, 0.5f,
+    -0.5f, -0.5f, 0.5f, 
+};
+
+f32 cube_normals[] = 
+{
+    0.5f, -0.5f, -0.5f,
+    0.5f, 0.5f, -0.5f,
+    -0.5f, 0.5f, -0.5f,
+    -0.5f, -0.5f, -0.5f, 
+
+    0.5f, -0.5f, 0.5f,
+    0.5f, 0.5f, 0.5f,
+    -0.5f, 0.5f, 0.5f,
+    -0.5f, -0.5f, 0.5f, 
 };
 
 u32 cube_outward_facing_indices[]
 {
     //+z
-    0, 1, 2,
-    1, 3, 2,
+    4, 5, 7,
+    5, 6, 7,
 
     //-z
-    4, 6, 5, 
-    5, 6, 7, 
+    0, 2, 1, 
+    0, 3, 2, 
 
     //+x
-    0, 2, 6,
-    0, 6, 4,
+    4, 0, 5,
+    0, 1, 5,
 
     //-x
-    1, 5, 3,
-    5, 7, 3,
+    2, 3, 7,
+    2, 7, 6,
 
     //+y
-    5, 0, 4,
-    5, 1, 0,
+    1, 2, 6,
+    1, 6, 5,
 
     //-y
-    3, 7, 2,
-    7, 6, 2
+    3, 0, 4,
+    3, 4, 7
 };
-
-u32 cube_inward_facing_indices[]
-{
-    //+z
-    0, 2, 1,
-    1, 2, 3,
-
-    //-z
-    4, 5, 6, 
-    5, 7, 6, 
-
-    //+x
-    0, 6, 2,
-    0, 4, 6,
-
-    //-x
-    1, 3, 5,
-    5, 3, 7,
-
-    //+y
-    5, 4, 0,
-    5, 0, 1,
-
-    //-y
-    3, 2, 7,
-    7, 2, 6
-};
-
-
-
 
 // TODO(joon) Later, we can make this to also 'stream' the meshes(just like the other assets), and put them inside the render mesh
 // so that the graphics API can render them.
@@ -1090,7 +542,10 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         PerFrameData per_frame_data = {};
         per_frame_data.proj_view = render_push_buffer->proj_view; // already calculated from the game code
 
-        metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 1);
+        u32 size = sizeof(per_frame_data);
+
+        // NOTE(joon) per frame data is always the 0th buffer
+        metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
 
         u32 voxel_instance_count = 0;
         for(u32 consumed = 0;
@@ -1103,13 +558,13 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
             {
                 // TODO(joon) we can also do the similar thing as the voxels,
                 // which is allocating the managed buffer and instance-drawing the lines
-                case Render_Entry_Type_Line:
+                case RenderEntryType_Line:
                 {
                     RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
                     metal_set_pipeline(render_encoder, render_context->line_pipeline_state);
                     f32 start_and_end[6] = {entry->start.x, entry->start.y, entry->start.z, entry->end.x, entry->end.y, entry->end.z};
 
-                    metal_set_vertex_bytes(render_encoder, start_and_end, sizeof(f32) * array_count(start_and_end), 0);
+                    metal_set_vertex_bytes(render_encoder, start_and_end, sizeof(f32) * array_count(start_and_end), 1);
                     metal_set_vertex_bytes(render_encoder, &entry->color, sizeof(entry->color), 2);
 
                     metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
@@ -1117,7 +572,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     consumed += sizeof(*entry);
                 }break;
 #if 0
-                case Render_Entry_Type_Voxel:
+                case RenderEntryType_Voxel:
                 {
                     RenderEntryVoxel *entry = (RenderEntryVoxel *)((u8 *)push_buffer_base + consumed);
 
@@ -1130,20 +585,41 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 }break;
 #endif
 
-                case Render_Entry_Type_AABB:
+                case RenderEntryType_AABB:
                 {
                     RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
-                    m4x4 model = translate(entry->p) * scale(entry->dim);
-                    model = transpose(model);
+                    m4x4 model = st_m4x4(entry->p, entry->dim);
+                    model = transpose(model); // make the matrix column-major
                     PerObjectData per_object_data = {};
                     per_object_data.model = model;
                     per_object_data.color = entry->color;
 
                     metal_set_pipeline(render_encoder, render_context->cube_pipeline_state);
-                    metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
-                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 2);
+                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
+                    metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 2);
+                    metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
+
+                    metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
+                            render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), 1);
+                }break;
+
+                case RenderEntryType_Cube:
+                {
+                    RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += sizeof(*entry);
+
+                    m4x4 model = srt_m4x4(entry->p, entry->orientation, entry->dim);
+                    model = transpose(model); // make the matrix column-major
+                    PerObjectData per_object_data = {};
+                    per_object_data.model = model;
+                    per_object_data.color = entry->color;
+
+                    metal_set_pipeline(render_encoder, render_context->cube_pipeline_state);
+                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
+                    metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 2);
+                    metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
 
                     metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
                             render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), 1);
@@ -1164,17 +640,17 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         v3 z_axis_color = V3(0, 0, 1);
 
         // x axis
-        metal_set_vertex_bytes(render_encoder, x_axis, sizeof(f32) * array_count(x_axis), 0);
+        metal_set_vertex_bytes(render_encoder, x_axis, sizeof(f32) * array_count(x_axis), 1);
         metal_set_vertex_bytes(render_encoder, &x_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
 
         // y axis
-        metal_set_vertex_bytes(render_encoder, y_axis, sizeof(f32) * array_count(y_axis), 0);
+        metal_set_vertex_bytes(render_encoder, y_axis, sizeof(f32) * array_count(y_axis), 1);
         metal_set_vertex_bytes(render_encoder, &y_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
 
         // z axis
-        metal_set_vertex_bytes(render_encoder, z_axis, sizeof(f32) * array_count(z_axis), 0);
+        metal_set_vertex_bytes(render_encoder, z_axis, sizeof(f32) * array_count(z_axis), 1);
         metal_set_vertex_bytes(render_encoder, &z_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
 
@@ -1379,7 +855,7 @@ main(void)
     view.depthStencilPixelFormat = MTLPixelFormatDepth32Float;
 
     MTLDepthStencilDescriptor *depth_descriptor = [MTLDepthStencilDescriptor new];
-    depth_descriptor.depthCompareFunction = MTLCompareFunctionLessEqual;
+    depth_descriptor.depthCompareFunction = MTLCompareFunctionLess;
     depth_descriptor.depthWriteEnabled = true;
     id<MTLDepthStencilState> depth_state = [device newDepthStencilStateWithDescriptor:depth_descriptor];
     [depth_descriptor release];
@@ -1466,10 +942,6 @@ main(void)
     metal_append_to_managed_buffer(&metal_render_context.cube_outward_facing_index_buffer, 
                                     cube_outward_facing_indices, 
                                     metal_render_context.cube_outward_facing_index_buffer.max_size);
-    metal_render_context.cube_inward_facing_index_buffer = metal_create_managed_buffer(device, sizeof(u32) * array_count(cube_inward_facing_indices));
-    metal_append_to_managed_buffer(&metal_render_context.cube_inward_facing_index_buffer, 
-                                    cube_inward_facing_indices, 
-                                    metal_render_context.cube_inward_facing_index_buffer.max_size);
 
     CVDisplayLinkRef display_link;
     if(CVDisplayLinkCreateWithActiveCGDisplays(&display_link)== kCVReturnSuccess)

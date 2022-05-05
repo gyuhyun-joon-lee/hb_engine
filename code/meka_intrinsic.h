@@ -1,7 +1,52 @@
 #ifndef MEKA_INTRINSIC_H
 #define MEKA_INTRINSIC_H
 
-// TODO(joon) intrinsic!
+// NOTE(joon) intrinsic functions are those that the provided by the compiler based on the language(some are non_portable).
+// Most of the bit operations are included in this case, including sin, cos functions, too.
+// To know more, check https://en.wikipedia.org/wiki/Intrinsic_function
+
+// TODO(joon) Remove this!!!
+#include <math.h>
+
+// TODO(joon) add functionality for other compilers(gcc, msvc)
+// NOTE(joon) kinda interesting that they do not have compare exchange for floating point numbers
+#if MEKA_LLVM
+
+#if MEKA_MACOS
+#include <libkern/OSAtomic.h>
+// NOTE(joon) : Check https://opensource.apple.com/source/Libc/Libc-594.1.4/i386/sys/OSAtomic.s
+
+// TODO(joon) macos has two different versions of this - with and without 'barrier'.
+// Find out whether we acutally need the barrier(for now, we use the version with barrier)
+#define atomic_compare_exchange(ptr, expected, desired) OSAtomicCompareAndSwapIntBarrier(ptr, expected, desired)
+#define atomic_compare_exchange_64(ptr, expected, desired) OSAtomicCompareAndSwap64Barrier(ptr, expected, desired)
+
+#define atomic_increment(ptr) OSAtomicIncrement32Barrier(ptr)
+#define atomic_increment_64(ptr) OSAtomicIncrement64Barrier(ptr)
+
+#define atomic_add(ptr, value_to_add) OSAtomicAdd32Barrier(ptr, value_to_add)
+#define atomic_add_64(ptr, value_to_add) OSAtomicAdd64Barrier(ptr, value_to_add)
+
+#elif MEKA_LLVM
+// TODO(joon) Can also be used for GCC, because this is a GCC extension of Clang?
+//#elif MEKA_GCC
+
+// NOTE(joon) These functions do not care whether it's 32bit or 64bit
+#define atomic_compare_exchange(ptr, expected, desired) __sync_bool_compare_and_swap(ptr, expected, desired)
+#define atomic_compare_exchange_64(ptr, expected, desired) __sync_bool_compare_and_swap(ptr, expected, desired)
+
+// TODO(joon) Do we really need increment intrinsics?
+#define atomic_increment(ptr) __sync_add_and_fetch(ptr, 1)
+#define atomic_increment_64(ptr) __sync_add_and_fetch(ptr, 1)
+
+#define atomic_add(ptr, value_to_add) __sync_add_and_fetch(ptr, value_to_add)
+#define atomic_add_64(ptr, value_to_add) __sync_add_and_fetch(ptr, value_to_add)
+#endif
+
+#elif MEKA_MSVC
+
+#endif
+
 inline u32
 count_set_bit(u32 value, u32 size_in_bytes)
 {

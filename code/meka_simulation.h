@@ -83,13 +83,17 @@ struct RigidBody
     //f32 linear_damp;
     // NOTE(joon) updated each frame using the equation 
     // o = o + (dt*angular_v*o)/2
-    Quat orientation; 
+    quat orientation; 
 
     m3x3 inv_intertia_tensor; // NOTE(joon) in local space, need to convert it to world space
     //f32 angular_damp;
 
     v3 p;
     v3 dp;
+    // TODO(joon) This really should not be here... though we do need some kind of collision volume
+    // both for the collision tests and rendering
+    v3 dim; 
+
 
     // NOTE(joon) Should be a pure quaternion
     // updated by the net torque,t = I*angular_v

@@ -8,7 +8,7 @@
 // TODO(joon) This function is not actually 'safe'...
 // need better name here
 inline b32
-compare_with_epsilon(f32 a, f32 b, f32 epsilon = 0.00001f)
+compare_with_epsilon(f32 a, f32 b, f32 epsilon = 0.00005f)
 {
     b32 result = true;
 
@@ -34,6 +34,12 @@ safe_ratio(f32 nom, f32 denom)
     }
 
     return result;
+}
+
+inline f32
+square(f32 value)
+{
+    return value*value;
 }
 
 inline v2
@@ -287,7 +293,6 @@ length_square(v3 a)
 {
     return a.x*a.x + a.y*a.y + a.z*a.z;
 }
-
 
 inline v3
 normalize(v3 a)
@@ -602,9 +607,11 @@ inverse(m3x3 m)
     return result;
 }
 
+
+
 // NOTE(joon) rotate along x axis
 inline m3x3
-x_rotation(f32 rad)
+x_rotate(f32 rad)
 {
     // same as 2d rotation, without x value changing
     // cos -sin
@@ -624,7 +631,7 @@ x_rotation(f32 rad)
 
 // NOTE(joon) rotate along y axis
 inline m3x3
-y_rotation(f32 rad)
+y_rotate(f32 rad)
 {
     // same as 2d rotation, without y value changing
     // cos -sin
@@ -646,7 +653,7 @@ y_rotation(f32 rad)
 
 // NOTE(joon) rotate along z axis
 inline m3x3 
-z_rotation(f32 rad)
+z_rotate(f32 rad)
 {
     // same as 2d rotation, without x value changing
     // cos -sin
@@ -660,22 +667,6 @@ z_rotation(f32 rad)
 
     result.e[1][0] = sin;
     result.e[1][1] = cos;
-
-    return result;
-}
-
-// NOTE/Joon : This assumes that the window width is always 1m
-inline m4x4
-projection(f32 focal_length, f32 aspect_ratio, f32 near, f32 far)
-{
-    m4x4 result = {};
-
-    f32 c = clip_space_top_is_one() ? 1.f : 0.f; 
-
-    result.rows[0] = V4(focal_length, 0, 0, 0);
-    result.rows[1] = V4(0, focal_length*aspect_ratio, 0, 0);
-    result.rows[2] = V4(0, 0, c*(near+far)/(far-near), (-2.0f*far*near)/(far-near));
-    result.rows[3] = V4(0, 0, 1, 0);
 
     return result;
 }
@@ -771,42 +762,6 @@ operator -(m4x4 a, m4x4 b)
     result.rows[3] = a.rows[3] - b.rows[3];
 
     return result;
-}
-
-inline m4x4
-scale(f32 x, f32 y, f32 z, f32 w = 1.0f)
-{
-    m4x4 result = {};
-    result.e[0][0] = x;
-    result.e[1][1] = y;
-    result.e[2][2] = z;
-    result.e[3][3] = w;
-
-    return result;
-}
-
-inline m4x4
-scale(v3 xyz)
-{
-    return scale(xyz.x, xyz.y, xyz.z);
-}
-
-inline m4x4
-translate(f32 x, f32 y, f32 z, f32 w = 1.0f)
-{
-    m4x4 result = M4x4();
-    result.e[0][3] = x;
-    result.e[1][3] = y;
-    result.e[2][3] = z;
-    result.e[3][3] = w;
-
-    return result;
-}
-
-inline m4x4
-translate(v3 xyz)
-{
-    return translate(xyz.x, xyz.y, xyz.z);
 }
 
 inline m4x4
@@ -978,23 +933,142 @@ big_to_little_endian(u64 byte_count)
     return result;
 }
 
+inline quat
+Quat(f32 s, v3 v)
+{
+    quat result = {};
+    result.s = s;
+    result.v = v;
 
-// TODO(joon) might be a better term for this...
+    return result;
+}
+
+// NOTE(joon) returns rotation quaternion
+inline quat
+Quat(v3 axis, f32 rad)
+{
+    quat result = {};
+    result.s = cosf(rad);
+    result.v = sinf(rad) * axis;
+
+    return result;
+}
+
+inline quat
+operator +(quat a, quat b)
+{
+    quat result = {};
+
+    result.s = a.s + b.s;
+    result.v = a.v + b.v;
+
+    return result;
+}
+
+inline quat
+operator *(quat a, quat b)
+{
+    quat result = {};
+
+    result.s = a.s*b.s - dot(a.v, b.v);
+    result.v = a.s*b.v + b.s*a.v + cross(a.v, b.v);
+
+    return result;
+}
+
+inline quat
+operator *(f32 value, quat q)
+{
+    quat result = q;
+    result.s *= value;
+    result.v *= value;
+
+    return result;
+}
+
+inline quat
+operator /(quat q, f32 value)
+{
+    quat result = {};
+    result.s = q.s/value;
+    result.v = q.v/value;
+
+    return result;
+}
+
+inline quat &
+operator *=(quat &q, f32 value)
+{
+    q.s *= value;
+    q.v *= value;
+
+    return q;
+}
+
+inline quat &
+operator /=(quat &q, f32 value)
+{
+    q.s /= value;
+    q.v /= value;
+
+    return q;
+}
+
+// TODO(joon) make quaternion based on the orientation
+
 inline f32
-length_square(Quat q)
+length_square(quat q)
 {
     f32 result = length_square(q.v) + q.s*q.s;
 
     return result;
 }
 
-// TODO(joon) double check whether this is an orthogonal matrix
-// so that inverse matrix == tranpose matrix
-inline m3x3
-rotation_quat_to_m3x3(Quat q)
+inline f32
+length(quat q)
 {
-    assert(compare_with_epsilon(length_square(q), 1.0f));
+    f32 result = sqrt(length_square(q));
 
+    return result;
+}
+
+inline quat
+normalize(quat q)
+{
+    quat result = q/length(q);
+
+    return result;
+}
+
+inline quat
+conjugate(quat q)
+{
+    quat result = q;
+    result.v *= -1.0f;
+
+    return result;
+}
+
+inline quat
+inverse(quat q)
+{
+    quat result = conjugate(q) / length_square(q);
+
+    return result;
+}
+
+inline b32
+does_quat_represent_orientation(quat q)
+{
+    b32 result = compare_with_epsilon(q.s, 0.0f) && compare_with_epsilon(length_square(q.v), 1.0f);
+
+    return result;
+}
+
+// NOTE(joon) This matrix is an orthogonal matrix, so inverse == transpose
+inline m3x3
+rotation_quat_to_m3x3(quat q)
+{
     m3x3 result = {};
     result.e[0][0] = 1 - 2.0f*(q.y*q.y + q.z*q.z);
     result.e[0][1] = 2.0f*(q.x*q.y + q.z*q.s);
@@ -1010,6 +1084,30 @@ rotation_quat_to_m3x3(Quat q)
 
     return result;
 }
+
+// NOTE(joon) 
+// You can see that q before and after the rotation should be pure, as it is the only way
+// they can exist in ijk coordinate.
+// If the rotation axis is not perpendicular to 
+// pure quaternion that we are trying to rotate,
+// multiplying those two quaternions will make the q unpure.
+// so we basically need to multiply it by inverse rot_q, 
+// which makes q pure again. This is also why we are only using half_rad instead of rad
+inline quat
+rotate(quat q, v3 axis, f32 rad)
+{
+    assert(compare_with_epsilon(length_square(axis), 1.0f));
+    assert(compare_with_epsilon(q.s, 0.0f));
+
+    quat half_rot = Quat(axis, rad/2.0f);
+
+    // Simplifed version of q * p * inverse(q)
+    quat result = Quat(0, 2*dot(half_rot.v, q.v)*half_rot.v + (2*square(half_rot.s) - 1)*q.v +
+                          2*half_rot.s*cross(half_rot.v, q.v));
+
+    return result;
+}
+
 
 #endif
 

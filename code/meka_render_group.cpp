@@ -1,3 +1,70 @@
+#include "meka_render_group.h"
+inline m3x3
+scale_m3x3(f32 x, f32 y, f32 z)
+{
+    m3x3 result = {};
+    result.e[0][0] = x;
+    result.e[1][1] = y;
+    result.e[2][2] = z;
+
+    return result;
+}
+
+inline m3x3
+scale_m3x3(v3 xyz)
+{
+    return scale_m3x3(xyz.x, xyz.y, xyz.z);
+}
+
+inline m4x4
+translate(f32 x, f32 y, f32 z, f32 w = 1.0f)
+{
+    m4x4 result = M4x4();
+    result.e[0][3] = x;
+    result.e[1][3] = y;
+    result.e[2][3] = z;
+    result.e[3][3] = w;
+
+    return result;
+}
+
+inline m4x4
+translate(v3 xyz)
+{
+    return translate(xyz.x, xyz.y, xyz.z);
+}
+
+// NOTE(joon) operation order here is translate * rotation * scale
+inline m4x4
+srt_m4x4(v3 translate, quat orientation, v3 scale)
+{
+    m3x3 r = rotation_quat_to_m3x3(orientation);
+    m3x3 s = scale_m3x3(scale);
+
+    m4x4 result = M4x4(r * s);
+    result.e[0][3] = translate.x;
+    result.e[1][3] = translate.y;
+    result.e[2][3] = translate.z;
+    result.e[3][3] = 1.0f;
+
+    return result;
+}
+
+inline m4x4
+st_m4x4(v3 translate, v3 scale)
+{
+    m3x3 s = scale_m3x3(scale);
+
+    m4x4 result = M4x4(s);
+    result.e[0][3] = translate.x;
+    result.e[1][3] = translate.y;
+    result.e[2][3] = translate.z;
+    result.e[3][3] = 1.0f;
+
+    return result;
+
+}
+
 struct vertex_normal_hit
 {
     v3 normal_sum;
@@ -108,8 +175,6 @@ internal void
              i < simd_end_index;
              i += 12) // considering we are using 128 bit wide vectors
      {
-
-
          // Load 12 indices
          // TODO(joon): timed this and for now it's not worth doing so(and increase the code complexity), 
          // unless we change the index to be 16-bit?
@@ -334,6 +399,20 @@ internal void
      end_temp_memory(&mesh_construction_temp_memory);
 }
 
+// NOTE(joon) can be also used to init different set of camers for debugging purposes
+internal Camera
+init_camera(v3 p, v3 lookat_p, f32 focal_length)
+{
+    Camera result = {};
+
+    result.p = p;
+    // TODO(joon) make use of the lookat_p
+    //result.orientation = Quat(0, V3(1, 0, 0));
+    result.focal_length = focal_length;
+
+    return result;
+}
+
 /* 
    NOTE(joon) Rotation matrix
    Let's say that we have a tranform matrix that looks like this
@@ -371,14 +450,14 @@ internal m4x4
 camera_transform(Camera *camera)
 {
     m4x4 result = {};
-
-    // TODO(joon) I don't quite understand why I need this - for z and x rotation
-    m3x3 camera_local_rotation = z_rotation(-camera->roll) * y_rotation(camera->yaw) * x_rotation(-camera->pitch);
-
+    
+    m3x3 camera_local_rotation = z_rotate(camera->roll) * y_rotate(camera->yaw) * x_rotate(camera->pitch);
+    
     // NOTE(joon) camera aligns with the world coordinate in default.
     v3 local_camera_x_axis = normalize(camera_local_rotation * V3(1, 0, 0));
     v3 local_camera_y_axis = normalize(camera_local_rotation * V3(0, 1, 0));
     v3 local_camera_z_axis = normalize(camera_local_rotation * V3(0, 0, 1));
+    m3x3 transpose_camera_local_rotation = transpose(camera_local_rotation);
 
     // NOTE(joon) to pack the rotation & translation into one matrix(with an order of translation and the rotation),
     // we need to first multiply the translation by the rotation matrix
@@ -397,29 +476,37 @@ camera_transform(Camera *camera)
 internal v3
 get_camera_lookat(Camera *camera)
 {
-    // TODO(joon) I don't quite understand why I need this - for z and x rotation
-    m3x3 camera_local_rotation = z_rotation(-camera->roll) * y_rotation(camera->yaw) * x_rotation(-camera->pitch);
-
-    v3 result = camera_local_rotation * V3(0, 0, 1); 
+    m3x3 camera_local_rotation = z_rotate(camera->roll) * y_rotate(camera->yaw) * x_rotate(camera->pitch);
+    v3 result = camera_local_rotation * V3(0, 0, -1); 
 
     return result;
 }
 
-// TODO(joon) probably buggy
-#if 0
-internal v3
-camera_to_world(Camera *camera, v3 v)
+
+internal m4x4
+rhs_to_lhs(m4x4 m)
 {
-    m3x3 camera_to_world_rotation = x_rotation(-camera->pitch) * y_rotation(-camera->yaw) * z_rotation(-camera->roll);
+    m4x4 result = m;
+    result.rows[2] *= -1.0f;
 
-    v3 camera_x_axis = camera_to_world_rotation * V3(1, 0, 0);
-    v3 camera_y_axis = camera_to_world_rotation * V3(0, 1, 0);
-    v3 camera_z_axis = camera_to_world_rotation * V3(0, 0, 1);
-
-    v3 result = v.x * camera_x_axis + v.y*camera_y_axis+ v.z*camera_z_axis;
     return result;
 }
-#endif
+
+// NOTE/Joon : This assumes that the window width is always 1m
+inline m4x4
+project(f32 focal_length, f32 aspect_ratio, f32 near, f32 far)
+{
+    m4x4 result = {};
+
+    f32 c = clip_space_top_is_one() ? 1.f : 0.f; 
+
+    result.rows[0] = V4(focal_length, 0, 0, 0);
+    result.rows[1] = V4(0, focal_length*aspect_ratio, 0, 0);
+    result.rows[2] = V4(0, 0, c*(near+far)/(far-near), (-2.0f*far*near)/(far-near));
+    result.rows[3] = V4(0, 0, 1, 0);
+
+    return result;
+}
 
 internal void
 start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_push_buffer, Camera *camera, v3 clear_color)
@@ -427,9 +514,12 @@ start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_p
     assert(render_push_buffer->base)
     render_group->render_push_buffer = render_push_buffer;
 
-    // TODO(joon) we can push the camera transform as a render entry
-    m4x4 proj = projection(camera->focal_length, render_push_buffer->width_over_height, 0.1f, 10000.0f);
-    m4x4 view = camera_transform(camera);
+    // TODO(joon) APIs differ in how they define their NDC, so maybe just pull this out 
+    // to the platform code and just pass the orientation quaternion
+    // TODO(joon) we can push the camera transform as a render entry, so that we can change the camera dynamically?
+    m4x4 proj = project(camera->focal_length, render_push_buffer->width_over_height, 0.1f, 10000.0f);
+    // TODO(joon) This should not be necessary?
+    m4x4 view = rhs_to_lhs(camera_transform(camera));
     m4x4 proj_view = transpose(proj * view); // Change to column major
 
     render_push_buffer->proj_view = proj_view;
@@ -445,7 +535,7 @@ push_aabb(RenderGroup *render_group, v3 p, v3 dim, v3 color)
     render_group->render_push_buffer->used += sizeof(*entry);
     assert(render_group->render_push_buffer->used <= render_group->render_push_buffer->total_size);
 
-    entry->header.type = Render_Entry_Type_AABB;
+    entry->header.type = RenderEntryType_AABB;
     entry->p = p;
     entry->dim = dim;
     
@@ -457,11 +547,25 @@ internal void
 push_line(RenderGroup *render_group, v3 start, v3 end, v3 color)
 {
     RenderEntryLine *entry = (RenderEntryLine *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
-    entry->header.type = Render_Entry_Type_Line;
+    entry->header.type = RenderEntryType_Line;
     render_group->render_push_buffer->used += sizeof(*entry);
 
     entry->start = start;
     entry->end = end;
+    entry->color = color;
+}
+ 
+internal void
+push_cube(RenderGroup *render_group, v3 p, v3 dim, v3 color, quat orientation)
+{
+    RenderEntryCube *entry = (RenderEntryCube *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
+    render_group->render_push_buffer->used += sizeof(*entry);
+    assert(render_group->render_push_buffer->used <= render_group->render_push_buffer->total_size);
+
+    entry->header.type = RenderEntryType_Cube;
+    entry->p = p;
+    entry->dim = dim;
+    entry->orientation = orientation;
     entry->color = color;
 }
 
@@ -470,7 +574,7 @@ internal void
 push_particle_faces(RenderGroup *render_group, v3 v_0, v3 v_1, v3 v_2, v3 color)
 {
     RenderEntryParticleFaces *entry = (RenderEntryParticleFaces *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
-    entry->header.type = Render_Entry_Type_Particle_Faces;
+    entry->header.type = RenderEntryType_Particle_Faces;
     render_group->render_push_buffer->used += sizeof(*entry);
 
     entry->faces = ;

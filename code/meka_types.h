@@ -46,13 +46,14 @@ typedef double r64;
 #define i8_min INT8_MIN
 #define i8_max INT8_MAX
 
+// NOTE(joon) As you may have noticed, structs that are in this file start with lower case,
+// compared to other structs in the codebase.
+
 struct v2
 {
     r32 x;
     r32 y;
 };
-
-
 
 struct v3
 {
@@ -115,22 +116,25 @@ struct v4
     };
 };
 
-struct Quat
+// NOTE(joon) quat is RHS
+struct quat
 {
     union
     {
-        f32 w;
-
-        f32 x;
-        f32 y;
-        f32 z;
-
         struct
         {
             // NOTE(joon) ordered pair representation of the quaternion
             // q = [s, v] = S + Vx*i + Vy*j + Vz*k
             f32 s; // scalar
             v3 v; // vector
+        };
+
+        struct 
+        {
+            f32 w;
+            f32 x;
+            f32 y;
+            f32 z;
         };
     };
 };

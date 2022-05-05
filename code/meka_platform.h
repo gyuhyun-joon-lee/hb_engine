@@ -39,7 +39,7 @@ extern "C" {
 #define pi_32 3.14159265358979323846264338327950288419716939937510582097494459230f
 #define half_pi_32 (pi_32/2.0f)
 
-#include "math.h"
+#include <math.h>
 
 struct PlatformReadFileResult
 {
@@ -83,6 +83,7 @@ struct PlatformInput
     f32 dt_per_frame;
 };
 
+#include <string.h>
 // TODO/Joon: intrinsic zero memory?
 // TODO(joon): can be faster using wider vectors
 inline void
@@ -109,6 +110,7 @@ zero_memory(void *memory, u64 size)
         }
     }
 #else
+
     // TODO(joon): support for intel simd, too!
     memset (memory, 0, size);
 #endif
@@ -172,6 +174,7 @@ struct PlatformMemory
     u64 transient_memory_size;
 };
 
+// TODO(joon) sub_arena!
 struct MemoryArena
 {
     void *base;

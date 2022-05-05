@@ -24,13 +24,16 @@ struct raw_mesh
     u32 texcoord_index_count;
 };
 
-// TODO(joon) make this to be entirely quarternion-based
+// TODO(joon) Will getting the axis_angle representation from pitch, yaw, and roll
+// and using that to rotate the orientation work?
 struct Camera
 {
-    // These are the rotation angle in camera space
-    f32 pitch; // x
-    f32 yaw; // y
-    f32 roll; // z
+    f32 pitch;
+    f32 yaw;
+    f32 roll;
+
+    // TODO(joon) someday...
+    //quat orientation;
 
     v3 p;
     f32 focal_length;
@@ -38,9 +41,9 @@ struct Camera
 
 enum RenderEntryType
 {
-    Render_Entry_Type_AABB,
-    Render_Entry_Type_Line,
-    Render_Entry_Type_Particle_Faces,
+    RenderEntryType_AABB,
+    RenderEntryType_Line,
+    RenderEntryType_Cube,
 };
 
 // TODO(joon) Do we have enough reason to keep this header?
@@ -48,14 +51,6 @@ struct RenderEntryHeader
 {
     // NOTE(joon) This should _always_ come first
     RenderEntryType type;
-};
-
-struct RenderEntryVoxelChunk
-{
-    RenderEntryHeader header;
-
-    void *chunk_data; // just storing the pointer
-    u32 chunk_size; // around 0.2mb
 };
 
 struct RenderEntryAABB
@@ -74,6 +69,18 @@ struct RenderEntryLine
 
     v3 start;
     v3 end;
+    v3 color;
+};
+
+struct RenderEntryCube
+{
+    RenderEntryHeader header;
+
+    v3 p;
+    v3 dim;
+    // TODO(joon) Should we store the full matrix here to reduce time from
+    // getting the rendering material to acutally drawing it to the screen?(especially for Metal)
+    quat orientation; // NOTE(joon) this should be a pure quaternion
     v3 color;
 };
 
