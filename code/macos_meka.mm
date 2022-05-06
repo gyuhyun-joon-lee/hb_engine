@@ -17,11 +17,12 @@
 
 // TODO(joon) meka_shared.h file for files that are shared across platforms?
 #include "meka_types.h"
+#include "meka_intrinsic.h"
 #include "meka_platform.h"
-#include "meka_simd.h"
-#include "meka_render_group.h"
 #include "meka_math.h"
 #include "meka_random.h"
+#include "meka_simd.h"
+#include "meka_render_group.h"
 
 #include "meka_metal.cpp"
 #include "meka_render_group.cpp"
@@ -776,7 +777,7 @@ main(void)
     macos_load_game_code(&macos_game_code, game_code_path);
  
     u32 random_seed = time(NULL);
-    random_series series = start_random_series(random_seed); 
+    RandomSeries series = start_random_series(random_seed); 
 
     //TODO : writefile?
     PlatformAPI platform_api = {};

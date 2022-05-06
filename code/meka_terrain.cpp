@@ -7,7 +7,7 @@ generate_mountain_inside_terrain(raw_mesh *terrain,
 {
     // TODO(joon): Get rid of rand()
     u32 random_seed = (u32)rand();
-    random_series series = start_random_series(random_seed); 
+    RandomSeries series = start_random_series(random_seed); 
 
     i32 min_x = maximum(round_r32_to_i32((center.x - radius)/dim), 0);
     i32 max_x = minimum(round_r32_to_i32((center.x + radius)/dim), x_count);
@@ -51,7 +51,7 @@ generate_sphere_mesh(u32 desired_column_count, u32 desired_row_count)
 
     // TODO(joon): Get rid of rand()
     u32 random_seed = (u32)rand();
-    random_series series = start_random_series(random_seed); 
+    RandomSeries series = start_random_series(random_seed); 
     
     r32 rad_per_column = 2.0f*pi_32 / (r32)desired_column_count;
     r32 rad_per_row = (pi_32) / (r32)desired_row_count;
@@ -138,7 +138,7 @@ generate_plane_terrain_mesh(MemoryArena *memory_arena, u32 quad_width, u32 quad_
 {
     // TODO(joon): Get rid of rand()
     u32 random_seed = (u32)rand();
-    random_series series = start_random_series(random_seed); 
+    RandomSeries series = start_random_series(random_seed); 
 
     // 100 vertices means there will be 99 quads per line
     raw_mesh terrain = {};

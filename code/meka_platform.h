@@ -83,58 +83,6 @@ struct PlatformInput
     f32 dt_per_frame;
 };
 
-#include <string.h>
-// TODO/Joon: intrinsic zero memory?
-// TODO(joon): can be faster using wider vectors
-inline void
-zero_memory(void *memory, u64 size)
-{
-    // TODO/joon: What if there's no neon support
-#if MEKA_ARM
-    u8 *byte = (u8 *)memory;
-    uint8x16_t zero_128 = vdupq_n_u8(0);
-
-    while(size > 16)
-    {
-        vst1q_u8(byte, zero_128);
-
-        byte += 16;
-        size -= 16;
-    }
-
-    if(size > 0)
-    {
-        while(size--)
-        {
-            *byte++ = 0;
-        }
-    }
-#else
-
-    // TODO(joon): support for intel simd, too!
-    memset (memory, 0, size);
-#endif
-}
-
-// TODO(joon): Intrinsic?
-inline u8
-reverse_bits(u8 value)
-{
-    u8 result = 0;
-
-    for(u32 i = 0;
-            i < 8;
-            ++i)
-    {
-        if(((value >> i) & 1) == 0)
-        {
-            result |= (1 << i);
-        }
-    }
-
-    return result;
-}
-
 // NOTE(joon) this function has no bound check
 internal void
 unsafe_string_append(char *dest, const char *source, u32 source_size)

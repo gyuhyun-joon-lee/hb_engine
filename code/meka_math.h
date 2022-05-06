@@ -42,6 +42,19 @@ square(f32 value)
     return value*value;
 }
 
+inline f32
+lerp(f32 min, f32 t, f32 max)
+{
+    return min + t*(max-min);
+}
+
+inline v2
+V2(void)
+{
+    v2 result = {};
+    return result;
+}
+
 inline v2
 V2(f32 x, f32 y)
 {
@@ -319,6 +332,34 @@ hadamard(v3 a, v3 b)
 }
 
 inline v3
+lerp(v3 min, f32 t, v3 max)
+{
+    v3 result = {};
+
+    result.x = lerp(min.x, t, max.x);
+    result.y = lerp(min.y, t, max.y);
+    result.z = lerp(min.z, t, max.z);
+
+    return result;
+}
+
+inline f32
+max_element(v3 a)
+{
+    f32 result = maximum(maximum(a.x, a.y), a.z);
+
+    return result;
+}
+
+inline f32
+min_element(v3 a)
+{
+    f32 result = minimum(minimum(a.x, a.y), a.z);
+
+    return result;
+}
+
+inline v3
 gather_min_elements(v3 a, v3 b)
 {
     v3 result = {};
@@ -339,6 +380,13 @@ gather_max_elements(v3 a, v3 b)
     result.y = maximum(a.y, b.y);
     result.z = maximum(a.z, b.z);
 
+    return result;
+}
+
+inline v4
+V4(void)
+{
+    v4 result = {};
     return result;
 }
 
@@ -487,6 +535,17 @@ M3x3(void)
     result.e[0][0] = 1.0f;
     result.e[1][1] = 1.0f;
     result.e[2][2] = 1.0f;
+
+    return result;
+}
+
+inline m3x3
+M3x3(m4x4 m)
+{
+    m3x3 result = {};
+    result.rows[0] = m.rows[0].xyz;
+    result.rows[1] = m.rows[1].xyz;
+    result.rows[2] = m.rows[2].xyz;
 
     return result;
 }
@@ -851,39 +910,7 @@ clamp(i32 min, i32 value, i32 max)
     return result;
 }
 
-inline f32
-lerp(f32 min, f32 t, f32 max)
-{
-    return min + t*(max-min);
-}
 
-inline v3
-lerp(v3 min, f32 t, v3 max)
-{
-    v3 result = {};
-
-    result.x = lerp(min.x, t, max.x);
-    result.y = lerp(min.y, t, max.y);
-    result.z = lerp(min.z, t, max.z);
-
-    return result;
-}
-
-inline f32
-max_element(v3 a)
-{
-    f32 result = maximum(maximum(a.x, a.y), a.z);
-
-    return result;
-}
-
-inline f32
-min_element(v3 a)
-{
-    f32 result = minimum(minimum(a.x, a.y), a.z);
-
-    return result;
-}
 
 // 0x11 22 33 44
 //    3  2  1  0 - little endian
@@ -994,6 +1021,15 @@ operator /(quat q, f32 value)
     result.v = q.v/value;
 
     return result;
+}
+
+inline quat &
+operator +=(quat &a, quat b)
+{
+    a.s += b.s;
+    a.v += b.v;
+
+    return a;
 }
 
 inline quat &

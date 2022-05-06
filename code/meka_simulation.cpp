@@ -566,18 +566,6 @@ move_mass_agg_entity(GameState *game_state, Entity *entity, f32 dt_per_frame, b3
     }
 }
 
-internal void
-get_transform_matrix(m4x4 *transform_matrix, v3 p, quat orientation)
-{
-    m3x3 rotation_matrix = rotation_quat_to_m3x3(orientation);
-    *transform_matrix = M4x4(rotation_matrix);
-    transform_matrix->e[0][3] = p.x;
-    transform_matrix->e[1][3] = p.y;
-    transform_matrix->e[2][3] = p.z;
-
-    // TODO(joon) should we initialize the e[3][3] element to 0 or 1?
-}
-
 /*
     NOTE(joon) inertia tensor
     Moment of inertia, which replaces the mass in F = ma in the subsequent equation t(torque) = I(moment of inertia) * w(angular v),
@@ -598,7 +586,50 @@ init_rigid_body(v3 p, v3 dim, f32 inv_mass, m3x3 inertia_tensor)
     result.inv_mass = inv_mass;
     result.orientation = Quat(0, V3(1, 0, 0));
 
-    result.inv_intertia_tensor = inverse(inertia_tensor);
+    result.inv_inertia_tensor = inverse(inertia_tensor);
 
     return result;
 }
+
+internal void
+calculate_derived_rigid_body_parameters(RigidBody *rigid_body)
+{
+    // NOTE(joon) transform matrix
+    m3x3 rot = rotation_quat_to_m3x3(rigid_body->orientation);
+    rigid_body->transform = M4x4(rot);
+    rigid_body->transform.e[0][3] = rigid_body->p.x;
+    rigid_body->transform.e[1][3] = rigid_body->p.y;
+    rigid_body->transform.e[2][3] = rigid_body->p.z;
+    rigid_body->transform.e[3][3] = 1.0f;
+
+    // transform inv intertia tensor
+    m3x3 transform = M3x3(rigid_body->transform);
+    rigid_body->transform_inv_inertia_tensor = transform* // transform back to world space
+                                                rigid_body->inv_inertia_tensor* // both inertia & vector that we are multiplying are in local space
+                                                inverse(transform); // transform to local space
+}
+
+internal void
+add_force_at_local_p(RigidBody *rigid_body, v3 force, v3 local_p)
+{
+    rigid_body->force += force;
+
+    v3 world_p = (rigid_body->transform * V4(local_p, 1.0f)).xyz;
+    v3 rel_world_p = world_p - rigid_body->p;
+
+    rigid_body->torque += cross(rel_world_p, force);
+}
+
+internal void
+add_linear_force(RigidBody *rigid_body, v3 force)
+{
+    rigid_body->force += force;
+}
+
+
+
+
+
+
+
+

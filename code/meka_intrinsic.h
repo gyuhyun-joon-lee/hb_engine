@@ -159,8 +159,59 @@ power(u32 base, u32 exponent)
 inline u64
 pointer_diff(void *start, void *end)
 {
-    assert(start && end);
+    //assert(start && end);
     u64 result = ((u8 *)start - (u8 *)end);
+
+    return result;
+}
+
+#include <string.h>
+// TODO/Joon: intrinsic zero memory?
+// TODO(joon): can be faster using wider vectors
+inline void
+zero_memory(void *memory, u64 size)
+{
+    // TODO/joon: What if there's no neon support
+#if MEKA_ARM
+    u8 *byte = (u8 *)memory;
+    uint8x16_t zero_128 = vdupq_n_u8(0);
+
+    while(size > 16)
+    {
+        vst1q_u8(byte, zero_128);
+
+        byte += 16;
+        size -= 16;
+    }
+
+    if(size > 0)
+    {
+        while(size--)
+        {
+            *byte++ = 0;
+        }
+    }
+#else
+    // TODO(joon): support for intel simd, too!
+    memset (memory, 0, size);
+#endif
+}
+
+// TODO(joon): Intrinsic?
+inline u8
+reverse_bits(u8 value)
+{
+    u8 result = 0;
+
+    for(u32 i = 0;
+            i < 8;
+            ++i)
+    {
+        if(((value >> i) & 1) == 0)
+        {
+            result |= (1 << i);
+        }
+    }
 
     return result;
 }

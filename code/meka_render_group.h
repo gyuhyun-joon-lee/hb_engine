@@ -24,8 +24,6 @@ struct raw_mesh
     u32 texcoord_index_count;
 };
 
-// TODO(joon) Will getting the axis_angle representation from pitch, yaw, and roll
-// and using that to rotate the orientation work?
 struct Camera
 {
     f32 pitch;
@@ -33,6 +31,8 @@ struct Camera
     f32 roll;
 
     // TODO(joon) someday...
+    // TODO(joon) Will getting the axis_angle representation from pitch, yaw, and roll
+    // and using that to rotate the orientation work?
     //quat orientation;
 
     v3 p;

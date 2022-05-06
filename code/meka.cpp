@@ -1,9 +1,9 @@
 #include "meka_types.h"
 #include "meka_simd.h"
+#include "meka_intrinsic.h"
 #include "meka_platform.h"
 #include "meka_math.h"
 #include "meka_random.h"
-#include "meka_intrinsic.h"
 #include "meka_font.h"
 #include "meka_simulation.h"
 #include "meka_entity.h"
@@ -53,8 +53,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
         add_floor_entity(game_state, V3(0, 0, -0.5f), V3(100.0f, 100.0f, 1.0f), V3(0.8f, 0.1f, 0.1f));
 
-        add_cube_rigid_body_entity(game_state, V3(0, 0, 2.0f), V3(1.0f, 1.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), 5.0f);
-
+        add_cube_rigid_body_entity(game_state, V3(0, 0, 30.0f), V3(1.0f, 1.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), 3.0f);
 #if 0
         add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 7.0f);
         PlatformReadFileResult cow_obj_file = platform_api->read_file("/Volumes/meka/meka_engine/data/low_poly_cow.obj");
@@ -71,8 +70,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
                                                     game_state->transient_arena.total_size + 
-                                                    game_state->mass_agg_arena.total_size, 
-                                                    megabytes(256));
+                                                    game_state->mass_agg_arena.total_size,
+                                                    megabytes(128));
+
+        game_state->random_series = start_random_series(123123);
 
         game_state->camera = init_camera(V3(-10, 0, 5), V3(0, 0, 0), 1.0f);
         
@@ -135,8 +136,34 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case Entity_Type_Cube:
             {
-                quat rot = Quat(V3(0, 0, 1), 0.01f);
-                entity->rigid_body.orientation = rot * entity->rigid_body.orientation * inverse(rot);
+                // NOTE(joon) Always should happen for all rigid bodies at the start of their update
+                calculate_derived_rigid_body_parameters(&entity->rigid_body);
+
+                if(!compare_with_epsilon(entity->rigid_body.inv_mass, 0.0f))
+                {
+                    // TODO(joon) This is a waste of time, as we are going to negate the mass portion anyway
+                    // TODO(joon) seems a bit fast...?
+                    entity->rigid_body.force += V3(0, 0, -9.8f) / entity->rigid_body.inv_mass;
+                }
+
+                v3 ddp = (entity->rigid_body.inv_mass * entity->rigid_body.force);
+            
+                entity->rigid_body.dp += platform_input->dt_per_frame * ddp;
+
+                f32 drag = 0.99f;
+                entity->rigid_body.dp *= drag;
+                entity->rigid_body.p += platform_input->dt_per_frame*entity->rigid_body.dp;
+
+                v3 angular_ddp = entity->rigid_body.transform_inv_inertia_tensor*entity->rigid_body.torque;
+                // NOTE(joon) equation here is orientation += 0.5f*dt*angular_ddp*orientation
+                entity->rigid_body.orientation += 0.5f*
+                                                  platform_input->dt_per_frame*
+                                                  Quat(0, angular_ddp) *
+                                                  entity->rigid_body.orientation;
+
+                // NOTE(joon) clear computed parameters
+                entity->rigid_body.force = V3();
+                entity->rigid_body.torque = V3();
             }break;
         }
     }

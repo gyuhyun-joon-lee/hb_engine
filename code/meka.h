@@ -21,6 +21,9 @@ struct GameState
     MemoryArena transient_arena; 
 
     MemoryArena mass_agg_arena;
+
+    // TODO(joon) seed this properly
+    RandomSeries random_series;
 };
 
 #endif

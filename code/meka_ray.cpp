@@ -73,8 +73,85 @@ struct RayIntersectResult
     // and when we want to check if there was a hit, we just check if hit_t >= 0.0f 
     r32 hit_t;
 
-    v3 next_normal;
+    v3 hit_normal;
 };
+
+internal RayIntersectResult
+ray_intersect_with_aab(v3 min, v3 max, v3 ray_origin, v3 ray_dir)
+{
+    v3 inv_ray_dir = V3(1.0f/ray_dir.x, 1.0f/ray_dir.y, 1.0f/ray_dir.z);
+
+    RayIntersectResult result = {};
+    result.hit_t = -1.0f;
+
+    v3 t0 = hadamard((min - ray_origin), inv_ray_dir); // normals are (-1, 0, 0), (0, -1, 0), (0, 0, -1)
+    v3 t1 = hadamard((max - ray_origin), inv_ray_dir);// normals are (1, 0, 0), (0, 1, 0), (0, 0, 1)
+
+    v3 t_min = gather_min_elements(t0, t1);
+    v3 t_max = gather_max_elements(t0, t1);
+
+    f32 max_component_of_t_min = max_element(t_min);
+    f32 min_component_of_t_max = max_element(t_max);
+
+    /*
+       Three lines : goes from tmin to tmax for the slabs(two parallel slabs give us min & max t)
+       To intersect, those three lines should be intersecting to each other, which means
+       the max of the min should be smaller than the min of the max
+
+        Intersect:
+        min------max
+            min------max
+        Don't intersect:
+        min------max
+                    min------max
+    */
+    if(min_component_of_t_max >= max_component_of_t_min)
+    {
+        f32 t_min_x_t = t0.x;
+        v3 t_min_x_normal = V3(-1, 0, 0);
+        if(t_min_x_t > t1.x)
+        {
+            t_min_x_t = t1.x;
+            t_min_x_normal = V3(1, 0, 0);
+        }
+
+        f32 t_min_y_t = t0.y;
+        v3 t_min_y_normal = V3(0, -1, 0);
+        if(t_min_y_t > t1.y)
+        {
+            t_min_y_t = t1.y;
+            t_min_y_normal = V3(0, 1, 0);
+        }
+
+        f32 t_min_z_t = t0.z;
+        v3 t_min_z_normal = V3(0, 0, -1);
+        if(t_min_z_t > t1.z)
+        {
+            t_min_z_t = t1.z;
+            t_min_z_normal = V3(0, 0, 1);
+        }
+
+        f32 max_of_min_t = t_min_x_t;
+        v3 max_of_min_t_normal = t_min_x_normal;
+
+        if(max_of_min_t < t_min_y_t)
+        {
+            max_of_min_t = t_min_y_t;
+            max_of_min_t_normal = t_min_y_normal;
+        }
+
+        if(max_of_min_t < t_min_z_t)
+        {
+            max_of_min_t = t_min_z_t;
+            max_of_min_t_normal = t_min_z_normal;
+        }
+
+        result.hit_t = max_component_of_t_min;
+        result.hit_normal = max_of_min_t_normal;
+    }
+
+    return result;
+}
 
 // TODO(joon) : This works for both inward & outward normals, 
 // but we might only want to test it against the outward normal
@@ -126,7 +203,7 @@ ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_origin, v3 ray_dir)
             
             // TODO(joon): calculate normal based on the ray dir, so that the next normal is facing the incoming ray dir
             // otherwise, the reflection vector will be totally busted?
-            result.next_normal = normalize(cross(e1, e2));
+            result.hit_normal = normalize(cross(e1, e2));
         }
     }
 
@@ -269,7 +346,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
     simd_u32 simd_u32_0 = simd_u32_(0);
     simd_u32 simd_u32_max = simd_u32_(U32_Max);
 
-    simd_v3 simd_v3_0 = simd_v3_(v3_(0.0f, 0.0f, 0.0f));
+    simd_v3 simd_V30 = simd_V3(V3(0.0f, 0.0f, 0.0f));
 
     // TODO(joon) : completely made up number
     simd_f32 square_root_tolerance = simd_f32_(0.00001f);
@@ -286,14 +363,14 @@ render_raytraced_image_tile_simd(raytracer_data *data)
     simd_u32 simd_u32_ray_per_pixel_count = simd_u32_(ray_per_pixel_count);
     simd_f32 simd_f32_ray_per_pixel_count = simd_f32_((f32)ray_per_pixel_count);
 
-    simd_v3 film_center = simd_v3_(data->film_center); 
+    simd_v3 film_center = simd_V3(data->film_center); 
     simd_f32 film_width = simd_f32_(data->film_width); 
     simd_f32 film_height = simd_f32_(data->film_height);
 
-    simd_v3 camera_p = simd_v3_(data->camera_p);
-    simd_v3 camera_x_axis = simd_v3_(data->camera_x_axis); 
-    simd_v3 camera_y_axis = simd_v3_(data->camera_y_axis); 
-    simd_v3 camera_z_axis = simd_v3_(data->camera_z_axis);
+    simd_v3 camera_p = simd_V3(data->camera_p);
+    simd_v3 camera_x_axis = simd_V3(data->camera_x_axis); 
+    simd_v3 camera_y_axis = simd_V3(data->camera_y_axis); 
+    simd_v3 camera_z_axis = simd_V3(data->camera_z_axis);
 
     u32 min_x = data->min_x; 
     u32 one_past_max_x = data->one_past_max_x;
@@ -330,7 +407,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                 ++x)
         {
             simd_f32 film_x = simd_f32_(2.0f*((r32)x/(r32)output_width) - 1.0f);
-            simd_v3 result_color = simd_v3_0;
+            simd_v3 result_color = simd_V30;
 
             for(u32 ray_per_pixel_index = 0;
                     ray_per_pixel_index < ray_per_pixel_count;
@@ -348,7 +425,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                 // TODO(joon) : later on, we need to make this to be random per ray per pixel!
                 simd_v3 ray_origin = camera_p;
                 simd_v3 ray_dir = film_p - camera_p;
-                simd_v3 attenuation = simd_v3_(v3_(1.0f, 1.0f, 1.0f));
+                simd_v3 attenuation = simd_V3(V3(1.0f, 1.0f, 1.0f));
 
                 simd_u32 is_ray_alive_mask = simd_u32_max;
 
@@ -361,8 +438,8 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                     simd_u32 hit_mat_index = simd_u32_0;
 
                     // NOTE(joon): Want to get rid of this value.. but sphere needs this to calculate the normal :(
-                    simd_v3 next_ray_origin = simd_v3_0;
-                    simd_v3 next_normal = simd_v3_0;
+                    simd_v3 next_ray_origin = simd_V30;
+                    simd_v3 next_normal = simd_V30;
 
                     for(u32 plane_index = 0;
                             plane_index < world->plane_count;
@@ -371,7 +448,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                         plane *plane = world->planes + plane_index;
                         
                         //simd_v3 plane_normal = normal;
-                        simd_v3 plane_normal = simd_v3_(plane->normal);
+                        simd_v3 plane_normal = simd_V3(plane->normal);
                         simd_f32 plane_d = simd_f32_(plane->d);
 
                         // NOTE(joon) : if the denominator is 0, it means that the ray is parallel to the plane
@@ -406,7 +483,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                     {
                         sphere *sphere = world->spheres + sphere_index;
 
-                        simd_v3 sphere_center = simd_v3_(sphere->center);
+                        simd_v3 sphere_center = simd_V3(sphere->center);
 
                         simd_f32 sphere_radius_square = simd_f32_(sphere->radius * sphere->radius);
 
@@ -475,9 +552,9 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                         // TODO(joon): These ones don't need to be calculated as vector, we can just duplicate the result value 
                         // This might help to not over-populate the port that has vector arithmetic function
 
-                        simd_v3 v0 = simd_v3_(triangle->v0);
-                        simd_v3 v1 = simd_v3_(triangle->v1);
-                        simd_v3 v2 = simd_v3_(triangle->v2);
+                        simd_v3 v0 = simd_V3(triangle->v0);
+                        simd_v3 v1 = simd_V3(triangle->v1);
+                        simd_v3 v2 = simd_V3(triangle->v2);
                         
                         simd_v3 e1 = v1 - v0;
                         simd_v3 e2 = v2 - v0;
@@ -526,12 +603,12 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                     material *lane_2_hit_material = world->materials + get_lane(hit_mat_index, 2);
                     material *lane_3_hit_material = world->materials + get_lane(hit_mat_index, 3);
 
-                    simd_v3 hit_mat_emit_color = simd_v3_(lane_0_hit_material->emit_color,
+                    simd_v3 hit_mat_emit_color = simd_V3(lane_0_hit_material->emit_color,
                                                           lane_1_hit_material->emit_color, 
                                                           lane_2_hit_material->emit_color, 
                                                           lane_3_hit_material->emit_color);
 
-                    simd_v3 hit_mat_reflection_color = simd_v3_(lane_0_hit_material->reflection_color, 
+                    simd_v3 hit_mat_reflection_color = simd_V3(lane_0_hit_material->reflection_color, 
                                                                 lane_1_hit_material->reflection_color, 
                                                                 lane_2_hit_material->reflection_color, 
                                                                 lane_3_hit_material->reflection_color);
@@ -564,7 +641,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
                         next_normal = normalize(next_normal);
                         simd_v3 perfect_reflection = normalize(ray_dir - simd_f32_2*dot(ray_dir, next_normal)*next_normal);
 
-                        simd_v3 random = simd_v3_(random_between_minus_1_1(series), random_between_minus_1_1(series), random_between_minus_1_1(series));
+                        simd_v3 random = simd_V3(random_between_minus_1_1(series), random_between_minus_1_1(series), random_between_minus_1_1(series));
 
                         simd_v3 random_reflection = normalize(next_normal + random);
 
@@ -652,6 +729,13 @@ ray_intersect_with_slab(v3 p0, v3 p1, v3 ray_origin, v3 inv_ray_dir)
 
     return result;
 }
+
+struct IntersectionTestResult
+{
+    f32 hit_t;
+    b32 inner_hit;
+};
+
  
 internal raytracer_output
 render_raytraced_image_tile(raytracer_data *data)
@@ -707,7 +791,7 @@ render_raytraced_image_tile(raytracer_data *data)
                 x < one_past_max_x;
                 ++x)
         {
-            v3 result_color = v3_(0, 0, 0);
+            v3 result_color = V3(0, 0, 0);
 
             for(u32 ray_per_pixel_index = 0;
                     ray_per_pixel_index < ray_per_pixel_count;
@@ -729,7 +813,7 @@ render_raytraced_image_tile(raytracer_data *data)
                 // TODO(joon) : later on, we need to make this to be random per ray per pixel!
                 v3 ray_origin = camera_p;
                 v3 ray_dir = film_p - camera_p;
-                v3 attenuation = v3_(1, 1, 1);
+                v3 attenuation = V3(1, 1, 1);
 
                 for(u32 bounce_index = 0;
                         bounce_index < 8;
@@ -809,7 +893,7 @@ render_raytraced_image_tile(raytracer_data *data)
 
                         next_normal = normalize(next_normal);
                         v3 perfect_reflection = normalize(ray_dir -  2.0f*dot(ray_dir, next_normal)*next_normal);
-                        v3 random_reflection = normalize(next_normal + v3_(random_between_minus_1_1(&series), random_between_minus_1_1(&series), random_between_minus_1_1(&series)));
+                        v3 random_reflection = normalize(next_normal + V3(random_between_minus_1_1(&series), random_between_minus_1_1(&series), random_between_minus_1_1(&series)));
 
                         ray_dir = lerp(random_reflection, hit_material->reflectivity, perfect_reflection);
                     }

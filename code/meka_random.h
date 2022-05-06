@@ -14,31 +14,31 @@ xor_shift_32(u32 *state)
     *state = x;
 }
 
-struct random_series
+struct RandomSeries
 {
     u32 next_random;
 };
 
-internal random_series
+internal RandomSeries
 start_random_series(u32 seed)
 {
-    random_series result = {};
+    RandomSeries result = {};
     result.next_random = seed;
 
     return result;
 }
 
-internal r32
-random_between_0_1(random_series *series)
+internal f32
+random_between_0_1(RandomSeries *series)
 {
     xor_shift_32(&series->next_random);
 
-    r32 result = (r32)series->next_random/(r32)U32_Max;
+    f32 result = (f32)series->next_random/(f32)U32_Max;
     return result;
 }
 
 internal r32
-random_between(random_series *series, r32 min, r32 max)
+random_between(RandomSeries *series, r32 min, r32 max)
 {
     xor_shift_32(&series->next_random);
 
@@ -46,7 +46,7 @@ random_between(random_series *series, r32 min, r32 max)
 }
 
 internal r32
-random_between_minus_1_1(random_series *series)
+random_between_minus_1_1(RandomSeries *series)
 {
     xor_shift_32(&series->next_random);
 
@@ -55,7 +55,7 @@ random_between_minus_1_1(random_series *series)
 }
 
 inline r32
-random_range(random_series *series, r32 value, r32 range)
+random_range(RandomSeries *series, r32 value, r32 range)
 {
     r32 half_range = range/2.0f;
 
@@ -64,8 +64,19 @@ random_range(random_series *series, r32 value, r32 range)
     return result;
 }
 
+// TODO(joon) NOT truely random !!!
+inline f32
+random_f32(RandomSeries *series)
+{
+    xor_shift_32(&series->next_random);
+
+    f32 result = (f32)series->next_random;
+
+    return result;
+}
+
 inline u32
-random_between_u32(random_series *series, u32 min, u32 max)
+random_between_u32(RandomSeries *series, u32 min, u32 max)
 {
     xor_shift_32(&series->next_random);
     
@@ -73,7 +84,7 @@ random_between_u32(random_series *series, u32 min, u32 max)
 }
 
 inline u32
-random_u32(random_series *series)
+random_u32(RandomSeries *series)
 {
     xor_shift_32(&series->next_random);
 
@@ -81,11 +92,18 @@ random_u32(random_series *series)
 }
 
 inline i32
-random_between_i32(random_series *series, i32 min, i32 max)
+random_between_i32(RandomSeries *series, i32 min, i32 max)
 {
     xor_shift_32(&series->next_random);
     
     return (i32)series->next_random%(max-min) + min;
+}
+
+inline v3
+random_normalized_v3(RandomSeries *series)
+{
+    v3 result = normalize(V3(random_f32(series), random_f32(series), random_f32(series)));
+    return result;
 }
 
 
