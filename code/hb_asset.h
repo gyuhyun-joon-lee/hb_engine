@@ -1,5 +1,5 @@
-#ifndef MEKA_ASSET_H
-#define MEKA_ASSET_H
+#ifndef HB_ASSET_H
+#define HB_ASSET_H
 
 enum AssetType
 {

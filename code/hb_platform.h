@@ -1,16 +1,15 @@
 /*
  * Written by Gyuhyun 'Joon' Lee
- * https://github.com/meka-lopo/
  */
 
-#ifndef MEKA_PLATFORM_H
-#define MEKA_PLATFORM_H
+#ifndef HB_PLATFORM_H
+#define HB_PLATFORM_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "meka_types.h" 
+#include "hb_types.h" 
 
 #define assert(expression) if(!(expression)) {int *a = 0; *a = 0;}
 #define array_count(array) (sizeof(array) / sizeof(array[0]))
@@ -238,9 +237,9 @@ struct debug_cycle_counter
 u64 rdtsc(void)
 {
 	u64 val;
-#if MEKA_ARM 
+#if HB_ARM 
 	asm volatile("mrs %0, cntvct_el0" : "=r" (val));
-#elif MEKA_X64
+#elif HB_X64
     val = __rdtsc();
 #endif
 	return val;
@@ -258,6 +257,7 @@ struct thread_work_queue;
 #define THREAD_WORK_CALLBACK(name) void name(void *data)
 typedef THREAD_WORK_CALLBACK(thread_work_callback);
 
+// TODO(joon) task_with_memory
 struct thread_work_item
 {
     thread_work_callback *callback;

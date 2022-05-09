@@ -1,5 +1,5 @@
-#ifndef MEKA_MATH_H
-#define MEKA_MATH_H
+#ifndef HB_MATH_H
+#define HB_MATH_H
 
 // NOTE(joon) : This file contains functions that requires math.h
 // TODO(joon) : Someday we will get remove of math.h, too :)
@@ -313,6 +313,12 @@ normalize(v3 a)
     return a/length(a);
 }
 
+inline v3
+norm(v3 a)
+{
+    return normalize(a);
+}
+
 inline b32
 is_normalized(v3 a)
 {
@@ -451,6 +457,12 @@ normalize(v4 a)
 }
 
 inline v4
+norm(v4 a)
+{
+    return normalize(a);
+}
+
+inline v4
 operator+(v4 &a, v4 &b)
 {
     v4 result = {};
@@ -504,9 +516,9 @@ inline b32
 clip_space_top_is_one(void)
 {
     b32 result = false;
-#if MEKA_METAL || MEKA_OPENGL
+#if HB_METAL || HB_OPENGL
     result = true;
-#elif MEKA_VULKAN
+#elif HB_VULKAN
     result = false;
 #endif
 
@@ -565,6 +577,20 @@ operator *(m3x3 a, m3x3 b)
     result.e[2][0] = a.e[2][0]*b.e[0][0] + a.e[2][1]*b.e[1][0] + a.e[2][2]*b.e[2][0];
     result.e[2][1] = a.e[2][0]*b.e[0][1] + a.e[2][1]*b.e[1][1] + a.e[2][2]*b.e[2][1];
     result.e[2][2] = a.e[2][0]*b.e[0][2] + a.e[2][1]*b.e[1][2] + a.e[2][2]*b.e[2][2];
+
+    return result;
+}
+
+inline m3x3
+operator *(f32 value, m3x3 m)
+{
+    m3x3 result = m;
+    for(u32 i = 0;
+            i < 3;
+            ++i)
+    {
+        result.rows[i] *= value;
+    }
 
     return result;
 }
@@ -793,6 +819,20 @@ operator *(m4x4 a, m4x4 b)
     result.e[3][1] = a.e[3][0]*b.e[0][1] + a.e[3][1]*b.e[1][1] + a.e[3][2]*b.e[2][1] + a.e[3][3]*b.e[3][1];
     result.e[3][2] = a.e[3][0]*b.e[0][2] + a.e[3][1]*b.e[1][2] + a.e[3][2]*b.e[2][2] + a.e[3][3]*b.e[3][2];
     result.e[3][3] = a.e[3][0]*b.e[0][3] + a.e[3][1]*b.e[1][3] + a.e[3][2]*b.e[2][3] + a.e[3][3]*b.e[3][3];
+
+    return result;
+}
+
+inline m4x4
+operator *(f32 value, m4x4 m)
+{
+    m4x4 result = m;
+    for(u32 i = 0;
+            i < 4;
+            ++i)
+    {
+        result.rows[i] *= value;
+    }
 
     return result;
 }
@@ -1077,6 +1117,12 @@ normalize(quat q)
 }
 
 inline quat
+norm(quat q)
+{
+    return normalize(q);
+}
+
+inline quat
 conjugate(quat q)
 {
     quat result = q;
@@ -1089,6 +1135,19 @@ inline quat
 inverse(quat q)
 {
     quat result = conjugate(q) / length_square(q);
+
+    return result;
+}
+
+inline b32
+is_pure_quat(quat q)
+{
+    b32 result = false;
+
+    if(compare_with_epsilon(q.s, 0.0f))
+    {
+        result = true;
+    }
 
     return result;
 }

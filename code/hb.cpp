@@ -1,24 +1,24 @@
-#include "meka_types.h"
-#include "meka_simd.h"
-#include "meka_intrinsic.h"
-#include "meka_platform.h"
-#include "meka_math.h"
-#include "meka_random.h"
-#include "meka_font.h"
-#include "meka_simulation.h"
-#include "meka_entity.h"
-#include "meka_voxel.h"
-#include "meka_render_group.h"
-#include "meka.h"
+#include "hb_types.h"
+#include "hb_simd.h"
+#include "hb_intrinsic.h"
+#include "hb_platform.h"
+#include "hb_math.h"
+#include "hb_random.h"
+#include "hb_font.h"
+#include "hb_simulation.h"
+#include "hb_entity.h"
+#include "hb_voxel.h"
+#include "hb_render_group.h"
+#include "hb.h"
 
-#include "meka_mesh_loader.cpp"
-#include "meka_voxel.cpp"
-#include "meka_ray.cpp"
-#include "meka_simulation.cpp"
-#include "meka_entity.cpp"
-#include "meka_terrain.cpp"
-#include "meka_render_group.cpp"
-#include "meka_image_loader.cpp"
+#include "hb_mesh_loader.cpp"
+#include "hb_voxel.cpp"
+#include "hb_ray.cpp"
+#include "hb_simulation.cpp"
+#include "hb_entity.cpp"
+#include "hb_terrain.cpp"
+#include "hb_render_group.cpp"
+#include "hb_image_loader.cpp"
 
 /*
     TODO(joon)
@@ -37,8 +37,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->max_entity_count = 1024;
         game_state->entities = (Entity *)malloc(sizeof(Entity) * game_state->max_entity_count);
 
-        //PlatformReadFileResult vox_file = platform_api->read_file("/Volumes/meka/meka_renderer/data/vox/chr_knight.vox");
-        PlatformReadFileResult vox_file = platform_api->read_file("/Volumes/meka/meka_renderer/data/vox/monu10.vox");
+        //PlatformReadFileResult vox_file = platform_api->read_file("/Volumes/hb/hb_renderer/data/vox/chr_knight.vox");
+        PlatformReadFileResult vox_file = platform_api->read_file("/Volumes/hb/hb_renderer/data/vox/monu10.vox");
         load_vox_result loaded_vox = load_vox(vox_file.memory, vox_file.size);
         platform_api->free_file_memory(vox_file.memory);
 
@@ -53,15 +53,15 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
         add_floor_entity(game_state, V3(0, 0, -0.5f), V3(100.0f, 100.0f, 1.0f), V3(0.8f, 0.1f, 0.1f));
 
-        add_cube_rigid_body_entity(game_state, V3(0, 0, 30.0f), V3(1.0f, 1.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), 3.0f);
+        add_cube_rigid_body_entity(game_state, V3(0, 0, 30.0f), V3(1.0f, 1.0f, 1.0f), 3.0f, V3(1.0f, 1.0f, 1.0f));
 #if 0
         add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 7.0f);
-        PlatformReadFileResult cow_obj_file = platform_api->read_file("/Volumes/meka/meka_engine/data/low_poly_cow.obj");
+        PlatformReadFileResult cow_obj_file = platform_api->read_file("/Volumes/hb/hb_engine/data/low_poly_cow.obj");
         raw_mesh cow_mesh = parse_obj_tokens(&game_state->transient_arena, cow_obj_file.memory, cow_obj_file.size);
         // TODO(joon) : Find out why increasing the elastic value make the entity fly away!!!
         add_mass_agg_entity_from_mesh(game_state, &game_state->mass_agg_arena, V3(0, 5, 30), V3(1, 1, 1), 
                                     cow_mesh.positions, cow_mesh.position_count, cow_mesh.indices, cow_mesh.index_count, V3(0.001f, 0.001f, 0.001f), 5.0f, 0.1f);
-        PlatformReadFileResult oh_obj_file = platform_api->read_file("/Volumes/meka/meka_engine/data/dodecahedron.obj");
+        PlatformReadFileResult oh_obj_file = platform_api->read_file("/Volumes/hb/hb_engine/data/dodecahedron.obj");
         raw_mesh oh_mesh = parse_obj_tokens(&game_state->transient_arena, oh_obj_file.memory, oh_obj_file.size);
         // TODO(joon) : Find out why increasing the elastic value make the entity fly away!!!
         add_mass_agg_entity_from_mesh(game_state, &game_state->mass_agg_arena, V3(0, 5, 30), V3(1, 1, 1), 
@@ -111,6 +111,17 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         camera->p -= camera_speed*camera_dir;
     }
+
+    /*
+        NOTE(joon) How we are going to update the entities (without the friction)
+        - move the entities, without thinking about the interpenetration
+            - knowing where the first collision p can be done, but very expensive
+        - generate collision data
+            - to avoid oop, we use the good-old push buffer, with header(entities, friction, restitution, data count),
+              followed by the data(contact point, normal, and penetration depth)
+        - resolve interpenetration
+        - resolve collision
+    */
     
     // NOTE(joon) update entity start
     for(u32 entity_index = 0;
@@ -136,34 +147,35 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case Entity_Type_Cube:
             {
+                RigidBody *rb = &entity->rb;
                 // NOTE(joon) Always should happen for all rigid bodies at the start of their update
-                calculate_derived_rigid_body_parameters(&entity->rigid_body);
+                init_rigid_body_and_calculate_derived_parameters_for_frame(rb);
 
-                if(!compare_with_epsilon(entity->rigid_body.inv_mass, 0.0f))
+                if(!compare_with_epsilon(rb->inv_mass, 0.0f))
                 {
                     // TODO(joon) This is a waste of time, as we are going to negate the mass portion anyway
-                    // TODO(joon) seems a bit fast...?
-                    entity->rigid_body.force += V3(0, 0, -9.8f) / entity->rigid_body.inv_mass;
+                    rb->force += V3(0, 0, -9.8f) / rb->inv_mass;
                 }
 
-                v3 ddp = (entity->rigid_body.inv_mass * entity->rigid_body.force);
+                v3 ddp = (rb->inv_mass * rb->force);
             
-                entity->rigid_body.dp += platform_input->dt_per_frame * ddp;
+                rb->dp += platform_input->dt_per_frame * ddp;
 
-                f32 drag = 0.99f;
-                entity->rigid_body.dp *= drag;
-                entity->rigid_body.p += platform_input->dt_per_frame*entity->rigid_body.dp;
+                rb->p += platform_input->dt_per_frame*rb->dp;
 
-                v3 angular_ddp = entity->rigid_body.transform_inv_inertia_tensor*entity->rigid_body.torque;
+                v3 angular_ddp = rb->transform_inv_inertia_tensor * rb->torque;
+                rb->angular_dp += platform_input->dt_per_frame * angular_ddp;
                 // NOTE(joon) equation here is orientation += 0.5f*dt*angular_ddp*orientation
-                entity->rigid_body.orientation += 0.5f*
-                                                  platform_input->dt_per_frame*
-                                                  Quat(0, angular_ddp) *
-                                                  entity->rigid_body.orientation;
+                rb->orientation += 0.5f*
+                                   platform_input->dt_per_frame*
+                                   Quat(0, rb->angular_dp) *
+                                   rb->orientation;
+                assert(is_pure_quat(rb->orientation));
 
                 // NOTE(joon) clear computed parameters
-                entity->rigid_body.force = V3();
-                entity->rigid_body.torque = V3();
+                // TODO(joon) would be nice if we can put this in intialize rb function,
+                entity->rb.force = V3();
+                entity->rb.torque = V3();
             }break;
         }
     }
@@ -202,7 +214,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case Entity_Type_Cube:
             {
-                push_cube(&render_group, entity->rigid_body.p, entity->rigid_body.dim, entity->color, entity->rigid_body.orientation);
+                push_cube(&render_group, entity->rb.p, entity->rb.dim, entity->color, entity->rb.orientation);
             }break;
         }
     }

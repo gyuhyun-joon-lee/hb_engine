@@ -1,4 +1,4 @@
-#include "meka_render_group.h"
+#include "hb_render_group.h"
 inline m3x3
 scale_m3x3(f32 x, f32 y, f32 z)
 {
@@ -73,17 +73,17 @@ struct vertex_normal_hit
 
 // TODO(joon): exclude duplicate vertex normals
 internal void
-generate_vertex_normals(MemoryArena *permanent_arena , MemoryArena *trasient_arena, raw_mesh *raw_mesh)
+generate_vertex_normals(MemoryArena *permanent_arena , MemoryArena *transient_arena, RawMesh *raw_mesh)
 {
     assert(!raw_mesh->normals);
 
     raw_mesh->normal_count = raw_mesh->position_count;
     raw_mesh->normals = push_array(permanent_arena, v3, sizeof(v3)*raw_mesh->normal_count);
 
-    TempMemory mesh_construction_temp_memory = start_temp_memory(trasient_arena, megabytes(16));
+    TempMemory mesh_construction_temp_memory = start_temp_memory(transient_arena, megabytes(16));
     vertex_normal_hit *normal_hits = push_array(&mesh_construction_temp_memory, vertex_normal_hit, raw_mesh->position_count);
 
-#if MEKA_DEBUG
+#if HB_DEBUG
     begin_cycle_counter(generate_vertex_normals);
 #endif
 
@@ -127,7 +127,7 @@ generate_vertex_normals(MemoryArena *permanent_arena , MemoryArena *trasient_are
         raw_mesh->normals[normal_index] = result_normal;
     }
 
-#if MEKA_DEBUG
+#if HB_DEBUG
     end_cycle_counter(generate_vertex_normals);
 #endif
 
@@ -143,7 +143,7 @@ generate_vertex_normals(MemoryArena *permanent_arena , MemoryArena *trasient_are
     Also, this _only_ works for 4 wide lane simd, and does not work for 1(due to how the memory laid out)
 */
 internal void
- generate_vertex_normals_simd(MemoryArena *permanent_arena, MemoryArena *trasient_arena, raw_mesh *raw_mesh)
+ generate_vertex_normals_simd(MemoryArena *permanent_arena, MemoryArena *trasient_arena, RawMesh *raw_mesh)
  {
      assert(!raw_mesh->normals);
 
@@ -166,7 +166,7 @@ internal void
  #define u32_from_slot(vector, slot) (((u32 *)&vector)[slot])
  #define r32_from_slot(vector, slot) (((r32 *)&vector)[slot])
 
- #if MEKA_DEBUG
+ #if HB_DEBUG
      begin_cycle_counter(generate_vertex_normals);
  #endif
      // TODO(joon) : If we decide to lose the precision while calculating the normals,
@@ -392,7 +392,7 @@ internal void
          raw_mesh->normals[normal_index] = result_normal;
      }
 
-#if MEKA_DEBUG
+#if HB_DEBUG
      end_cycle_counter(generate_vertex_normals);
 #endif
 

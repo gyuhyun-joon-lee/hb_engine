@@ -1,4 +1,4 @@
-#include "meka_simulation.h"
+#include "hb_simulation.h"
 
 // TODO(joon) local space aabb testing?
 internal b32
@@ -485,7 +485,6 @@ move_mass_agg_entity(GameState *game_state, Entity *entity, f32 dt_per_frame, b3
                             // that are colliding
                             f32 restitution_c = 0.9999f; 
                             f32 new_seperating_v = -restitution_c * seperating_v;
-
 #if 1
                             v3 acc_caused_v = ddp;
                             f32 acc_caused_seperating_v = dt_per_frame * dot(hit_normal, acc_caused_v);
@@ -577,6 +576,7 @@ move_mass_agg_entity(GameState *game_state, Entity *entity, f32 dt_per_frame, b3
     where Iab = sum(mi * pi.a * pi.b) (for principle axes x, y, and z, we just put the same axis in both a and b)
 */
 // TODO(joon) also add initial orietation
+// TODO(joon) instead of returning a rigid body, allocate the space and return the pointer
 internal RigidBody
 init_rigid_body(v3 p, v3 dim, f32 inv_mass, m3x3 inertia_tensor)
 {
@@ -592,39 +592,45 @@ init_rigid_body(v3 p, v3 dim, f32 inv_mass, m3x3 inertia_tensor)
 }
 
 internal void
-calculate_derived_rigid_body_parameters(RigidBody *rigid_body)
+init_rigid_body_and_calculate_derived_parameters_for_frame(RigidBody *rb)
 {
+    // TODO(joon) is applying the drag to dp 'here' correct?
+    f32 linear_damp = 0.99f;
+    rb->dp *= linear_damp;
+
+    f32 angular_damp = 0.99f;
+    rb->angular_dp *= angular_damp;
+
+    rb->orientation = normalize(rb->orientation);
+
     // NOTE(joon) transform matrix
-    m3x3 rot = rotation_quat_to_m3x3(rigid_body->orientation);
-    rigid_body->transform = M4x4(rot);
-    rigid_body->transform.e[0][3] = rigid_body->p.x;
-    rigid_body->transform.e[1][3] = rigid_body->p.y;
-    rigid_body->transform.e[2][3] = rigid_body->p.z;
-    rigid_body->transform.e[3][3] = 1.0f;
+    m3x3 rot = rotation_quat_to_m3x3(rb->orientation);
+    rb->transform = M4x4(rot);
+    rb->transform.e[0][3] = rb->p.x;
+    rb->transform.e[1][3] = rb->p.y;
+    rb->transform.e[2][3] = rb->p.z;
+    rb->transform.e[3][3] = 1.0f;
 
-    // transform inv intertia tensor
-    m3x3 transform = M3x3(rigid_body->transform);
-    rigid_body->transform_inv_inertia_tensor = transform* // transform back to world space
-                                                rigid_body->inv_inertia_tensor* // both inertia & vector that we are multiplying are in local space
-                                                inverse(transform); // transform to local space
+    // transform inv inertia tensor
+    m3x3 transform = M3x3(rb->transform); // NOTE(joon) we dont care about the translation here
+    rb->transform_inv_inertia_tensor = transform* // transform back to world space
+                                        rb->inv_inertia_tensor* // both inertia & vector that we are multiplying are in local space
+                                        inverse(transform); // transform to local space
 }
 
 internal void
-add_force_at_local_p(RigidBody *rigid_body, v3 force, v3 local_p)
+add_force_at_local_p(RigidBody *rb, v3 force, v3 local_p)
 {
-    rigid_body->force += force;
+    rb->force += force;
 
-    v3 world_p = (rigid_body->transform * V4(local_p, 1.0f)).xyz;
-    v3 rel_world_p = world_p - rigid_body->p;
+    v3 world_p = (rb->transform * V4(local_p, 1.0f)).xyz;
+    v3 rel_world_p = world_p - rb->p;
 
-    rigid_body->torque += cross(rel_world_p, force);
+    rb->torque += cross(rel_world_p, force);
 }
 
-internal void
-add_linear_force(RigidBody *rigid_body, v3 force)
-{
-    rigid_body->force += force;
-}
+
+
 
 
 

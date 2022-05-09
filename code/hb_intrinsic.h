@@ -1,5 +1,5 @@
-#ifndef MEKA_INTRINSIC_H
-#define MEKA_INTRINSIC_H
+#ifndef HB_INTRINSIC_H
+#define HB_INTRINSIC_H
 
 // NOTE(joon) intrinsic functions are those that the provided by the compiler based on the language(some are non_portable).
 // Most of the bit operations are included in this case, including sin, cos functions, too.
@@ -10,9 +10,9 @@
 
 // TODO(joon) add functionality for other compilers(gcc, msvc)
 // NOTE(joon) kinda interesting that they do not have compare exchange for floating point numbers
-#if MEKA_LLVM
+#if HB_LLVM
 
-#if MEKA_MACOS
+#if HB_MACOS
 #include <libkern/OSAtomic.h>
 // NOTE(joon) : Check https://opensource.apple.com/source/Libc/Libc-594.1.4/i386/sys/OSAtomic.s
 
@@ -27,9 +27,9 @@
 #define atomic_add(ptr, value_to_add) OSAtomicAdd32Barrier(ptr, value_to_add)
 #define atomic_add_64(ptr, value_to_add) OSAtomicAdd64Barrier(ptr, value_to_add)
 
-#elif MEKA_LLVM
+#elif HB_LLVM
 // TODO(joon) Can also be used for GCC, because this is a GCC extension of Clang?
-//#elif MEKA_GCC
+//#elif HB_GCC
 
 // NOTE(joon) These functions do not care whether it's 32bit or 64bit
 #define atomic_compare_exchange(ptr, expected, desired) __sync_bool_compare_and_swap(ptr, expected, desired)
@@ -43,7 +43,7 @@
 #define atomic_add_64(ptr, value_to_add) __sync_add_and_fetch(ptr, value_to_add)
 #endif
 
-#elif MEKA_MSVC
+#elif HB_MSVC
 
 #endif
 
@@ -172,7 +172,7 @@ inline void
 zero_memory(void *memory, u64 size)
 {
     // TODO/joon: What if there's no neon support
-#if MEKA_ARM
+#if HB_ARM
     u8 *byte = (u8 *)memory;
     uint8x16_t zero_128 = vdupq_n_u8(0);
 

@@ -1,4 +1,3 @@
-
 // TODO(joon): Move this into seperate header?
 #pragma pack(push, 1)
 struct bmp_file_header

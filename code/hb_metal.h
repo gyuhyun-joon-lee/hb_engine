@@ -1,5 +1,5 @@
-#ifndef MEKA_METAL_H
-#define MEKA_METAL_H
+#ifndef HB_METAL_H
+#define HB_METAL_H
 
 // NOTE(joon) shared buffer between CPU and GPU, in a coherent way
 struct MetalSharedBuffer

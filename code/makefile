@@ -6,13 +6,13 @@ MAKEFLAGS += --silent
 
 MAIN_CODE_PATH = ../code
 MACOS_BUILD_PATH = ../build
-MACOS_APP_NAME = meka.app
+MACOS_APP_NAME = HB.app
 MACOS_EXE_PATH = $(MACOS_BUILD_PATH)/$(MACOS_APP_NAME)/Contents/MacOS
 MACOS_RESOURCE_PATH = $(MACOS_BUILD_PATH)/$(MACOS_APP_NAME)/Contents/Resources
 MACOS_FRAMEWORK = -framework Cocoa -framework CoreFoundation -framework CoreGraphics -framework CoreVideo -framework Metal -framework MetalKit -framework Foundation -framework QuartzCore -pthread
 
 # -O0 = unoptimized, -O2 = compiler optimized
-COMPILER_FLAGS = -g -Wall -O0 -std=c++11 -lm -pthread -D MEKA_DEBUG=1 -D MEKA_ARM=1 -D MEKA_X86_X64=0 -D MEKA_LLVM=1 -D MEKA_MSVC=0 -D MEKA_WINDOWS=0 -D MEKA_MACOS=1 -D MEKA_VULKAN=0 -D MEKA_METAL=1
+COMPILER_FLAGS = -g -Wall -O0 -std=c++11 -lm -pthread -D HB_DEBUG=1 -D HB_ARM=1 -D HB_X86_X64=0 -D HB_LLVM=1 -D HB_MSVC=0 -D HB_WINDOWS=0 -D HB_MACOS=1 -D HB_VULKAN=0 -D HB_METAL=1
 # This is a nightmare.. :(
 # to disable warning, prefix the name of the warning with no-
 COMPILER_IGNORE_WARNINGS = -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-writable-strings -Wno-switch -Wno-objc-missing-super-calls -Wno-missing-braces -Wnonportable-include-path -Wno-uninitialized -Wno-nonportable-include-path -Wno-tautological-bitwise-compare -Wno-unused-but-set-variable
@@ -31,15 +31,15 @@ make_app :
 
 # target:  dependency1 dependency2 ...
 #       <tab> command
-compile_main : $(MAIN_CODE_PATH)/macos_meka.mm
-	$(COMPILER) $(ARCHITECTURE) $(COMPILER_FLAGS) $(COMPILER_IGNORE_WARNINGS) $(MACOS_FRAMEWORK) -o $(MACOS_EXE_PATH)/meka $(MAIN_CODE_PATH)/macos_meka.mm 
+compile_main : $(MAIN_CODE_PATH)/macos_hb.mm
+	$(COMPILER) $(ARCHITECTURE) $(COMPILER_FLAGS) $(COMPILER_IGNORE_WARNINGS) $(MACOS_FRAMEWORK) -o $(MACOS_EXE_PATH)/hb $(MAIN_CODE_PATH)/macos_hb.mm 
 
 create_lock : 
 	touch $(MACOS_EXE_PATH)/lock.tmp
 
 # TODO(joon) map file is not being generated correctly...
 compile_game : 
-	$(COMPILER) $(ARCHITECTURE)  -Wl,-map,$(MACOS_EXE_PATH)/output.map $(COMPILER_FLAGS) -dynamiclib $(COMPILER_IGNORE_WARNINGS) -o $(MACOS_EXE_PATH)/meka.dylib $(MAIN_CODE_PATH)/meka.cpp 
+	$(COMPILER) $(ARCHITECTURE)  -Wl,-map,$(MACOS_EXE_PATH)/output.map $(COMPILER_FLAGS) -dynamiclib $(COMPILER_IGNORE_WARNINGS) -o $(MACOS_EXE_PATH)/hb.dylib $(MAIN_CODE_PATH)/hb.cpp 
 
 delete_lock : 
 	rm $(MACOS_EXE_PATH)/lock.tmp

@@ -1,5 +1,5 @@
-#ifndef MEKA_ENTITY_H
-#define MEKA_ENTITY_H
+#ifndef HB_ENTITY_H
+#define HB_ENTITY_H
 
 enum EntityType
 {
@@ -28,7 +28,10 @@ struct Entity
     // TODO(joon) some kind of entity system, 
     // so that we don't have to store entity_specific things in all of the entities
     MassAgg mass_agg;
-    RigidBody rigid_body;
+    RigidBody rb; // TODO(joon) make this a pointer!
+
+    CollisionVolumeGroup *collision_group;
+
     AABB aabb; 
 };
 

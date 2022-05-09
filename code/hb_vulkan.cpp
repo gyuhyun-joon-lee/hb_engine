@@ -1,8 +1,7 @@
 /*
  * Written by Gyuhyun 'Joon' Lee
- * https://github.com/meka-lopo/
  */
-#include "meka_vulkan.h"
+#include "hb_vulkan.h"
 
 #include <stdio.h>
 #define CheckVkResult(expression)                                             \

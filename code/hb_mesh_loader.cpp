@@ -1,6 +1,5 @@
 /*
  * Written by Gyuhyun 'Joon' Lee
- * https://github.com/meka-lopo/
  */
 
 #define Invalid_R32 10000.0f
@@ -140,7 +139,7 @@ IsPairValid(pair *pair)
 }
 
 internal void 
-UpdateQuadricMetricErrorCost(raw_mesh *loadedMesh, r32 *QPerEachVertex, pair *pair)
+UpdateQuadricMetricErrorCost(RawMesh *loadedMesh, r32 *QPerEachVertex, pair *pair)
 {
     assert(IsPairValid(pair));
     assert(pair->index0 != pair->index1);
@@ -237,7 +236,7 @@ FloatEpsilonCompare(r32 a, r32 b)
     - This assumes that the mesh you are providing is counter-clockwise(needed to calculate the plane equation for Q)
 */
 internal void
-OptimizeMeshGH(raw_mesh *loadedMesh, 
+OptimizeMeshGH(RawMesh *loadedMesh, 
                 r32 optimizeRatio) // newFaceCount = mesh->faceCount * optimizeRatio
 {
     assert(optimizeRatio > 0.0f && optimizeRatio < 1.0f);
@@ -876,12 +875,12 @@ peek_up_to_three_numeric_values(obj_tokenizer *tokenizer)
 
 // TODO(joon): parsing positions and vertex normals work just fine,
 // but havent yet tested with the texture coords. Will do when I have a png loader :)
-internal raw_mesh
+internal RawMesh
 parse_obj_tokens(MemoryArena *memory_arena, u8 *file, size_t file_size)
 {
     assert(file && file_size > 0);
 
-    raw_mesh result ={};
+    RawMesh result ={};
 
     obj_tokenizer tokenizer = {};
     tokenizer.at = file;
@@ -1284,7 +1283,7 @@ parse_obj_line_with_v_or_vn(u8 *start, u8 *end)
 
 // TODO/Joon : not super important, but measure the time just for fun
 // Naive method, which is stepping character by character(1 byte)
-internal raw_mesh
+internal RawMesh
 parse_obj_slow(memory_arena *memory_arena, memory_arena *transient_memory_arena, u8 *file, size_t file_size)
 {
     assert(file && file_size != 0);
@@ -1413,7 +1412,7 @@ parse_obj_slow(memory_arena *memory_arena, memory_arena *transient_memory_arena,
         }
     }
 
-    raw_mesh mesh = {};
+    RawMesh mesh = {};
     mesh.index_count = index_count;
     mesh.indices = push_array(memory_arena, u32, sizeof(u32)*index_count);
 
@@ -1536,6 +1535,85 @@ parse_obj_slow(memory_arena *memory_arena, memory_arena *transient_memory_arena,
     return mesh;
 }
 #endif
+
+// TODO(joon): not a particularly intuitive parameters
+internal RawMesh
+generate_unit_sphere_mesh(u32 desired_column_count, u32 desired_row_count)
+{
+    RawMesh result = {};
+    
+    r32 rad_per_column = 2.0f*pi_32 / (r32)desired_column_count;
+    r32 rad_per_row = (pi_32) / (r32)desired_row_count;
+    r32 radius = 0.5f;
+
+    u32 expected_vertex_count = desired_column_count*desired_row_count;
+    u32 expected_index_count = 6*(desired_row_count-1)*desired_column_count;
+
+    result.positions = (v3 *)malloc(sizeof(v3)*expected_vertex_count);
+    result.normals = (v3 *)malloc(sizeof(v3)*expected_vertex_count);
+    result.indices = (u32 *)malloc(sizeof(u32)*expected_index_count);
+
+    for(u32 row = 0;
+            row < desired_row_count;
+            row++)
+    {
+        r32 cos_phi = cosf(-half_pi_32 + row*rad_per_row);
+        r32 sin_phi = sinf(-half_pi_32 + row*rad_per_row);
+
+        r32 z_for_this_row = radius * sin_phi;
+        for(u32 column = 0;
+                column < desired_column_count;
+                column++)
+        {
+            r32 cos_theta = cosf(column*rad_per_column);
+            r32 sin_theta = sinf(column*rad_per_column);
+            v3 p = radius * cos_phi * V3(cos_theta,
+                                        sin_theta,
+                                        0);
+            p.z = z_for_this_row;
+
+            result.positions[result.position_count++] = p;
+            result.normals[result.normal_count++] = normalize(p);
+        }
+    }
+
+    assert(result.position_count == expected_vertex_count);
+    
+    for(u32 row = 0;
+            row < desired_row_count - 1;
+            row++)
+    {
+        for(u32 column = 0;
+                column < desired_column_count;
+                column++)
+        {
+            /*
+               NOTE/Joon: Given certain cycle, we will construct the mesh like this
+               v2-----v3
+               |       |
+               |       |
+               |       |
+               v0-----v1 -> indices : 012, 132
+            */
+            u32 i0 = row*desired_column_count + column;
+            u32 i1 = row*desired_column_count + (column+1) % desired_column_count;
+            u32 i2 = (row+1)*desired_column_count + column;
+            u32 i3 = (row+1)*desired_column_count + (column+1) % desired_column_count;
+
+            result.indices[result.index_count++] = i0;
+            result.indices[result.index_count++] = i1;
+            result.indices[result.index_count++] = i2;
+
+            result.indices[result.index_count++] = i1;
+            result.indices[result.index_count++] = i3;
+            result.indices[result.index_count++] = i2;
+        }
+    }
+
+    assert(result.index_count == expected_index_count);
+
+    return result;
+}
 
 internal f32 *
 load_merl_brdf(PlatformReadFileResult file)

@@ -15,17 +15,17 @@
 #undef internal
 #undef assert
 
-// TODO(joon) meka_shared.h file for files that are shared across platforms?
-#include "meka_types.h"
-#include "meka_intrinsic.h"
-#include "meka_platform.h"
-#include "meka_math.h"
-#include "meka_random.h"
-#include "meka_simd.h"
-#include "meka_render_group.h"
+// TODO(joon) shared.h file for files that are shared across platforms?
+#include "hb_types.h"
+#include "hb_intrinsic.h"
+#include "hb_platform.h"
+#include "hb_math.h"
+#include "hb_random.h"
+#include "hb_simd.h"
+#include "hb_render_group.h"
 
-#include "meka_metal.cpp"
-#include "meka_render_group.cpp"
+#include "hb_metal.cpp"
+#include "hb_render_group.cpp"
 
 // TODO(joon): Get rid of global variables?
 global v2 last_mouse_p;
@@ -771,8 +771,8 @@ main(void)
     mach_timebase_info(&mach_time_info);
     f32 nano_seconds_per_tick = ((f32)mach_time_info.numer/(f32)mach_time_info.denom);
 
-    char *lock_file_path = "/Volumes/meka/meka_engine/build/meka.app/Contents/MacOS/lock.tmp";
-    char *game_code_path = "/Volumes/meka/meka_engine/build/meka.app/Contents/MacOS/meka.dylib";
+    char *lock_file_path = "/Volumes/meka/hb_engine/build/hb.app/Contents/MacOS/lock.tmp";
+    char *game_code_path = "/Volumes/meka/hb_engine/build/hb.app/Contents/MacOS/hb.dylib";
     MacOSGameCode macos_game_code = {};
     macos_load_game_code(&macos_game_code, game_code_path);
  

@@ -1,5 +1,5 @@
-#ifndef MEKA_VULKAN_FUNCTION_POINTERS
-#define MEKA_VULKAN_FUNCTION_POINTERS
+#ifndef HB_VULKAN_FUNCTION_POINTERS
+#define HB_VULKAN_FUNCTION_POINTERS
 
 #define VFType(name) PFN_##name
 // NOTE(joon) : global, instance, device level proc address loader functions
@@ -28,9 +28,9 @@ global_variable VFType(vkEnumerateDeviceExtensionProperties) vkEnumerateDeviceEx
 global_variable VFType(vkDestroySurfaceKHR) vkDestroySurfaceKHR;
 
 // NOTE(joon) : Device level functions
-#ifdef MEKA_WIN32
+#ifdef HB_WIN32
 global_variable VFType(vkCreateWin32SurfaceKHR) vkCreateWin32SurfaceKHR;
-#elif MEKA_MACOS
+#elif HB_MACOS
 global_variable VFType(vkCreateMetalSurfaceEXT) vkCreateMetalSurfaceEXT;
 #endif
 
@@ -98,7 +98,7 @@ global_variable VFType(vkDestroyDevice) vkDestroyDevice;
 #define get_device_function(device, name) name = (VFType(name))vkGetDeviceProcAddr(device, #name); assert(name)
 
 // TODO(joon) : Make this more platform-independent!
-#ifdef MEKA_WIN32
+#ifdef HB_WIN32
 
 internal void
 Win32LoadVulkanLibrary(char *filename)
@@ -147,9 +147,9 @@ resolve_instance_functions(VkInstance instance)
     get_instance_function(instance, vkEnumerateDeviceExtensionProperties);
     get_instance_function(instance, vkDestroySurfaceKHR);
 
-#ifdef MEKA_WIN32
+#ifdef HB_WIN32
     get_instance_function(instance, vkCreateWin32SurfaceKHR);
-#elif MEKA_MACOS
+#elif HB_MACOS
     get_instance_function(instance, vkCreateMetalSurfaceEXT);
 #endif
 }

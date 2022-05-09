@@ -1,5 +1,5 @@
-#ifndef MEKA_TYPES_H
-#define MEKA_TYPES_H
+#ifndef HB_TYPES_H
+#define HB_TYPES_H
 
 #include <stdint.h>
 #include <float.h>

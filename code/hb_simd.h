@@ -1,5 +1,5 @@
-#ifndef MEKA_SIMD_H
-#define MEKA_SIMD_H
+#ifndef HB_SIMD_H
+#define HB_SIMD_H
 // NOTE(joon): This usage of SIMD is a very simple & easy to use to make use of SIMD in a particular peace of code that you want to speed up.
 // However, this also creates a bit of an overhead, as everything is wrapped into another layer of function call that might not get inlined or whatever weird thing that
 // the compiler might do... So for a routine that needs an _extreme_ speed boot, use this as just a intermission layer, and eventually get rid of it 
@@ -7,20 +7,20 @@
 
 // TODO(joon): Make seperate types for each lane with different size, or a safegurad that we can insert inside the function that tells 
 // that a certain function only works with specific size of lane
-#define MEKA_LANE_WIDTH 4 // NOTE(joon): Should be 1/4 for ARM, 1/4/8 for x86/64
+#define HB_LANE_WIDTH 4 // NOTE(joon): Should be 1/4 for ARM, 1/4/8 for x86/64
 
-#if MEKA_ARM
+#if HB_ARM
 //NOTE(joon): Gets rid of bl instructions
 #define force_inline static inline __attribute__((always_inline))
 
-#if MEKA_LANE_WIDTH == 4
-#include "meka_simd_4x.h"
+#if HB_LANE_WIDTH == 4
+#include "hb_simd_4x.h"
 
-#elif MEKA_LANE_WIDTH == 8
+#elif HB_LANE_WIDTH == 8
 
 // TODO(joon): M1 pro does not support more that 128bit lane... 
-//#include "meka_simd_8x.h"
-#elif MEKA_LANE_WIDTH == 1
+//#include "hb_simd_8x.h"
+#elif HB_LANE_WIDTH == 1
 
 typedef v3 simd_v3;
 typedef r32 simd_f32;
@@ -399,7 +399,7 @@ start_random_series(u32 seed0, u32 seed1, u32 seed2, u32 seed3)
 #define u32_from_128(vector, slot) (((u32 *)&vector)[slot])
 #define r32_from_128(vector, slot) (((r32 *)&vector)[slot])
 
-#elif MEKA_X64
+#elif HB_X64
 #define dup_u32_128(value) _mm_set1_ps(value) 
 // NOTE(joon): no unsigned value for _m128i
 #define load_u32_128(ptr) _mm_load_si128(ptr)

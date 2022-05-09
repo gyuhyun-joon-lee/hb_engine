@@ -1,9 +1,14 @@
-#ifndef MEKA_RENDER_GROUP_H
-#define MEKA_RENDER_GROUP_H
+#ifndef HB_RENDER_GROUP_H
+#define HB_RENDER_GROUP_H
+
+// TODO(joon) To seperate the 'asset' thing completely from the game code
+// whenever we need some kind of mesh, retrieve from the platform layer
+// that already has the handle to the vertexbuffer, texture... etc?
 
 // NOTE(joon) : This forces us to copy these datas again to the actual 'usable' vertex buffer,
 // but even with more than 100000 vertices, the size of it isn't too big 
-struct raw_mesh
+
+struct RawMesh
 {
     v3 *positions;
     u32 position_count;
@@ -44,6 +49,7 @@ enum RenderEntryType
     RenderEntryType_AABB,
     RenderEntryType_Line,
     RenderEntryType_Cube,
+    RenderEntryType_Sphere,
 };
 
 // TODO(joon) Do we have enough reason to keep this header?
@@ -84,6 +90,15 @@ struct RenderEntryCube
     v3 color;
 };
 
+struct RenderEntrySphere
+{
+    RenderEntryHeader header;
+
+    v3 p;
+    v3 r;
+    v3 color;
+};
+
 #if 0
 struct RenderEntryParticleFaces
 {
@@ -100,7 +115,7 @@ struct RenderGroup
     PlatformRenderPushBuffer *render_push_buffer;
 };
 
-// TODO(joon) move the shader related structs(i.e uniform) into seperate file? (meka_shader.h)
+// TODO(joon) move the shader related structs(i.e uniform) into seperate file? (hb_shader.h)
 struct PerFrameData
 {
     alignas(16) m4x4 proj_view;

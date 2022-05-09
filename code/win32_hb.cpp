@@ -1,15 +1,14 @@
 /*
  * Written by Gyuhyun 'Joon' Lee
- * https://github.com/meka-lopo/
  */
 #define VK_USE_PLATFORM_WIN32_KHR
 //#define VK_USE_MESH_SHADER
 
-#include "meka_platform.h"
-#include "meka_vulkan_function_loader.h"
-#include "meka_vulkan.cpp"
-#include "meka_render.h"
-#include "meka_mesh_loader.cpp"
+#include "hb_platform.h"
+#include "hb_vulkan_function_loader.h"
+#include "hb_vulkan.cpp"
+#include "hb_render.h"
+#include "hb_mesh_loader.cpp"
 
 #define CGLTF_IMPLEMENTATION
 #include "../external_libraries/cgltf.h"
@@ -138,7 +137,7 @@ internal void
 Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle, i32 screenWidth, i32 screenHeight,
                 platform_api *platformApi, platform_memory *platformMemory)
 {
-#if !MEKA_VULKAN
+#if !HB_VULKAN
     Assert(0);
 #endif
 
@@ -152,7 +151,7 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     // NOTE(joon) : VK_LAYER_LUNARG_standard_validation is deprecated
     char *instanceLayerNames[] = 
     {
-#if MEKA_DEBUG
+#if HB_DEBUG
         "VK_LAYER_KHRONOS_validation"
 #endif
     };
@@ -188,7 +187,7 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
     vkEnumerateInstanceExtensionProperties(0, &extensionCount, extensions);
     char *instanceLevelExtensions[] =
     {
-#if MEKA_DEBUG
+#if HB_DEBUG
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
         VK_KHR_SURFACE_EXTENSION_NAME,
@@ -227,7 +226,7 @@ Win32InitVulkan(renderer *renderer, HINSTANCE instanceHandle, HWND windowHandle,
 
     ResolveInstanceLevelFunctions(instance);
 
-#if MEKA_DEBUG
+#if HB_DEBUG
     CreateDebugMessenger(instance);
 #endif
 
@@ -1081,7 +1080,7 @@ WinMain(HINSTANCE instanceHandle,
 {
     srand((u32)time(NULL));
 
-#if MEKA_DEBUG
+#if HB_DEBUG
     Win32CreateConsoleWindow();
 #endif
 
@@ -1143,14 +1142,14 @@ WinMain(HINSTANCE instanceHandle,
     windowClass.style = CS_HREDRAW|CS_VREDRAW;
     windowClass.lpfnWndProc = MainWindowProcedure;
     windowClass.hInstance = instanceHandle;
-    windowClass.lpszClassName = "mekaWindowClass";
+    windowClass.lpszClassName = "HBWindowClass";
     windowClass.hCursor = LoadCursor(0, IDC_ARROW);
 
 	if(RegisterClassExA(&windowClass))
 	{
 		HWND windowHandle = CreateWindowExA(0,
 										windowClass.lpszClassName,
-								  		"meka_renderer",
+								  		"HB",
 							            WS_OVERLAPPEDWINDOW|WS_VISIBLE,
 							            CW_USEDEFAULT, CW_USEDEFAULT,
 								  		windowWidth, windowHeight,

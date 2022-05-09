@@ -1,5 +1,5 @@
-#ifndef MEKA_VOXEL_H
-#define MEKA_VOXEL_H
+#ifndef HB_VOXEL_H
+#define HB_VOXEL_H
 
 struct VoxelChunkHash
 {

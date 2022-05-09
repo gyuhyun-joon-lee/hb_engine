@@ -1,5 +1,5 @@
-#ifndef MEKA_SIMULATION_H
-#define MEKA_SIMULATION_H
+#ifndef HB_SIMULATION_H
+#define HB_SIMULATION_H
 
 // TODO(joon) collision volume & group
 struct AABB
@@ -77,6 +77,38 @@ struct MassAgg
     f32 inner_sphere_r;
 };
 
+enum CollisionVolumeType
+{
+    CollisionVolumeType_Null,
+    CollisionVolumeType_Sphere,
+    CollisionVolumeType_Cube,
+};
+
+struct CollisionVolumeHeader
+{
+    CollisionVolumeType type;
+    v3 offset;
+};
+
+struct CollisionVolumeCube
+{
+    CollisionVolumeType type;
+    v3 dim;
+};
+
+struct CollisionVolumeSphere
+{
+    CollisionVolumeType type;
+    f32 r;
+};
+
+struct CollisionVolumeGroup
+{
+    u8 *collision_volume_buffer;
+    u32 size;
+    u32 used;
+};
+
 struct RigidBody
 {
     f32 inv_mass;
@@ -90,17 +122,17 @@ struct RigidBody
 
     v3 p; // NOTE(Also works as a center of mass)
     v3 dp;
-    // TODO(joon) This really should not be here... though we do need some kind of collision volume
-    // both for the collision tests and rendering
-    v3 dim; 
 
-    // NOTE(joon) Should be a pure quaternion
-    // updated by the net torque,t = I*angular_v
-    v3 angular_v;
+    // TODO(joon) collision volume instead!!!!
+    v3 dim;
+    f32 r;
+
+    // NOTE(joon) needs to be a pure quaternion
+    v3 angular_dp;
 
     /* NOTE(joon) derived parameters per frame */
     m4x4 transform; // derived from orientation quaternion
-    m3x3 transform_inv_inertia_tensor; // derived from inv_inertia_tensor
+    m3x3 transform_inv_inertia_tensor; // derived from inv_inertia_tensor, convert to local -> multiply by inv it -> convert back to world
 
     /* NOTE(joon) Computed parameters per frame */
     v3 force; // world space

@@ -1,2 +1,2 @@
-# Meka Engine
-Under-construction voxel engine, made from scratch. 
+# HB Engine
+3D game engine that I'm working on.

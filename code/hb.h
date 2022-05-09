@@ -1,5 +1,5 @@
-#ifndef MEKA_H
-#define MEKA_H
+#ifndef HB_H
+#define HB_H
 
 struct GameState
 {

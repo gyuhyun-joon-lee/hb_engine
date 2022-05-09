@@ -1,4 +1,4 @@
-#include "meka_entity.h"
+#include "hb_entity.h"
 
 #if 0
 internal
@@ -66,7 +66,7 @@ add_floor_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 }
 
 internal Entity *
-add_cube_rigid_body_entity(GameState *game_state, v3 p, v3 dim, v3 color, f32 mass)
+add_cube_rigid_body_entity(GameState *game_state, v3 p, v3 dim, f32 mass, v3 color)
 {
     Entity *result = add_entity(game_state, Entity_Type_Cube, Entity_Flag_Movable|Entity_Flag_Collides);
     result->color = color;
@@ -76,11 +76,22 @@ add_cube_rigid_body_entity(GameState *game_state, v3 p, v3 dim, v3 color, f32 ma
             0, mass*(dim.x*dim.x + dim.z*dim.z)/12.0f, 0,
             0, 0, mass*(dim.x*dim.x + dim.y*dim.y)/12.0f);
 
-    result->rigid_body = init_rigid_body(p, dim, safe_ratio(1.0f, mass), intertia_tensor);
+    result->rb = init_rigid_body(p, dim, safe_ratio(1.0f, mass), intertia_tensor);
 
     return result;
 }
 
+#if 0
+internal Entity *
+add_sphere_rigid_body_entity(GameState *game_state, v3 p, f32 r, f32 mass, v3 color)
+{
+    Entity *result = add_entity(game_state, Entity_Type_Cube, Entity_Flag_Movable|Entity_Flag_Collides);
+    result->color = color;
 
+    f32 c = (2.0f/5.0f) * mass * square(r);
 
+    m3x3 intertia_tensor = c * M3x3();
 
+    result->rb = init_rigid_body(p, );
+}
+#endif

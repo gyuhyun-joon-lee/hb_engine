@@ -1,4 +1,5 @@
-
+#ifndef HB_RANDOM_H
+#define HB_RANDOM_H
 // NOTE(joon): xorshift promises a huge speed boost comparing to rand(with the fact that it is really easy to use simd),
 // but is not particulary well distributed(close to blue noise) rand function.
 // TODO(joon): use PCG later?
@@ -105,6 +106,8 @@ random_normalized_v3(RandomSeries *series)
     v3 result = normalize(V3(random_f32(series), random_f32(series), random_f32(series)));
     return result;
 }
+
+#endif
 
 
 

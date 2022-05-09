@@ -2,11 +2,11 @@
 #include <limits.h>
 #include <stdint.h>
 #include <float.h>
-#include "meka_types.h"
-#include "meka_simd.h"
-#include "meka_platform.h"
-#include "meka_math.h"
-#include "meka_random.h"
+#include "hb_types.h"
+#include "hb_simd.h"
+#include "hb_platform.h"
+#include "hb_math.h"
+#include "hb_random.h"
 #endif
 
 #if 0
@@ -356,7 +356,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
     u32 output_width = data->output_width; 
     u32 output_height = data->output_height;
     u32 ray_per_pixel_count = data->ray_per_pixel_count;
-    assert(ray_per_pixel_count % MEKA_LANE_WIDTH == 0);
+    assert(ray_per_pixel_count % HB_LANE_WIDTH == 0);
 
     simd_u32 simd_output_width = simd_u32_(output_width);
     simd_u32 simd_output_height = simd_u32_(output_height);
@@ -411,7 +411,7 @@ render_raytraced_image_tile_simd(raytracer_data *data)
 
             for(u32 ray_per_pixel_index = 0;
                     ray_per_pixel_index < ray_per_pixel_count;
-                    ray_per_pixel_index += MEKA_LANE_WIDTH)
+                    ray_per_pixel_index += HB_LANE_WIDTH)
             {
                 // NOTE(joon): These values are inside the loop because as we are casting multiple lights anyway,
                 // we can slightly 'jitter' the ray direction to get the anti-aliasing effect 

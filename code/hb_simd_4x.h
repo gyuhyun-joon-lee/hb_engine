@@ -1,4 +1,4 @@
-#if MEKA_ARM
+#if HB_ARM
 
 #include <arm_neon.h>
 
@@ -1069,4 +1069,4 @@ random_between_minus_1_1(simd_random_series *series)
     return result;
 }
 
-#endif // #if MEKA_ARM
+#endif // #if HB_ARM
