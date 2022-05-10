@@ -51,9 +51,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         //add_flat_triangle_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 1, 1), 1.0f, 15.0f);
 
         //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
-        add_floor_entity(game_state, V3(0, 0, -0.5f), V3(100.0f, 100.0f, 1.0f), V3(0.8f, 0.1f, 0.1f));
+        // add_floor_entity(game_state, V3(0, 0, -0.5f), V3(100.0f, 100.0f, 1.0f), V3(0.8f, 0.1f, 0.1f));
 
-        add_cube_rigid_body_entity(game_state, V3(0, 0, 30.0f), V3(1.0f, 1.0f, 1.0f), 3.0f, V3(1.0f, 1.0f, 1.0f));
+        add_cube_rigid_body_entity(game_state, V3(0, 0, 30.0f), V3(1.0f, 1.0f, 1.0f), 1.0f/3.0f, V3(1.0f, 1.0f, 1.0f));
+        add_cube_rigid_body_entity(game_state, V3(0, 0, 0.0f), V3(5.0f, 5.0f, 5.0f), 0.0f, V3(1.0f, 1.0f, 1.0f));
 #if 0
         add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 7.0f);
         PlatformReadFileResult cow_obj_file = platform_api->read_file("/Volumes/hb/hb_engine/data/low_poly_cow.obj");
@@ -151,11 +152,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 // NOTE(joon) Always should happen for all rigid bodies at the start of their update
                 init_rigid_body_and_calculate_derived_parameters_for_frame(rb);
 
+#if 0
                 if(!compare_with_epsilon(rb->inv_mass, 0.0f))
                 {
                     // TODO(joon) This is a waste of time, as we are going to negate the mass portion anyway
                     rb->force += V3(0, 0, -9.8f) / rb->inv_mass;
                 }
+#endif
 
                 v3 ddp = (rb->inv_mass * rb->force);
             
@@ -192,12 +195,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         switch(entity->type)
         {
             case Entity_Type_Floor:
+
             case Entity_Type_AABB:
             {
                 push_aabb(&render_group, 
                           entity->aabb.p, 2.0f*entity->aabb.half_dim, 
                           entity->color);
             }break;
+
             case Entity_Type_Mass_Agg:
             {
                 for(u32 connection_index = 0;

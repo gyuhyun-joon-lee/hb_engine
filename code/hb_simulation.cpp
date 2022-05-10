@@ -878,7 +878,15 @@ init_rigid_body(v3 p, f32 inv_mass, m3x3 inertia_tensor)
     result.inv_mass = inv_mass;
     result.orientation = Quat(0, V3(1, 0, 0));
 
-    result.inv_inertia_tensor = inverse(inertia_tensor);
+    if(!compare_with_epsilon(inv_mass, 0.0f))
+    {
+        result.inv_inertia_tensor = inverse(inertia_tensor);
+    }
+    else
+    {
+        // TODO(joon) double check if this is right, though it looks correct?
+        result.inv_inertia_tensor = {};
+    }
 
     return result;
 }
