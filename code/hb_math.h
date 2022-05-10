@@ -1164,6 +1164,7 @@ does_quat_represent_orientation(quat q)
 inline m3x3
 rotation_quat_to_m3x3(quat q)
 {
+    // NOTE(joon) q is a unit-norm quaterion, whether pure or non-pure
     m3x3 result = {};
     result.e[0][0] = 1 - 2.0f*(q.y*q.y + q.z*q.z);
     result.e[0][1] = 2.0f*(q.x*q.y + q.z*q.s);

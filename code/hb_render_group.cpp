@@ -556,7 +556,7 @@ push_line(RenderGroup *render_group, v3 start, v3 end, v3 color)
 }
  
 internal void
-push_cube(RenderGroup *render_group, v3 p, v3 dim, v3 color, quat orientation)
+push_cube(RenderGroup *render_group, v3 p, v3 half_dim, v3 color, quat orientation)
 {
     RenderEntryCube *entry = (RenderEntryCube *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
     render_group->render_push_buffer->used += sizeof(*entry);
@@ -564,7 +564,7 @@ push_cube(RenderGroup *render_group, v3 p, v3 dim, v3 color, quat orientation)
 
     entry->header.type = RenderEntryType_Cube;
     entry->p = p;
-    entry->dim = dim;
+    entry->dim = 2.0f * half_dim; // TODO(joon) do we store half_dim instead?
     entry->orientation = orientation;
     entry->color = color;
 }

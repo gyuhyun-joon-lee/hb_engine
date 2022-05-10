@@ -30,7 +30,8 @@ struct Entity
     MassAgg mass_agg;
     RigidBody rb; // TODO(joon) make this a pointer!
 
-    CollisionVolumeGroup *collision_group;
+    // TODO(joon) CollisionVolumeGroup!
+    CollisionVolumeCube cv;
 
     AABB aabb; 
 };

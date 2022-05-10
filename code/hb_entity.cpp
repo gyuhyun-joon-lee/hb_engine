@@ -66,17 +66,19 @@ add_floor_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 }
 
 internal Entity *
-add_cube_rigid_body_entity(GameState *game_state, v3 p, v3 dim, f32 mass, v3 color)
+add_cube_rigid_body_entity(GameState *game_state, v3 p, v3 half_dim, f32 mass, v3 color)
 {
     Entity *result = add_entity(game_state, Entity_Type_Cube, Entity_Flag_Movable|Entity_Flag_Collides);
     result->color = color;
 
+    v3 dim = 2.0f * half_dim;
     m3x3 intertia_tensor = 
         M3x3(mass*(dim.y*dim.y + dim.z*dim.z)/12.0f, 0, 0,
             0, mass*(dim.x*dim.x + dim.z*dim.z)/12.0f, 0,
             0, 0, mass*(dim.x*dim.x + dim.y*dim.y)/12.0f);
 
-    result->rb = init_rigid_body(p, dim, safe_ratio(1.0f, mass), intertia_tensor);
+    result->rb = init_rigid_body(p, safe_ratio(1.0f, mass), intertia_tensor);
+    result->cv = init_collision_volume_cube(V3(0, 0, 0), half_dim);
 
     return result;
 }

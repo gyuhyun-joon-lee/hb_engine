@@ -1,2 +1,2 @@
 # HB Engine
-3D game engine that I'm working on.
+HB engine is a 3D game engine, made specifically for the game that I'm working on. 

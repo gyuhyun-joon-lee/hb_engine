@@ -80,25 +80,23 @@ struct MassAgg
 enum CollisionVolumeType
 {
     CollisionVolumeType_Null,
-    CollisionVolumeType_Sphere,
     CollisionVolumeType_Cube,
-};
-
-struct CollisionVolumeHeader
-{
-    CollisionVolumeType type;
-    v3 offset;
+    CollisionVolumeType_Sphere,
 };
 
 struct CollisionVolumeCube
 {
     CollisionVolumeType type;
-    v3 dim;
+
+    v3 offset;
+    v3 half_dim;
 };
 
 struct CollisionVolumeSphere
 {
     CollisionVolumeType type;
+
+    v3 offset;
     f32 r;
 };
 
@@ -122,10 +120,6 @@ struct RigidBody
 
     v3 p; // NOTE(Also works as a center of mass)
     v3 dp;
-
-    // TODO(joon) collision volume instead!!!!
-    v3 dim;
-    f32 r;
 
     // NOTE(joon) needs to be a pure quaternion
     v3 angular_dp;

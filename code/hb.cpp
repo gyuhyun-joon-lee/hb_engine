@@ -214,7 +214,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case Entity_Type_Cube:
             {
-                push_cube(&render_group, entity->rb.p, entity->rb.dim, entity->color, entity->rb.orientation);
+                // TODO(joon) collision volume independent rendering?
+                push_cube(&render_group, entity->rb.p + entity->cv.offset, entity->cv.half_dim, entity->color, entity->rb.orientation);
             }break;
         }
     }
