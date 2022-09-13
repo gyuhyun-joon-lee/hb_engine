@@ -25,12 +25,25 @@ struct MetalRenderContext
     id<MTLDevice> device;
     MTKView *view;
     id<MTLCommandQueue> command_queue;
+
     id<MTLDepthStencilState> depth_state; // compare <=, write : enabled
+    id<MTLDepthStencilState> disabled_depth_state; // compare <=, write : enabled
 
-    id<MTLRenderPipelineState> voxel_pipeline_state;
-    id<MTLRenderPipelineState> cube_pipeline_state;
-    id<MTLRenderPipelineState> line_pipeline_state;
+    // Pipelines
+    id<MTLRenderPipelineState> cube_pipeline;
+    id<MTLRenderPipelineState> line_pipeline;
+    id<MTLRenderPipelineState> deferred_lighting_pipeline;
+    
+    // Renderpasses
+    MTLRenderPassDescriptor *g_buffer_renderpass;
 
+    // Textures
+    id<MTLTexture> g_buffer_position_texture;
+    id<MTLTexture> g_buffer_normal_texture;
+    id<MTLTexture> g_buffer_color_texture;
+    id<MTLTexture> g_buffer_depth_texture;
+
+    // Buffers
     MetalManagedBuffer voxel_position_buffer;
     MetalManagedBuffer voxel_color_buffer;
 

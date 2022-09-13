@@ -394,6 +394,14 @@ get_closest_points_on_two_lines(v3 line0, v3 p0, v3 line1, v3 p1)
     return result;
 }
 
+/*
+   NOTE(joon) coherency
+   We are currently generating only one contact for each collision test,
+   but we really want to generate more than one contact point(i.e if an edge meets the face, we will have two vertex face contacts)
+
+   We do this by saving each contact data, 
+*/
+
 union CoordinateSystem
 {
     struct
@@ -532,6 +540,9 @@ generate_contact_cube_cube(CollisionVolumeCube *cube0, m4x4 *transform0,
         }
     }
 
+    // NOTE(joon) 
+    // 0 ~ 5 : contact normal is face normal
+    // 6 ~ 14 : conatct normal is a cross product of two edges
     if(best_sa_index < array_count(seperating_axes)) // NOTE(joon) check if there was any possible contact
     {
         // NOTE(joon) contact normal is _always_ for the first object.
@@ -601,7 +612,7 @@ generate_contact_cube_cube(CollisionVolumeCube *cube0, m4x4 *transform0,
         }
         else
         {
-            // NOTE(joon) edge edge contact
+            // NOTE(joon) edge x edge contact
             u32 edge_index0 = (best_sa_index - 6) / 3;
             u32 edge_index1 = best_sa_index % 3;
 
@@ -617,7 +628,7 @@ generate_contact_cube_cube(CollisionVolumeCube *cube0, m4x4 *transform0,
                 }
                 else if(dot(hd0.axes[axis_index], contact_normal) > 0.0f)
                 {
-                    p_on_edge0 += -hd0.axes[axis_index];
+                    p_on_edge0 -= hd0.axes[axis_index];
                 }
                 else
                 {
@@ -630,7 +641,7 @@ generate_contact_cube_cube(CollisionVolumeCube *cube0, m4x4 *transform0,
                 }
                 else if(dot(hd1.axes[axis_index], contact_normal) < 0.0f)
                 {
-                    p_on_edge1 += -hd1.axes[axis_index];
+                    p_on_edge1 -= hd1.axes[axis_index];
                 }
                 else
                 {

@@ -2,7 +2,7 @@
 
 using namespace metal;
 
-// NOTE(joon) this is a consequence of not having a shared file
+// NOTE(gh) this is a consequence of not having a shared file
 // between metal and the platform code.. which is a rabbit hole
 // that I do not want to go inside :(
 struct PerFrameData
@@ -22,7 +22,7 @@ struct LineVertexOutput
     float3 color;
 };
 
-// NOTE(joon) : line vertex function gets a world position input
+// NOTE(gh) : line vertex function gets a world position input
 vertex LineVertexOutput
 line_vertex(uint vertex_ID [[vertex_id]],
             constant PerFrameData *per_frame_data [[buffer(0)]],
@@ -46,7 +46,6 @@ line_frag(LineVertexOutput vertex_output [[stage_in]])
     return float4(vertex_output.color, 1.0f);
 }
 
-
 struct VoxelVertexOutput
 {
     float4 clip_p [[position]];
@@ -57,7 +56,7 @@ struct VoxelVertexOutput
     float4 color; 
 };
 
-// NOTE(joon) : vertex is a prefix for vertex shader
+// NOTE(gh) : vertex is a prefix for vertex shader
 vertex VoxelVertexOutput
 voxel_vertex(uint vertexID [[vertex_id]],
                 uint instanceID [[instance_id]],
@@ -68,7 +67,7 @@ voxel_vertex(uint vertexID [[vertex_id]],
 {
     VoxelVertexOutput result = {};
 
-    // TODO(joon) better way of doing this?
+    // TODO(gh) better way of doing this?
     float4 world_p = float4(voxel_positions[3*instanceID] + vertices[3*vertexID+0], 
                             voxel_positions[3*instanceID+1] + vertices[3*vertexID+1],
                             voxel_positions[3*instanceID+2] + vertices[3*vertexID+2],
@@ -102,25 +101,23 @@ struct CubeVertexOutput
 
     float3 p;
     float3 N;
-
-    // TODO(joon) just pass the perframedata to the fragment function
-    float3 light_p;
 };
 
+// TODO(gh) I don't like this...
 struct VertexPN
 {
     float3 p;
     float3 N;
 };
 
-// NOTE(joon) : vertex is a prefix for vertex shader
+// NOTE(gh) : vertex is a prefix for vertex shader
 vertex CubeVertexOutput
 cube_vertex(uint vertexID [[vertex_id]],
                 uint instanceID [[instance_id]],
                 constant PerFrameData *per_frame_data [[buffer(0)]],
                 constant PerObjectData *per_object_data [[buffer(1)]], 
 
-                // TODO(joon) This is fine, as long as we will going to use instacing to draw the cubes
+                // TODO(gh) This is fine, as long as we will going to use instacing to draw the cubes
                 constant float *positions [[buffer(2)]], 
                 constant float *normals [[buffer(3)]])
 {
@@ -140,21 +137,92 @@ cube_vertex(uint vertexID [[vertex_id]],
 
     result.clip_p = per_frame_data->proj_view * world_p;
     result.color = per_object_data->color;
+
     result.p = world_p.xyz;
     result.N = normalize(world_normal.xyz);
-    result.light_p = float3(500, 500, 5);
+    result.color = per_object_data->color;
+
+    return result;
+}
+
+// NOTE(gh) This will be outputted by the deferred pass before the lighting pass
+struct GBuffers
+{
+    // TODO(gh) maybe this is too big... shrink these down by sacrificing precisions
+    float4 position [[color(0)]];
+    float4 normal [[color(1)]];
+    float4 color [[color(2)]];
+
+    float depth [[color(3)]];
+};
+
+
+fragment GBuffers 
+cube_frag(CubeVertexOutput vertex_output [[stage_in]])
+{
+    GBuffers result = {};
+
+    result.position = float4(vertex_output.p, 0.0f);
+    result.normal = float4(vertex_output.N, 0.0f);
+    result.color = float4(vertex_output.color, 0.0f);
+    result.depth = vertex_output.clip_p.z;
+   
+    return result;
+}
+
+// NOTE(gh) This generates one full quad, assuming that the vertexID is 0, 1, 2 ... 5
+constant float2 full_quad_vertices[]
+{
+    {-1.0f, -1.0f},
+    {1.0f, 1.0f},
+    {-1.0f, 1.0f},
+
+    {-1.0f, -1.0f},
+    {1.0f, -1.0f},
+    {1.0f, 1.0f},
+};
+
+struct DeferredLightingVertexOutput
+{
+    float4 clip_p [[position]];
+
+    // TODO(gh) just pass the perframedata to the fragment function
+    float3 light_p;
+};
+
+vertex DeferredLightingVertexOutput
+deferred_lighting_vertex(uint vertexID [[vertex_id]])
+{
+    DeferredLightingVertexOutput result = {};
+
+    result.clip_p = float4(full_quad_vertices[vertexID], 0.0f, 1.0f);
+
+    result.light_p = float3(100.0f, 100.0f, 2.0f);
 
     return result;
 }
 
 fragment float4 
-cube_frag(CubeVertexOutput vertex_output [[stage_in]])
+deferred_lighting_frag(DeferredLightingVertexOutput vertex_output [[stage_in]],
+                       texture2d<float> position_g_buffer [[texture(0)]],
+                       texture2d<float> normal_g_buffer [[texture(1)]],
+                       texture2d<float> color_g_buffer [[texture(2)]], 
+                       texture2d<float> depth_g_buffer [[texture(3)]])
 {
-    float3 L = normalize(vertex_output.light_p - vertex_output.p);
-    float n_dot_l = clamp(dot(vertex_output.N, L), 0.2f, 1.0f); // 0.2f for ambient lighting
+    // NOTE(gh) This is what Apple is doing in their deferred rendering sample
+    uint2 sample_p = uint2(vertex_output.clip_p.xy);
 
-    float4 result = float4(vertex_output.color * n_dot_l, 1.0f);
+    float3 p = position_g_buffer.read(sample_p).xyz;
+    float3 N = normal_g_buffer.read(sample_p).xyz;
+    float3 color = color_g_buffer.read(sample_p).xyz;
+    // float depth = depth_g_buffer.read(sample_p).x;
+
+    float3 L = normalize(vertex_output.light_p - p);
+
+    float ambient = 0.2f;
+    float diffuse = max(dot(N, L), 0.1f);
+
+    float4 result = float4(color * (ambient + diffuse), 1.0f);
 
     return result;
 }
-

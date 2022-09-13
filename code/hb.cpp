@@ -21,7 +21,7 @@
 #include "hb_image_loader.cpp"
 
 /*
-    TODO(joon)
+    TODO(gh)
     - Render Font using one of the graphics API
         - If we are going to use the packed texture, how should we correctly sample from it in the shader?
 */
@@ -30,13 +30,18 @@ extern "C"
 GAME_UPDATE_AND_RENDER(update_and_render)
 {
     GameState *game_state = (GameState *)platform_memory->permanent_memory;
-    VoxelWorld *world = &game_state->world;
     if(!game_state->is_initialized)
     {
-        // TODO(joon) entity arena?
+        // TODO(gh) entity arena?
         game_state->max_entity_count = 1024;
         game_state->entities = (Entity *)malloc(sizeof(Entity) * game_state->max_entity_count);
 
+        u32 voxel_x_count = 8;
+        u32 voxel_y_count = 1;
+        u32 voxel_z_count = 8;
+        initialize_voxel_world(&game_state->voxel_world, voxel_x_count, voxel_y_count, voxel_z_count, V3(1, 1, 1));
+
+#if 0 
         //PlatformReadFileResult vox_file = platform_api->read_file("/Volumes/hb/hb_renderer/data/vox/chr_knight.vox");
         PlatformReadFileResult vox_file = platform_api->read_file("/Volumes/hb/hb_renderer/data/vox/monu10.vox");
         load_vox_result loaded_vox = load_vox(vox_file.memory, vox_file.size);
@@ -44,30 +49,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         //add_voxel_entity_from_vox_file(game_state, loaded_vox);
         free_loaded_vox(&loaded_vox);
+#endif
 
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
-
-        game_state->mass_agg_arena = start_memory_arena((u8 *)platform_memory->transient_memory + game_state->transient_arena.total_size, megabytes(256));
-        //add_flat_triangle_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(1, 1, 1), 1.0f, 15.0f);
-
-        //add_room_entity(game_state, V3(0, 0, 0), V3(100.0f, 100.0f, 100.0f), V3(0.3f, 0.3f, 0.3f));
-        // add_floor_entity(game_state, V3(0, 0, -0.5f), V3(100.0f, 100.0f, 1.0f), V3(0.8f, 0.1f, 0.1f));
-
-        add_cube_rigid_body_entity(game_state, V3(0, 0, 30.0f), V3(1.0f, 1.0f, 1.0f), 1.0f/3.0f, V3(1.0f, 1.0f, 1.0f));
-        add_cube_rigid_body_entity(game_state, V3(0, 0, 0.0f), V3(5.0f, 5.0f, 5.0f), 0.0f, V3(1.0f, 1.0f, 1.0f));
-#if 0
-        add_cube_mass_agg_entity(game_state, &game_state->mass_agg_arena, V3(0, 0, 10), V3(1.0f, 1.0f, 1.0f), V3(1, 1, 1), 1.0f, 7.0f);
-        PlatformReadFileResult cow_obj_file = platform_api->read_file("/Volumes/hb/hb_engine/data/low_poly_cow.obj");
-        raw_mesh cow_mesh = parse_obj_tokens(&game_state->transient_arena, cow_obj_file.memory, cow_obj_file.size);
-        // TODO(joon) : Find out why increasing the elastic value make the entity fly away!!!
-        add_mass_agg_entity_from_mesh(game_state, &game_state->mass_agg_arena, V3(0, 5, 30), V3(1, 1, 1), 
-                                    cow_mesh.positions, cow_mesh.position_count, cow_mesh.indices, cow_mesh.index_count, V3(0.001f, 0.001f, 0.001f), 5.0f, 0.1f);
-        PlatformReadFileResult oh_obj_file = platform_api->read_file("/Volumes/hb/hb_engine/data/dodecahedron.obj");
-        raw_mesh oh_mesh = parse_obj_tokens(&game_state->transient_arena, oh_obj_file.memory, oh_obj_file.size);
-        // TODO(joon) : Find out why increasing the elastic value make the entity fly away!!!
-        add_mass_agg_entity_from_mesh(game_state, &game_state->mass_agg_arena, V3(0, 5, 30), V3(1, 1, 1), 
-                                    oh_mesh.positions, oh_mesh.position_count, oh_mesh.indices, oh_mesh.index_count, V3(0.5f, 0.5f, 0.5f), 5.0f, 10.0f);
-#endif
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
                                                     game_state->transient_arena.total_size + 
@@ -76,7 +60,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         game_state->random_series = start_random_series(123123);
 
-        game_state->camera = init_camera(V3(-10, 0, 5), V3(0, 0, 0), 1.0f);
+        game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
+
+        add_voxel(&game_state->voxel_world, 0, 0, 0);
+        add_floor_entity(game_state, V3(0, 0, 0), V3(10, 10, 10), V3(1, 1, 1));
         
         game_state->is_initialized = true;
     }
@@ -114,7 +101,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     /*
-        NOTE(joon) How we are going to update the entities (without the friction)
+        NOTE(gh) How we are going to update the entities (without the friction)
         - move the entities, without thinking about the interpenetration
             - knowing where the first collision p can be done, but very expensive
         - generate collision data
@@ -124,7 +111,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         - resolve collision
     */
     
-    // NOTE(joon) update entity start
+    // NOTE(gh) update entity start
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;
         ++entity_index)
@@ -139,7 +126,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case Entity_Type_Mass_Agg:
             {
-                // TODO(joon) make physics not to be dependent to the framerate?
+                // TODO(gh) make physics not to be dependent to the framerate?
                 if(is_entity_flag_set(entity, Entity_Flag_Movable))
                 {
                     move_mass_agg_entity(game_state, entity, platform_input->dt_per_frame, platform_input->space);
@@ -149,13 +136,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case Entity_Type_Cube:
             {
                 RigidBody *rb = &entity->rb;
-                // NOTE(joon) Always should happen for all rigid bodies at the start of their update
+                // NOTE(gh) Always should happen for all rigid bodies at the start of their update
                 init_rigid_body_and_calculate_derived_parameters_for_frame(rb);
 
 #if 0
                 if(!compare_with_epsilon(rb->inv_mass, 0.0f))
                 {
-                    // TODO(joon) This is a waste of time, as we are going to negate the mass portion anyway
+                    // TODO(gh) This is a waste of time, as we are going to negate the mass portion anyway
                     rb->force += V3(0, 0, -9.8f) / rb->inv_mass;
                 }
 #endif
@@ -168,25 +155,24 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 v3 angular_ddp = rb->transform_inv_inertia_tensor * rb->torque;
                 rb->angular_dp += platform_input->dt_per_frame * angular_ddp;
-                // NOTE(joon) equation here is orientation += 0.5f*dt*angular_ddp*orientation
+                // NOTE(gh) equation here is orientation += 0.5f*dt*angular_ddp*orientation
                 rb->orientation += 0.5f*
                                    platform_input->dt_per_frame*
                                    Quat(0, rb->angular_dp) *
                                    rb->orientation;
                 assert(is_pure_quat(rb->orientation));
 
-                // NOTE(joon) clear computed parameters
-                // TODO(joon) would be nice if we can put this in intialize rb function,
+                // NOTE(gh) clear computed parameters
+                // TODO(gh) would be nice if we can put this in intialize rb function,
                 entity->rb.force = V3();
                 entity->rb.torque = V3();
             }break;
         }
     }
 
-    // NOTE(joon) rendering code start
     RenderGroup render_group = {};
     start_render_group(&render_group, platform_render_push_buffer, &game_state->camera, V3(0, 0, 0));
-    
+#if 1
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;
         ++entity_index)
@@ -195,12 +181,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         switch(entity->type)
         {
             case Entity_Type_Floor:
-
             case Entity_Type_AABB:
             {
                 push_aabb(&render_group, 
                           entity->aabb.p, 2.0f*entity->aabb.half_dim, 
                           entity->color);
+                // push_cube(&render_group, entity->aabb.p, 2.0f * entity->aabb.half_dim, V3(1, 1, 1), Quat(1, 0, 0, 0));
             }break;
 
             case Entity_Type_Mass_Agg:
@@ -219,10 +205,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case Entity_Type_Cube:
             {
-                // TODO(joon) collision volume independent rendering?
+                // TODO(gh) collision volume independent rendering?
                 push_cube(&render_group, entity->rb.p + entity->cv.offset, entity->cv.half_dim, entity->color, entity->rb.orientation);
             }break;
         }
     }
+#endif
+
 }
 

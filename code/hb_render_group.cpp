@@ -34,7 +34,7 @@ translate(v3 xyz)
     return translate(xyz.x, xyz.y, xyz.z);
 }
 
-// NOTE(joon) operation order here is translate * rotation * scale
+// NOTE(gh) operation order here is translate * rotation * scale
 inline m4x4
 srt_m4x4(v3 translate, quat orientation, v3 scale)
 {
@@ -71,7 +71,7 @@ struct vertex_normal_hit
     i32 hit;
 };
 
-// TODO(joon): exclude duplicate vertex normals
+// TODO(gh): exclude duplicate vertex normals
 internal void
 generate_vertex_normals(MemoryArena *permanent_arena , MemoryArena *transient_arena, RawMesh *raw_mesh)
 {
@@ -134,7 +134,7 @@ generate_vertex_normals(MemoryArena *permanent_arena , MemoryArena *transient_ar
     end_temp_memory(&mesh_construction_temp_memory);
 }
 
-/*TODO(joon): 
+/*TODO(gh): 
     This routine is slightly optimized using 128bit-wide SIMD vectors, with around ~2x improvements than before
     Improvements can be made with:
     1. better loading by organizing the data more simd-friendly
@@ -158,7 +158,7 @@ internal void
 
      u32 *normal_hit_counts = push_array(&mesh_construction_temp_memory, u32, raw_mesh->position_count);
 
-     // NOTE(joon): dividing by 12 as each face is consisted of 3 indices, and we are going to use 4-wide(128 bits) SIMD
+     // NOTE(gh): dividing by 12 as each face is consisted of 3 indices, and we are going to use 4-wide(128 bits) SIMD
      //u32 index_count_div_12 = face_count / 12;
      u32 index_count_mod_12 = raw_mesh->index_count % 12;
      u32 simd_end_index = raw_mesh->index_count - index_count_mod_12;
@@ -169,14 +169,14 @@ internal void
  #if HB_DEBUG
      begin_cycle_counter(generate_vertex_normals);
  #endif
-     // TODO(joon) : If we decide to lose the precision while calculating the normals,
+     // TODO(gh) : If we decide to lose the precision while calculating the normals,
      // might be able to use float16, which doubles the faces that we can process at once
      for(u32 i = 0;
              i < simd_end_index;
              i += 12) // considering we are using 128 bit wide vectors
      {
          // Load 12 indices
-         // TODO(joon): timed this and for now it's not worth doing so(and increase the code complexity), 
+         // TODO(gh): timed this and for now it's not worth doing so(and increase the code complexity), 
          // unless we change the index to be 16-bit?
          // i00, i01 i02 i10
          uint32x4_t ia = vld1q_u32(raw_mesh->indices + i);
@@ -213,7 +213,7 @@ internal void
          float32x4_t v2_y = {v02.y, v12.y, v22.y, v32.y};
          float32x4_t v2_z = {v02.z, v12.z, v22.z, v32.z};
 
-         // NOTE(joon): e0 = v1 - v0, e1 = v2 - v0, normal = cross(e0, e1);
+         // NOTE(gh): e0 = v1 - v0, e1 = v2 - v0, normal = cross(e0, e1);
 
          float32x4_t e0_x_4 = vsubq_f32(v1_x, v0_x);
          float32x4_t e0_y_4 = vsubq_f32(v1_y, v0_y);
@@ -239,7 +239,7 @@ internal void
          float32x4_t cross_result_y = vsubq_f32(cross_left_y, cross_right_y);
          float32x4_t cross_result_z = vsubq_f32(cross_left_z, cross_right_z);
 
-         // NOTE(joon): now we have a data that looks like : xxxx yyyy zzzz
+         // NOTE(gh): now we have a data that looks like : xxxx yyyy zzzz
 
          // ia : i00, i01 i02 i10
          // ib : i11, i12 i20 i21
@@ -303,7 +303,7 @@ internal void
 
      }
 
-     // NOTE(joon): Get the rest of the normals, that cannot be processed in vector-wide fassion
+     // NOTE(gh): Get the rest of the normals, that cannot be processed in vector-wide fassion
      for(u32 i = simd_end_index;
              i < raw_mesh->index_count;
              i += 3)
@@ -347,15 +347,15 @@ internal void
          float32x4_t normal_sum_x_128 = vld1q_f32(normal_sum_x + i);
          float32x4_t normal_sum_y_128 = vld1q_f32(normal_sum_y + i);
          float32x4_t normal_sum_z_128 = vld1q_f32(normal_sum_z + i);
-         // TODO(joon): test convert vs reinterpret
+         // TODO(gh): test convert vs reinterpret
          float32x4_t normal_hit_counts_128 = vcvtq_f32_u32(vld1q_u32(normal_hit_counts + i));
 
-         // TODO(joon): div vs load one over
+         // TODO(gh): div vs load one over
          float32x4_t unnormalized_result_x_128 = vdivq_f32(normal_sum_x_128, normal_hit_counts_128);
          float32x4_t unnormalized_result_y_128 = vdivq_f32(normal_sum_y_128, normal_hit_counts_128);
          float32x4_t unnormalized_result_z_128 = vdivq_f32(normal_sum_z_128, normal_hit_counts_128);
 
-         // TODO(joon): normalizing the simd vector might come in handy, pull this out into a seperate function?
+         // TODO(gh): normalizing the simd vector might come in handy, pull this out into a seperate function?
          float32x4_t dot_128 = vaddq_f32(vaddq_f32(vmulq_f32(unnormalized_result_x_128, unnormalized_result_x_128), vmulq_f32(unnormalized_result_y_128, unnormalized_result_y_128)), 
                                          vmulq_f32(unnormalized_result_z_128, unnormalized_result_z_128));
          float32x4_t length_128 = vsqrtq_f32(dot_128);
@@ -378,7 +378,7 @@ internal void
                                      r32_from_slot(normalized_result_z_128, 3));
      }
 
-     // NOTE(joon): calculate the remaining normals
+     // NOTE(gh): calculate the remaining normals
      for(u32 normal_index = simd_normal_end_index;
              normal_index < raw_mesh->normal_count;
              normal_index++)
@@ -399,22 +399,23 @@ internal void
      end_temp_memory(&mesh_construction_temp_memory);
 }
 
-// NOTE(joon) can be also used to init different set of camers for debugging purposes
 internal Camera
 init_camera(v3 p, v3 lookat_p, f32 focal_length)
 {
     Camera result = {};
 
     result.p = p;
-    // TODO(joon) make use of the lookat_p
-    //result.orientation = Quat(0, V3(1, 0, 0));
     result.focal_length = focal_length;
+
+    result.pitch = 0.0f;
+    result.yaw = 0.0f;
+    result.roll = 0.0f;
 
     return result;
 }
 
 /* 
-   NOTE(joon) Rotation matrix
+   NOTE(gh) Rotation matrix
    Let's say that we have a tranform matrix that looks like this
    |xa ya za|
    |xb yb zb|
@@ -437,7 +438,7 @@ init_camera(v3 p, v3 lookat_p, f32 focal_length)
    so that the inverse = transpose
 */
 
-// NOTE(joon) To move the world space position into camera space,
+// NOTE(gh) To move the world space position into camera space,
 // 1. We first translate the position so that the origin of the camera space
 // in world coordinate is (0, 0, 0). We can achieve this by  simply subtracing the camera position
 // from the world position.
@@ -453,13 +454,13 @@ camera_transform(Camera *camera)
     
     m3x3 camera_local_rotation = z_rotate(camera->roll) * y_rotate(camera->yaw) * x_rotate(camera->pitch);
     
-    // NOTE(joon) camera aligns with the world coordinate in default.
+    // NOTE(gh) camera aligns with the world coordinate in default.
     v3 local_camera_x_axis = normalize(camera_local_rotation * V3(1, 0, 0));
     v3 local_camera_y_axis = normalize(camera_local_rotation * V3(0, 1, 0));
     v3 local_camera_z_axis = normalize(camera_local_rotation * V3(0, 0, 1));
     m3x3 transpose_camera_local_rotation = transpose(camera_local_rotation);
 
-    // NOTE(joon) to pack the rotation & translation into one matrix(with an order of translation and the rotation),
+    // NOTE(gh) to pack the rotation & translation into one matrix(with an order of translation and the rotation),
     // we need to first multiply the translation by the rotation matrix
     v3 multiplied_translation = V3(dot(local_camera_x_axis, -camera->p), 
                                     dot(local_camera_y_axis, -camera->p),
@@ -492,7 +493,7 @@ rhs_to_lhs(m4x4 m)
     return result;
 }
 
-// NOTE/Joon : This assumes that the window width is always 1m
+// NOTE/gh : This assumes that the window width is always 1m
 inline m4x4
 project(f32 focal_length, f32 aspect_ratio, f32 near, f32 far)
 {
@@ -514,11 +515,11 @@ start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_p
     assert(render_push_buffer->base)
     render_group->render_push_buffer = render_push_buffer;
 
-    // TODO(joon) APIs differ in how they define their NDC, so maybe just pull this out 
+    // TODO(gh) APIs differ in how they define their NDC, so maybe just pull this out 
     // to the platform code and just pass the orientation quaternion
-    // TODO(joon) we can push the camera transform as a render entry, so that we can change the camera dynamically?
+    // TODO(gh) we can push the camera transform as a render entry, so that we can change the camera dynamically?
     m4x4 proj = project(camera->focal_length, render_push_buffer->width_over_height, 0.1f, 10000.0f);
-    // TODO(joon) This should not be necessary?
+    // TODO(gh) This should not be necessary?
     m4x4 view = rhs_to_lhs(camera_transform(camera));
     m4x4 proj_view = transpose(proj * view); // Change to column major
 
@@ -542,7 +543,7 @@ push_aabb(RenderGroup *render_group, v3 p, v3 dim, v3 color)
     entry->color = color;
 }
 
-// TODO(joon) do we want to collape this to single line_group or something to save memory(color, type)?
+// TODO(gh) do we want to collape this to single line_group or something to save memory(color, type)?
 internal void
 push_line(RenderGroup *render_group, v3 start, v3 end, v3 color)
 {
@@ -564,7 +565,7 @@ push_cube(RenderGroup *render_group, v3 p, v3 half_dim, v3 color, quat orientati
 
     entry->header.type = RenderEntryType_Cube;
     entry->p = p;
-    entry->dim = 2.0f * half_dim; // TODO(joon) do we store half_dim instead?
+    entry->dim = 2.0f * half_dim; // TODO(gh) do we store half_dim instead?
     entry->orientation = orientation;
     entry->color = color;
 }

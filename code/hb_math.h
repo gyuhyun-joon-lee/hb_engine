@@ -152,7 +152,7 @@ operator/(v2 a, f32 value)
 }
 
 inline v2
-operator*(f32 value, v2 &a)
+operator*(f32 value, v2 a)
 {
     v2 result = {};
 
@@ -950,11 +950,10 @@ clamp(i32 min, i32 value, i32 max)
     return result;
 }
 
-
-
-// 0x11 22 33 44
-//    3  2  1  0 - little endian
-//    0  1  2  3 - big endian
+// NOTE(joon) How "ABCD" will lay out in memory based on the endianess
+// 0x00 0x01 0x02 0x03 
+//    D    C    B    A - little endian (last thing comes first in memory)
+//    A    B    C    D - big endian (same as how we see)
 inline u32
 big_to_little_endian(u32 big)
 {
@@ -1008,6 +1007,12 @@ Quat(f32 s, v3 v)
     result.v = v;
 
     return result;
+}
+
+inline quat
+Quat(f32 s, f32 v0, f32 v1, f32 v2)
+{
+    return Quat(s, V3(v0, v1, v2));
 }
 
 // NOTE(joon) returns rotation quaternion
@@ -1114,12 +1119,6 @@ normalize(quat q)
     quat result = q/length(q);
 
     return result;
-}
-
-inline quat
-norm(quat q)
-{
-    return normalize(q);
 }
 
 inline quat

@@ -82,6 +82,8 @@ struct PlatformInput
     f32 dt_per_frame;
 };
 
+// TODO(joon) Make this string to be similar to what Casey has done in his HH project
+// which is non-null terminated string with the size
 // NOTE(joon) this function has no bound check
 internal void
 unsafe_string_append(char *dest, const char *source, u32 source_size)

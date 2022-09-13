@@ -11,11 +11,11 @@
 #include <metalkit/metalkit.h>
 #include <metal/metal.h>
 
-// TODO(joon) introspection?
+// TODO(gh) introspection?
 #undef internal
 #undef assert
 
-// TODO(joon) shared.h file for files that are shared across platforms?
+// TODO(gh) shared.h file for files that are shared across platforms?
 #include "hb_types.h"
 #include "hb_intrinsic.h"
 #include "hb_platform.h"
@@ -27,7 +27,7 @@
 #include "hb_metal.cpp"
 #include "hb_render_group.cpp"
 
-// TODO(joon): Get rid of global variables?
+// TODO(gh): Get rid of global variables?
 global v2 last_mouse_p;
 global v2 mouse_diff;
 
@@ -69,7 +69,7 @@ PLATFORM_READ_FILE(debug_macos_read_file)
 
         if(fileSize > 0)
         {
-            // TODO/Joon : NO MORE OS LEVEL ALLOCATION!
+            // TODO/gh : NO MORE OS LEVEL ALLOCATION!
             Result.size = fileSize;
             Result.memory = (u8 *)malloc(Result.size);
             if(read(File, Result.memory, fileSize) == -1)
@@ -93,14 +93,14 @@ PLATFORM_WRITE_ENTIRE_FILE(debug_macos_write_entire_file)
     {
         if(write(file, memory_to_write, size) == -1)
         {
-            // TODO(joon) : LOG here
+            // TODO(gh) : LOG here
         }
 
         close(file);
     }
     else
     {
-        // TODO(joon) :LOG
+        // TODO(gh) :LOG
         printf("Failed to create file\n");
     }
 }
@@ -137,22 +137,15 @@ app_delegate : NSObject<NSApplicationDelegate>
 
 @end
 
-#define check_ns_error(error)\
-{\
-    if(error)\
-    {\
-        printf("check_metal_error failed inside the domain: %s code: %ld\n", [error.domain UTF8String], (long)error.code);\
-        assert(0);\
-    }\
-}\
+
 
 
 internal CVReturn 
 display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_time, const CVTimeStamp* output_time,
                 CVOptionFlags ignored_0, CVOptionFlags* ignored_1, void* displayLinkContext)
 {
-    // NOTE(joon) : display link automatically adjust the framerate.
-    // TODO(joon) : Find out in what condition it adjusts the framerate?
+    // NOTE(gh) : display link automatically adjust the framerate.
+    // TODO(gh) : Find out in what condition it adjusts the framerate?
     u32 last_frame_diff = (u32)(output_time->hostTime - last_time);
     u32 current_time_diff = (u32)(output_time->hostTime - current_time->hostTime);
 
@@ -211,7 +204,7 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
         mouse_diff.y = mouse_speed_when_clipped;
     }
 
-    // NOTE(joon) : MacOS screen coordinate is bottom-up, so just for the convenience, make y to be bottom-up
+    // NOTE(gh) : MacOS screen coordinate is bottom-up, so just for the convenience, make y to be bottom-up
     mouse_diff.y *= -1.0f;
 
     last_mouse_p.x = mouse_location.x;
@@ -325,8 +318,8 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
     }
 } 
 
-// TODO(joon) : It seems like this combines read & write barrier, but make sure
-// TODO(joon) : mfence?(DSB)
+// TODO(gh) : It seems like this combines read & write barrier, but make sure
+// TODO(gh) : mfence?(DSB)
 #define write_barrier() OSMemoryBarrier(); 
 #define read_barrier() OSMemoryBarrier();
 
@@ -335,12 +328,12 @@ struct macos_thread
     u32 ID;
     thread_work_queue *queue;
 
-    // TODO(joon): I like the idea of each thread having a random number generator that they can use throughout the whole process
+    // TODO(gh): I like the idea of each thread having a random number generator that they can use throughout the whole process
     // though what should happen to the 0th thread(which does not have this structure)?
     simd_random_series series;
 };
 
-// NOTE(joon) : use this to add what thread should do
+// NOTE(gh) : use this to add what thread should do
 internal 
 THREAD_WORK_CALLBACK(print_string)
 {
@@ -348,36 +341,7 @@ THREAD_WORK_CALLBACK(print_string)
     printf("%s\n", stringToPrint);
 }
 
-#if 0
-struct thread_work_raytrace_tile_data
-{
-    raytracer_data raytracer_input;
-};
-
-global volatile u64 total_bounced_ray_count;
-internal 
-THREAD_WORK_CALLBACK(thread_work_callback_render_tile)
-{
-    thread_work_raytrace_tile_data *raytracer_data = (thread_work_raytrace_tile_data *)data;
-
-    //raytracer_output output = render_raytraced_image_tile(&raytracer_data->raytracer_input);
-    raytracer_output output = render_raytraced_image_tile_simd(&raytracer_data->raytracer_input);
-
-    // TODO(joon): double check the return value of the OSAtomicIncrement32, is it really a post incremented value? 
-    i32 rendered_tile_count = OSAtomicIncrement32Barrier((volatile int32_t *)&raytracer_data->raytracer_input.world->rendered_tile_count);
-
-    u64 ray_count = raytracer_data->raytracer_input.ray_per_pixel_count*
-                    (raytracer_data->raytracer_input.one_past_max_x - raytracer_data->raytracer_input.min_x) * 
-                    (raytracer_data->raytracer_input.one_past_max_y - raytracer_data->raytracer_input.min_y);
-
-    OSAtomicAdd64Barrier(ray_count, (volatile int64_t *)&raytracer_data->raytracer_input.world->total_ray_count);
-    OSAtomicAdd64Barrier(output.bounced_ray_count, (volatile int64_t *)&raytracer_data->raytracer_input.world->bounced_ray_count);
-
-    printf("%dth tile finished with %llu rays\n", rendered_tile_count, raytracer_data->raytracer_input.world->total_ray_count);
-}
-#endif
-
-// NOTE(joon): This is single producer multiple consumer - 
+// NOTE(gh): This is single producer multiple consumer - 
 // meaning, it _does not_ provide any thread safety
 // For example, if the two threads try to add the work item,
 // one item might end up over-writing the other one
@@ -386,7 +350,7 @@ macos_add_thread_work_item(thread_work_queue *queue,
                             thread_work_callback *work_callback,
                             void *data)
 {
-    assert(data); // TODO(joon) : There might be a work that does not need any data?
+    assert(data); // TODO(gh) : There might be a work that does not need any data?
     thread_work_item *item = queue->items + queue->add_index;
     item->callback = work_callback;
     item->data = data;
@@ -424,7 +388,7 @@ macos_do_thread_work_item(thread_work_queue *queue, u32 thread_index)
 internal 
 PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_queue_items)
 {
-    // TODO(joon): If there was a last thread that was working on the item,
+    // TODO(gh): If there was a last thread that was working on the item,
     // this does not guarantee that the last work will be finished.
     // Maybe add some flag inside the thread? (sleep / working / ...)
     while(queue->work_index != queue->add_index) 
@@ -432,7 +396,6 @@ PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_que
         macos_do_thread_work_item(queue, 0);
     }
 }
-
 
 internal void*
 thread_proc(void *data)
@@ -505,33 +468,20 @@ u32 cube_outward_facing_indices[]
     3, 0, 4,
     3, 4, 7
 };
-
-// TODO(joon) Later, we can make this to also 'stream' the meshes(just like the other assets), and put them inside the render mesh
-// so that the graphics API can render them.
+// TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
+// and put them inside the render mesh so that the graphics API can render them.
 internal void
-metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height)
+metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, v3 light_p)
 {
-    // NOTE(joon): renderpass descriptor is already configured for this frame
-    MTLRenderPassDescriptor *this_frame_descriptor = render_context->view.currentRenderPassDescriptor;
+    // NOTE(gh): renderpass descriptor is already configured for this frame
+    MTLRenderPassDescriptor *current_frame_renderpass = render_context->view.currentRenderPassDescriptor;
 
-    //renderpass_descriptor.colorAttachments[0].texture = ;
-    this_frame_descriptor.colorAttachments[0].clearColor = {render_push_buffer->clear_color.r, 
-                                                            render_push_buffer->clear_color.g, 
-                                                            render_push_buffer->clear_color.b, 
-                                                            1};
-    this_frame_descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
-    this_frame_descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-    this_frame_descriptor.depthAttachment.clearDepth = 1.0f;
-    this_frame_descriptor.depthAttachment.loadAction = MTLLoadActionClear;
-    this_frame_descriptor.depthAttachment.storeAction = MTLStoreActionDontCare;
-
-    if(this_frame_descriptor)
+    if(current_frame_renderpass)
     {
         id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
-        // TODO(joon) double check whether this thing is freed automatically or not
+        // TODO(gh) double check whether this thing is freed automatically or not
         // if not, we can pull this outside, and put this inside the render context
-        id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: this_frame_descriptor];
+        id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->g_buffer_renderpass];
 
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
@@ -545,7 +495,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
         u32 size = sizeof(per_frame_data);
 
-        // NOTE(joon) per frame data is always the 0th buffer
+        // NOTE(gh) per frame data is always the 0th buffer
         metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
 
         u32 voxel_instance_count = 0;
@@ -557,12 +507,12 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
             switch(header->type)
             {
-                // TODO(joon) we can also do the similar thing as the voxels,
+                // TODO(gh) we can also do the similar thing as the voxels,
                 // which is allocating the managed buffer and instance-drawing the lines
                 case RenderEntryType_Line:
                 {
                     RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
-                    metal_set_pipeline(render_encoder, render_context->line_pipeline_state);
+                    metal_set_pipeline(render_encoder, render_context->line_pipeline);
                     f32 start_and_end[6] = {entry->start.x, entry->start.y, entry->start.z, entry->end.x, entry->end.y, entry->end.z};
 
                     metal_set_vertex_bytes(render_encoder, start_and_end, sizeof(f32) * array_count(start_and_end), 1);
@@ -597,10 +547,11 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     per_object_data.model = model;
                     per_object_data.color = entry->color;
 
-                    metal_set_pipeline(render_encoder, render_context->cube_pipeline_state);
+                    metal_set_pipeline(render_encoder, render_context->cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 2);
                     metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
+                    metal_set_vertex_bytes(render_encoder, &light_p, sizeof(light_p), 4);
 
                     metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
                             render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), 1);
@@ -617,7 +568,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     per_object_data.model = model;
                     per_object_data.color = entry->color;
 
-                    metal_set_pipeline(render_encoder, render_context->cube_pipeline_state);
+                    metal_set_pipeline(render_encoder, render_context->cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 2);
                     metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
@@ -628,8 +579,10 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
             }
         }
 
-        // NOTE(joon) draw axis lines
-        // TODO(joon) maybe it's more wise to pull the line into seperate entry, and 
+        // TODO(gh) put this back when we have forward rendering!
+#if 0 
+        // NOTE(gh) draw axis lines
+        // TODO(gh) maybe it's more wise to pull the line into seperate entry, and 
         // instance draw them just by the position buffer
         metal_set_pipeline(render_encoder, render_context->line_pipeline_state);
 
@@ -654,44 +607,39 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_vertex_bytes(render_encoder, z_axis, sizeof(f32) * array_count(z_axis), 1);
         metal_set_vertex_bytes(render_encoder, &z_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
-
-        if(voxel_instance_count)
-        {
-            // NOTE(joon) as we are drawing a lot of voxels, we are going to treat the voxels in a special way by
-            // using the instancing.
-            metal_flush_managed_buffer(&render_context->voxel_position_buffer);
-            metal_flush_managed_buffer(&render_context->voxel_color_buffer);
-
-            metal_set_pipeline(render_encoder, render_context->voxel_pipeline_state);
-            metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
-            metal_set_vertex_buffer(render_encoder, render_context->voxel_position_buffer.buffer, 0, 2);
-            metal_set_vertex_buffer(render_encoder, render_context->voxel_color_buffer.buffer, 0, 3);
-
-            //metal_draw_primitives(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(voxel_vertices)/3, 0, voxel_count);
-
-            metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
-                    render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), voxel_instance_count);
-        }
-#if 0
-- (void)drawIndexedPrimitives:(MTLPrimitiveType)primitiveType 
-                   indexCount:(NSUInteger)indexCount 
-                    indexType:(MTLIndexType)indexType 
-                  indexBuffer:(id<MTLBuffer>)indexBuffer 
-            indexBufferOffset:(NSUInteger)indexBufferOffset 
-                instanceCount:(NSUInteger)instanceCount;
 #endif
-
 
         metal_end_encoding(render_encoder);
 
+        id<MTLRenderCommandEncoder> present_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: current_frame_renderpass];
+
+        metal_set_viewport(present_render_encoder, 0, 0, window_width, window_height, 0, 1);
+        metal_set_scissor_rect(present_render_encoder, 0, 0, window_width, window_height);
+        metal_set_triangle_fill_mode(present_render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(present_render_encoder, MTLWindingCounterClockwise);
+        metal_set_cull_mode(present_render_encoder, MTLCullModeBack);
+        // NOTE(gh) disable depth testing in current renderpass for deferred lighting(we should be overwriting the whole screen)
+        metal_set_detph_stencil_state(present_render_encoder, render_context->disabled_depth_state);
+
+        metal_set_pipeline(present_render_encoder, render_context->deferred_lighting_pipeline);
+
+        metal_set_fragment_texture(present_render_encoder, render_context->g_buffer_position_texture, 0);
+        metal_set_fragment_texture(present_render_encoder, render_context->g_buffer_normal_texture, 1);
+        metal_set_fragment_texture(present_render_encoder, render_context->g_buffer_color_texture, 2);
+        metal_set_fragment_texture(present_render_encoder, render_context->g_buffer_depth_texture, 3);
+
+        metal_draw_non_indexed(present_render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
+
+        metal_end_encoding(present_render_encoder);
+
         metal_present_drawable(command_buffer, render_context->view);
 
-        // TODO(joon): Sync with the swap buffer!
+        // TODO(gh): Sync with the swap buffer!
         metal_commit_command_buffer(command_buffer, render_context->view);
     }
 }
 
-// NOTE(joon): returns the base path where all the folders(code, misc, data) are located
+// NOTE(gh): returns the base path where all the folders(code, misc, data) are located
 internal void
 macos_get_base_path(char *dest)
 {
@@ -743,9 +691,9 @@ struct MacOSGameCode
 internal void
 macos_load_game_code(MacOSGameCode *game_code, char *file_name)
 {
-    // NOTE(joon) dlclose does not actually unload the dll!!!
+    // NOTE(gh) dlclose does not actually unload the dll!!!
     // dll only gets unloaded if there is no object that is referencing the dll.
-    // TODO(joon) library should be remain open? If so, we need another way to 
+    // TODO(gh) library should be remain open? If so, we need another way to 
     // actually unload the dll so that the fresh dll can be loaded.
     if(game_code->library)
     {
@@ -764,15 +712,14 @@ macos_load_game_code(MacOSGameCode *game_code, char *file_name)
     }
 }
 
-int 
-main(void)
+int main(void)
 { 
     struct mach_timebase_info mach_time_info;
     mach_timebase_info(&mach_time_info);
     f32 nano_seconds_per_tick = ((f32)mach_time_info.numer/(f32)mach_time_info.denom);
 
-    char *lock_file_path = "/Volumes/meka/hb_engine/build/hb.app/Contents/MacOS/lock.tmp";
-    char *game_code_path = "/Volumes/meka/hb_engine/build/hb.app/Contents/MacOS/hb.dylib";
+    char *lock_file_path = "/Volumes/meka/HB_engine/build/hb.app/Contents/MacOS/lock.tmp";
+    char *game_code_path = "/Volumes/meka/HB_engine/build/hb.app/Contents/MacOS/hb.dylib";
     MacOSGameCode macos_game_code = {};
     macos_load_game_code(&macos_game_code, game_code_path);
  
@@ -821,10 +768,10 @@ main(void)
     [SubMenuOfMenuItemWithAppName addItem:quitMenuItem];
     [menu_item_with_item_name setSubmenu:SubMenuOfMenuItemWithAppName];
 
-    // TODO(joon): when connected to the external display, this should be window_width and window_height
+    // TODO(gh): when connected to the external display, this should be window_width and window_height
     // but if not, this should be window_width/2 and window_height/2. Why?
-    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width, (f32)window_height);
-    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width/2.0f, (f32)window_height/2.0f);
+    //NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width, (f32)window_height);
+    NSRect window_rect = NSMakeRect(100.0f, 100.0f, (f32)window_width/2.0f, (f32)window_height/2.0f);
 
     NSWindow *window = [[NSWindow alloc] initWithContentRect : window_rect
                                         // Apple window styles : https://developer.apple.com/documentation/appkit/nswindow/stylemask
@@ -855,88 +802,123 @@ main(void)
     [window setContentView:view];
     view.depthStencilPixelFormat = MTLPixelFormatDepth32Float;
 
-    MTLDepthStencilDescriptor *depth_descriptor = [MTLDepthStencilDescriptor new];
-    depth_descriptor.depthCompareFunction = MTLCompareFunctionLess;
-    depth_descriptor.depthWriteEnabled = true;
-    id<MTLDepthStencilState> depth_state = [device newDepthStencilStateWithDescriptor:depth_descriptor];
-    [depth_descriptor release];
+    MetalRenderContext metal_render_context = {};
+
+    metal_render_context.depth_state = metal_make_depth_state(device, MTLCompareFunctionLess, true);
+    metal_render_context.disabled_depth_state = metal_make_depth_state(device, MTLCompareFunctionAlways, false);
 
     NSError *error;
-    // TODO(joon) : Put the metallib file inside the app
+    // TODO(gh) : Put the metallib file inside the app
     char metallib_path[256] = {};
     unsafe_string_append(metallib_path, base_path);
     unsafe_string_append(metallib_path, "code/shader/shader.metallib");
 
-    // TODO(joon) : maybe just use newDefaultLibrary? If so, figure out where should we put the .metal files
-    id<MTLLibrary> shader_library = [device newLibraryWithFile:[[NSString alloc] initWithCString:metallib_path
-                                                                                    encoding:NSUTF8StringEncoding] 
+    // TODO(gh) : maybe just use newDefaultLibrary? If so, figure out where should we put the .metal files
+    id<MTLLibrary> shader_library = [device newLibraryWithFile:[NSString stringWithUTF8String:metallib_path] 
                                                                 error: &error];
     check_ns_error(error);
 
-    id<MTLFunction> voxel_vertex = [shader_library newFunctionWithName:@"voxel_vertex"];
-    id<MTLFunction> voxel_frag = [shader_library newFunctionWithName:@"voxel_frag"];
-    MTLRenderPipelineDescriptor *voxel_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
-    voxel_pipeline_descriptor.label = @"Voxel Pipeline";
-    voxel_pipeline_descriptor.vertexFunction = voxel_vertex;
-    voxel_pipeline_descriptor.fragmentFunction = voxel_frag;
-    voxel_pipeline_descriptor.sampleCount = 1;
-    voxel_pipeline_descriptor.rasterSampleCount = voxel_pipeline_descriptor.sampleCount;
-    voxel_pipeline_descriptor.rasterizationEnabled = true;
-    voxel_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
-    voxel_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    voxel_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-    voxel_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+    MTLPixelFormat cube_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatRGBA32Float, // position
+                                                                   MTLPixelFormatRGBA32Float, // normal
+                                                                   MTLPixelFormatRGBA8Unorm}; // color
+    MTLColorWriteMask cube_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll, MTLColorWriteMaskAll, MTLColorWriteMaskAll};
+    id<MTLRenderPipelineState> cube_pipeline = metal_make_pipeline(device, "Cube Pipeline", "cube_vertex", "cube_frag", 
+                                                                         shader_library,
+                                                                         MTLPrimitiveTopologyClassTriangle,
+                                                                         cube_pipeline_color_attachment_pixel_formats, array_count(cube_pipeline_color_attachment_pixel_formats),
+                                                                         cube_pipeline_color_attachment_write_masks, array_count(cube_pipeline_color_attachment_write_masks),
+                                                                         view.depthStencilPixelFormat);
 
-    id<MTLRenderPipelineState> voxel_pipeline_state = [device newRenderPipelineStateWithDescriptor:voxel_pipeline_descriptor
-                                                                error:&error];
+    MTLPixelFormat deferred_lighting_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm}; // This is the default pixel format for displaying
+    MTLColorWriteMask deferred_lighting_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll};
+    id<MTLRenderPipelineState> deferred_lighting_pipeline = metal_make_pipeline(device, "Deferred Lighting Pipeline", "deferred_lighting_vertex", "deferred_lighting_frag", 
+                                                                         shader_library,
+                                                                         MTLPrimitiveTopologyClassTriangle,
+                                                                         deferred_lighting_pipeline_color_attachment_pixel_formats, array_count(deferred_lighting_pipeline_color_attachment_pixel_formats),
+                                                                         deferred_lighting_pipeline_color_attachment_write_masks, array_count(deferred_lighting_pipeline_color_attachment_write_masks),
+                                                                         MTLPixelFormatDepth32Float);
 
-    id<MTLFunction> cube_vertex = [shader_library newFunctionWithName:@"cube_vertex"];
-    id<MTLFunction> cube_frag = [shader_library newFunctionWithName:@"cube_frag"];
-    MTLRenderPipelineDescriptor *cube_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
-    cube_pipeline_descriptor.label = @"Cube Pipeline";
-    cube_pipeline_descriptor.vertexFunction = cube_vertex;
-    cube_pipeline_descriptor.fragmentFunction = cube_frag;
-    cube_pipeline_descriptor.sampleCount = 1;
-    cube_pipeline_descriptor.rasterSampleCount = cube_pipeline_descriptor.sampleCount;
-    cube_pipeline_descriptor.rasterizationEnabled = true;
-    cube_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
-    cube_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    cube_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-    cube_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
 
-    id<MTLRenderPipelineState> cube_pipeline_state = [device newRenderPipelineStateWithDescriptor:cube_pipeline_descriptor
-                                                                error:&error];
+    MTLPixelFormat line_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm}; // This is the default pixel format for displaying
+    MTLColorWriteMask line_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll};
+    id<MTLRenderPipelineState> line_pipeline = metal_make_pipeline(device, "Line Pipeline", "line_vertex", "line_frag",
+                                                                         shader_library,
+                                                                         MTLPrimitiveTopologyClassLine,
+                                                                         line_pipeline_color_attachment_pixel_formats, array_count(line_pipeline_color_attachment_pixel_formats),
+                                                                         line_pipeline_color_attachment_write_masks, array_count(line_pipeline_color_attachment_write_masks),
+                                                                         view.depthStencilPixelFormat);
 
-    id<MTLFunction> line_vertex = [shader_library newFunctionWithName:@"line_vertex"];
-    id<MTLFunction> line_frag = [shader_library newFunctionWithName:@"line_frag"];
-    MTLRenderPipelineDescriptor *line_pipeline_descriptor = [MTLRenderPipelineDescriptor new];
-    line_pipeline_descriptor.label = @"Line Pipeline";
-    line_pipeline_descriptor.vertexFunction = line_vertex;
-    line_pipeline_descriptor.fragmentFunction = line_frag;
-    line_pipeline_descriptor.sampleCount = 1;
-    line_pipeline_descriptor.rasterSampleCount = line_pipeline_descriptor.sampleCount;
-    line_pipeline_descriptor.rasterizationEnabled = true;
-    line_pipeline_descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassLine;
-    line_pipeline_descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    line_pipeline_descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-    line_pipeline_descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
-
-    id<MTLRenderPipelineState> line_pipeline_state = [device newRenderPipelineStateWithDescriptor:line_pipeline_descriptor
-                                                                error:&error];
-
-    check_ns_error(error);
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
 
-    MetalRenderContext metal_render_context = {};
+
+    // NOTE(gh) Create required textures
+    metal_render_context.g_buffer_position_texture  = 
+        metal_make_texture_2D(device, 
+                              MTLPixelFormatRGBA32Float, 
+                              window_width, 
+                              window_height,
+                              MTLTextureType2D,
+                              MTLTextureUsageRenderTarget,
+                              MTLStorageModeManaged);
+
+    metal_render_context.g_buffer_normal_texture  = 
+        metal_make_texture_2D(device, 
+                              MTLPixelFormatRGBA32Float, 
+                              window_width, 
+                              window_height,
+                              MTLTextureType2D,
+                              MTLTextureUsageRenderTarget,
+                              MTLStorageModeManaged);
+
+    metal_render_context.g_buffer_color_texture  = 
+        metal_make_texture_2D(device, 
+                              MTLPixelFormatRGBA8Unorm, 
+                              window_width, 
+                              window_height,
+                              MTLTextureType2D,
+                              MTLTextureUsageRenderTarget,
+                              MTLStorageModeManaged);
+
+    metal_render_context.g_buffer_depth_texture  = 
+        metal_make_texture_2D(device, 
+                              MTLPixelFormatDepth32Float, 
+                              window_width, 
+                              window_height,
+                              MTLTextureType2D,
+                              MTLTextureUsageRenderTarget,
+                              MTLStorageModeManaged);
+
+    metal_render_context.g_buffer_renderpass = [MTLRenderPassDescriptor new];
+    metal_render_context.g_buffer_renderpass.colorAttachments[0].loadAction = MTLLoadActionClear; // Will DONTCARE work here?
+    metal_render_context.g_buffer_renderpass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    metal_render_context.g_buffer_renderpass.colorAttachments[0].texture = metal_render_context.g_buffer_position_texture;
+    metal_render_context.g_buffer_renderpass.colorAttachments[0].clearColor = {0, 0, 0, 0};;
+
+    metal_render_context.g_buffer_renderpass.colorAttachments[1].loadAction = MTLLoadActionClear; // Will DONTCARE work here?
+    metal_render_context.g_buffer_renderpass.colorAttachments[1].storeAction = MTLStoreActionStore;
+    metal_render_context.g_buffer_renderpass.colorAttachments[1].texture = metal_render_context.g_buffer_normal_texture;
+    metal_render_context.g_buffer_renderpass.colorAttachments[1].clearColor = {0, 0, 0, 0};;
+
+    metal_render_context.g_buffer_renderpass.colorAttachments[2].loadAction = MTLLoadActionClear; // Will DONTCARE work here?
+    metal_render_context.g_buffer_renderpass.colorAttachments[2].storeAction = MTLStoreActionStore;
+    metal_render_context.g_buffer_renderpass.colorAttachments[2].texture = metal_render_context.g_buffer_color_texture;
+    metal_render_context.g_buffer_renderpass.colorAttachments[1].clearColor = {0, 0, 0, 0};;
+
+    metal_render_context.g_buffer_renderpass.depthAttachment.clearDepth = 1.0f;
+    metal_render_context.g_buffer_renderpass.depthAttachment.loadAction = MTLLoadActionClear;
+    metal_render_context.g_buffer_renderpass.depthAttachment.storeAction = MTLStoreActionStore;
+    metal_render_context.g_buffer_renderpass.depthAttachment.texture = metal_render_context.g_buffer_depth_texture;
+
     metal_render_context.device = device;
     metal_render_context.view = view;
     metal_render_context.command_queue = command_queue;
-    metal_render_context.depth_state = depth_state;
-    metal_render_context.voxel_pipeline_state = voxel_pipeline_state;
-    metal_render_context.cube_pipeline_state = cube_pipeline_state;
-    metal_render_context.line_pipeline_state = line_pipeline_state;
-    // TODO(joon) More robust way to manage these buffers??(i.e asset system?)
+
+    metal_render_context.cube_pipeline = cube_pipeline;
+    metal_render_context.line_pipeline = line_pipeline;
+    metal_render_context.deferred_lighting_pipeline = deferred_lighting_pipeline;
+
+    // TODO(gh) More robust way to manage these buffers??(i.e asset system?)
     metal_render_context.voxel_position_buffer = metal_create_managed_buffer(device, megabytes(16));
     metal_render_context.voxel_color_buffer = metal_create_managed_buffer(device, megabytes(4));
     metal_render_context.cube_outward_facing_index_buffer = metal_create_managed_buffer(device, sizeof(u32) * array_count(cube_outward_facing_indices));
@@ -956,7 +938,7 @@ main(void)
     PlatformRenderPushBuffer platform_render_push_buffer = {};
     platform_render_push_buffer.total_size = megabytes(16);
     platform_render_push_buffer.base = (u8 *)malloc(platform_render_push_buffer.total_size);
-    // TODO(joon) Make sure to update this value whenever we resize the window
+    // TODO(gh) Make sure to update this value whenever we resize the window
     platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
 
     [app activateIgnoringOtherApps:YES];
@@ -969,18 +951,18 @@ main(void)
         platform_input.dt_per_frame = target_seconds_per_frame;
         macos_handle_event(app, window, &platform_input);
 
-        // TODO(joon): check if the focued window is working properly
+        // TODO(gh): check if the focued window is working properly
         b32 is_window_focused = [app keyWindow] && [app mainWindow];
 
         /*
-            TODO(joon) : For more precisely timed rendering, the operations should be done in this order
+            TODO(gh) : For more precisely timed rendering, the operations should be done in this order
             1. Update the game based on the input
             2. Check the mach absolute time
             3. With the return value from the displayLinkOutputCallback function, get the absolute time to present
             4. Use presentDrawable:atTime to present at the specific time
         */
 
-        // TODO(joon) : last permission bit should not matter, but double_check?
+        // TODO(gh) : last permission bit should not matter, but double_check?
         int lock_file = open(lock_file_path, O_RDONLY); 
         if(lock_file < 0)
         {
@@ -1001,7 +983,7 @@ main(void)
 
         u64 time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
 
-        // NOTE(joon): Because nanosleep is such a high resolution sleep method, for precise timing,
+        // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
         // we need to undersleep and spend time in a loop
         u64 undersleep_nano_seconds = 100000000;
         if(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
@@ -1014,7 +996,7 @@ main(void)
         else
         {
             // TODO : Missed Frame!
-            // TODO(joon) : Whenever we miss the frame re-sync with the display link
+            // TODO(gh) : Whenever we miss the frame re-sync with the display link
         }
 
         // For a short period of time, loop
@@ -1028,11 +1010,18 @@ main(void)
         printf("%dms elapsed, fps : %.6f\n", time_passed_in_micro_sec, 1.0f/time_passed_in_sec);
         @autoreleasepool
         {
-            metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height);
+            static f32 e = 0.0f;
+            v3 light_p = V3(100.0f*cosf(e), 0.0f, 100.0f*sinf(e));
+            light_p = V3(0, 0, 100.0f);
+
+            // NOTE(gh) first, render to the g buffers
+
+            metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height, light_p);
+            e += time_passed_in_sec;
         }
 
 #if 0
-        // NOTE(joon) : debug_printf_all_cycle_counters
+        // NOTE(gh) : debug_printf_all_cycle_counters
         for(u32 cycle_counter_index = 0;
                 cycle_counter_index < debug_cycle_counter_count;
                 cycle_counter_index++)

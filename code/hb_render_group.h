@@ -1,11 +1,11 @@
 #ifndef HB_RENDER_GROUP_H
 #define HB_RENDER_GROUP_H
 
-// TODO(joon) To seperate the 'asset' thing completely from the game code
+// TODO(gh) To seperate the 'asset' thing completely from the game code
 // whenever we need some kind of mesh, retrieve from the platform layer
 // that already has the handle to the vertexbuffer, texture... etc?
 
-// NOTE(joon) : This forces us to copy these datas again to the actual 'usable' vertex buffer,
+// NOTE(gh) : This forces us to copy these datas again to the actual 'usable' vertex buffer,
 // but even with more than 100000 vertices, the size of it isn't too big 
 
 struct RawMesh
@@ -29,16 +29,27 @@ struct RawMesh
     u32 texcoord_index_count;
 };
 
+/* 
+   TODO(gh) we would want these functionalities for the camera
+   - Initialize camera with the 'position' and the 'look at' position.
+   - fully functioning quaternion to avoid gimbal lock
+*/
+
+/*
+   NOTE(gh) To avoid any confusion, the following things are true
+   - By default, camera coordinates = world coordinates
+   - camera -Z is the lookat direction
+*/
+
 struct Camera
 {
-    f32 pitch;
-    f32 yaw;
-    f32 roll;
+    f32 pitch; // x
+    f32 yaw; // y
+    f32 roll; // z
 
-    // TODO(joon) someday...
-    // TODO(joon) Will getting the axis_angle representation from pitch, yaw, and roll
-    // and using that to rotate the orientation work?
-    //quat orientation;
+    // TODO(gh) someday, tricky part is not the rotation itself, but 
+    // initializing but the camera so that it can look at some position
+    quat orientation;
 
     v3 p;
     f32 focal_length;
@@ -52,10 +63,10 @@ enum RenderEntryType
     RenderEntryType_Sphere,
 };
 
-// TODO(joon) Do we have enough reason to keep this header?
+// TODO(gh) Do we have enough reason to keep this header?
 struct RenderEntryHeader
 {
-    // NOTE(joon) This should _always_ come first
+    // NOTE(gh) This should _always_ come first
     RenderEntryType type;
 };
 
@@ -84,9 +95,9 @@ struct RenderEntryCube
 
     v3 p;
     v3 dim;
-    // TODO(joon) Should we store the full matrix here to reduce time from
+    // TODO(gh) Should we store the full matrix here to reduce time from
     // getting the rendering material to acutally drawing it to the screen?(especially for Metal)
-    quat orientation; // NOTE(joon) this should be a pure quaternion
+    quat orientation; // NOTE(gh) this should be a pure quaternion
     v3 color;
 };
 
@@ -108,14 +119,14 @@ struct RenderEntryParticleFaces
 };
 #endif
 
-// TODO(joon) Do we even need to keep the concept of 'render group'
+// TODO(gh) Do we even need to keep the concept of 'render group'
 struct RenderGroup
 {
-    // NOTE(joon) provided by the platform layer
+    // NOTE(gh) provided by the platform layer
     PlatformRenderPushBuffer *render_push_buffer;
 };
 
-// TODO(joon) move the shader related structs(i.e uniform) into seperate file? (hb_shader.h)
+// TODO(gh) move the shader related structs(i.e uniform) into seperate file? (hb_shader.h)
 struct PerFrameData
 {
     alignas(16) m4x4 proj_view;

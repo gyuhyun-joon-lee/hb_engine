@@ -1,5 +1,14 @@
 #include "hb_metal.h"
 
+#define check_ns_error(error)\
+{\
+    if(error)\
+    {\
+        printf("check_metal_error failed inside the domain: %s code: %ld\n", [error.domain UTF8String], (long)error.code);\
+        assert(0);\
+    }\
+}\
+
 internal void
 metal_set_viewport(id<MTLRenderCommandEncoder> render_encoder, f32 x, f32 y, f32 width, f32 height, f32 near, f32 far)
 {
@@ -134,9 +143,24 @@ metal_set_vertex_buffer(id<MTLRenderCommandEncoder> render_encoder, id<MTLBuffer
 }
 
 internal void
+metal_set_vertex_texture(id<MTLRenderCommandEncoder> render_encoder, id<MTLTexture> texture, u32 index)
+{
+    [render_encoder setVertexTexture : texture
+                    atIndex : index];
+}
+
+internal void
+metal_set_fragment_texture(id<MTLRenderCommandEncoder> render_encoder, id<MTLTexture> texture, u32 index)
+{
+    [render_encoder setFragmentTexture : texture
+                             atIndex:index];
+}
+
+internal void
 metal_draw_non_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, 
                         u32 vertex_start, u32 vertex_count)
 {
+    // NOTE(gh) vertex_id will start from vertex_start to vertex_start + vertex_count - 1
     [render_encoder drawPrimitives:primitive_type 
                     vertexStart:vertex_start
                     vertexCount:vertex_count];
@@ -188,6 +212,86 @@ internal void
 metal_commit_command_buffer(id<MTLCommandBuffer> command_buffer, MTKView *view)
 {
     [command_buffer commit];
+}
+
+internal id<MTLRenderPipelineState>
+metal_make_pipeline(id<MTLDevice> device,
+                    const char *pipeline_name, const char *vertex_shader_name, const char *fragment_shader_name,
+                    id<MTLLibrary> shader_library,
+                    MTLPrimitiveTopologyClass topology, 
+                    MTLPixelFormat *pixel_formats, u32 pixel_format_count, 
+                    MTLColorWriteMask *masks, u32 mask_count,
+                    MTLPixelFormat depth_pixel_format)
+{
+    assert(pixel_format_count == mask_count);
+
+    id<MTLFunction> vertex_shader = [shader_library newFunctionWithName:[NSString stringWithUTF8String:vertex_shader_name]];
+    id<MTLFunction> fragment_shader = [shader_library newFunctionWithName:[NSString stringWithUTF8String:fragment_shader_name]];
+
+    MTLRenderPipelineDescriptor *pipeline_descriptor = [MTLRenderPipelineDescriptor new];
+    pipeline_descriptor.label = [NSString stringWithUTF8String:pipeline_name];
+    pipeline_descriptor.vertexFunction = vertex_shader;
+    pipeline_descriptor.fragmentFunction = fragment_shader;
+    pipeline_descriptor.sampleCount = 1;
+    pipeline_descriptor.rasterSampleCount = pipeline_descriptor.sampleCount;
+    pipeline_descriptor.rasterizationEnabled = true;
+    pipeline_descriptor.inputPrimitiveTopology = topology;
+
+    for(u32 color_attachment_index = 0;
+            color_attachment_index < pixel_format_count;
+            ++color_attachment_index)
+    {
+        pipeline_descriptor.colorAttachments[color_attachment_index].pixelFormat = pixel_formats[color_attachment_index];
+        pipeline_descriptor.colorAttachments[color_attachment_index].writeMask = masks[color_attachment_index];
+    }
+
+
+    pipeline_descriptor.depthAttachmentPixelFormat = depth_pixel_format;
+
+    NSError *error;
+    id<MTLRenderPipelineState> result = [device newRenderPipelineStateWithDescriptor:pipeline_descriptor
+                                                                error:&error];
+    check_ns_error(error);
+
+    [pipeline_descriptor release];
+
+    return result;
+}
+
+internal id<MTLTexture>
+metal_make_texture_2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, 
+                  MTLTextureType type, MTLTextureUsage usage, MTLStorageMode storage_mode)
+{
+    MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pixel_format
+                                                                   width:width
+                                                                  height:height
+                                                               mipmapped:NO];
+    descriptor.textureType = type;
+    descriptor.usage |= usage;
+    descriptor.storageMode =  storage_mode;
+
+    id<MTLTexture> result  = [device newTextureWithDescriptor:descriptor];
+    [descriptor release];
+
+    return result;
+}
+
+internal id<MTLDepthStencilState>
+metal_make_depth_state(id<MTLDevice> device, MTLCompareFunction compare_function, b32 should_enable_write)
+{
+    /*
+       MTLCompareFunction
+        never : A new value never passes the comparison test.
+        always : A new value always passes the comparison test.
+    */
+    MTLDepthStencilDescriptor *depth_descriptor = [MTLDepthStencilDescriptor new];
+    depth_descriptor.depthCompareFunction = compare_function;
+    depth_descriptor.depthWriteEnabled = should_enable_write;
+
+    id<MTLDepthStencilState> result = [device newDepthStencilStateWithDescriptor:depth_descriptor];
+    [depth_descriptor release];
+
+    return result;
 }
 
         
