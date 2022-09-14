@@ -326,7 +326,7 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
 struct macos_thread
 {
     u32 ID;
-    thread_work_queue *queue;
+    ThreadWorkQueue *queue;
 
     // TODO(gh): I like the idea of each thread having a random number generator that they can use throughout the whole process
     // though what should happen to the 0th thread(which does not have this structure)?
@@ -346,8 +346,8 @@ THREAD_WORK_CALLBACK(print_string)
 // For example, if the two threads try to add the work item,
 // one item might end up over-writing the other one
 internal void
-macos_add_thread_work_item(thread_work_queue *queue,
-                            thread_work_callback *work_callback,
+macos_add_thread_work_item(ThreadWorkQueue *queue,
+                            ThreadWorkCallback *work_callback,
                             void *data)
 {
     assert(data); // TODO(gh) : There might be a work that does not need any data?
@@ -364,7 +364,7 @@ macos_add_thread_work_item(thread_work_queue *queue,
 }
 
 internal b32
-macos_do_thread_work_item(thread_work_queue *queue, u32 thread_index)
+macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
 {
     b32 did_work = false;
     if(queue->work_index != queue->add_index)
@@ -386,7 +386,7 @@ macos_do_thread_work_item(thread_work_queue *queue, u32 thread_index)
 }
 
 internal 
-PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_queue_items)
+PLATFORM_COMPLETE_ALL_ThreadWorkQueue_ITEMS(macos_complete_all_ThreadWorkQueue_items)
 {
     // TODO(gh): If there was a last thread that was working on the item,
     // this does not guarantee that the last work will be finished.
@@ -468,6 +468,7 @@ u32 cube_outward_facing_indices[]
     3, 0, 4,
     3, 4, 7
 };
+
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
 // and put them inside the render mesh so that the graphics API can render them.
 internal void
@@ -787,8 +788,8 @@ int main(void)
     mach_timebase_info(&mach_time_info);
     f32 nano_seconds_per_tick = ((f32)mach_time_info.numer/(f32)mach_time_info.denom);
 
-    char *lock_file_path = "/Volumes/meka/HB_engine/build/hb.app/Contents/MacOS/lock.tmp";
-    char *game_code_path = "/Volumes/meka/HB_engine/build/hb.app/Contents/MacOS/hb.dylib";
+    char *lock_file_path = "/Volumes/meka/HB_engine/build/PUL.app/Contents/MacOS/lock.tmp";
+    char *game_code_path = "/Volumes/meka/HB_engine/build/PUL.app/Contents/MacOS/pul.dylib";
     MacOSGameCode macos_game_code = {};
     macos_load_game_code(&macos_game_code, game_code_path);
  
@@ -811,8 +812,6 @@ int main(void)
                 total_size, 
                 VM_FLAGS_ANYWHERE);
     platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
-
-    PlatformReadFileResult font = debug_macos_read_file("/Users/mekalopo/Library/Fonts/InputMonoCompressed-Light.ttf");
 
     i32 window_width = 1920;
     i32 window_height = 1080;

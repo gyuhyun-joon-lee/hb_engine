@@ -55,6 +55,19 @@ struct Camera
     f32 focal_length;
 };
 
+// camera that circles around a single axis, looking at certain poitn
+struct CircleCamera
+{
+    v3 p;
+    v3 lookat_p;
+
+    f32 distance_from_axis;
+    f32 rad;
+    // TODO(gh) Allow this camera to rotate along any axis!
+
+    f32 focal_length;
+};
+
 enum RenderEntryType
 {
     RenderEntryType_AABB,

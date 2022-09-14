@@ -11,6 +11,8 @@ struct GameState
 
     // NOTE(gh) rendering related stuffs
     Camera camera;
+    CircleCamera circle_camera;
+
     MemoryArena render_arena;
 
     // NOTE(gh) Where all non permanent things should go inside

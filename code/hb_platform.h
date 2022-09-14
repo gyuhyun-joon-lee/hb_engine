@@ -255,28 +255,28 @@ global debug_cycle_counter debug_cycle_counters[debug_cycle_counter_count];
 
 #define PLATFORM_DEBUG_PRINT_CYCLE_COUNTERS(name) void (name)(debug_cycle_counter *debug_cycle_counters)
 
-struct thread_work_queue;
+struct ThreadWorkQueue;
 #define THREAD_WORK_CALLBACK(name) void name(void *data)
-typedef THREAD_WORK_CALLBACK(thread_work_callback);
+typedef THREAD_WORK_CALLBACK(ThreadWorkCallback);
 
 // TODO(joon) task_with_memory
 struct thread_work_item
 {
-    thread_work_callback *callback;
+    ThreadWorkCallback *callback;
     void *data;
 
     b32 written; // indicates whether this item is properly filled or not
 };
 
-#define PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(name) void name(thread_work_queue *queue)
-typedef PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(platform_complete_all_thread_work_queue_items);
+#define PLATFORM_COMPLETE_ALL_ThreadWorkQueue_ITEMS(name) void name(ThreadWorkQueue *queue)
+typedef PLATFORM_COMPLETE_ALL_ThreadWorkQueue_ITEMS(platform_complete_all_ThreadWorkQueue_items);
 
-#define PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(name) void name(thread_work_queue *queue, thread_work_callback *threadWorkCallback, void *data)
+#define PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(name) void name(ThreadWorkQueue *queue, ThreadWorkCallback *thread_work_callback, void *data)
 typedef PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(platform_add_thread_work_queue_item);
 
 // IMPORTANT(joon): There is no safeguard for the situation where one work takes too long, and meanwhile the work queue was filled so quickly
 // causing writeItem == readItem
-struct thread_work_queue
+struct ThreadWorkQueue
 {
     // NOTE(joon) : volatile forces the compiler not to optimize the value out, and always to the load(as other thread can change it)
     int volatile work_index; // index to the queue that is currently under work
@@ -285,8 +285,8 @@ struct thread_work_queue
     thread_work_item items[1024];
 
     // now this can be passed onto other codes, such as seperate game code to be used as rendering 
-    platform_add_thread_work_queue_item *add_thread_work_queue_item;
-    platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
+    platform_add_thread_work_queue_item *add_ThreadWorkQueue_item;
+    platform_complete_all_ThreadWorkQueue_items * complete_all_ThreadWorkQueue_items;
 };
 
 struct PlatformRenderPushBuffer

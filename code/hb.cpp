@@ -44,8 +44,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->random_series = start_random_series(123123);
 
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
+        game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 1.0f);
 
-        add_floor_entity(game_state, V3(0, 0, 0), V3(10, 10, 10), V3(1, 1, 1));
+        add_floor_entity(game_state, V3(0, 0, 0), V3(1, 1, 1), V3(1, 1, 1));
         
         game_state->is_initialized = true;
     }
@@ -55,32 +56,37 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     if(platform_input->action_up)
     {
-        camera->pitch += camera_rotation_speed;
+        // camera->pitch += camera_rotation_speed;
     }
     if(platform_input->action_down)
     {
-        camera->pitch -= camera_rotation_speed;
+        // camera->pitch -= camera_rotation_speed;
     }
     if(platform_input->action_left)
     {
-        camera->roll += camera_rotation_speed;
+        // camera->roll += camera_rotation_speed;
     }
     if(platform_input->action_right)
     {
-        camera->roll -= camera_rotation_speed;
+        // camera->roll -= camera_rotation_speed;
     }
 
     v3 camera_dir = get_camera_lookat(camera);
     f32 camera_speed = 10.0f * platform_input->dt_per_frame;
     if(platform_input->move_up)
     {
-        camera->p += camera_speed*camera_dir;
+        // camera->p += camera_speed*camera_dir;
     }
-
     if(platform_input->move_down)
     {
-        camera->p -= camera_speed*camera_dir;
+        // camera->p -= camera_speed*camera_dir;
     }
+
+    game_state->circle_camera.p.x = game_state->circle_camera.distance_from_axis * 
+                                    cosf(game_state->circle_camera.rad);
+    game_state->circle_camera.p.y = game_state->circle_camera.distance_from_axis * 
+                                    sinf(game_state->circle_camera.rad);
+    game_state->circle_camera.rad += 10.0f * platform_input->dt_per_frame;
 
     /*
         NOTE(gh) How we are going to update the entities (without the friction)
@@ -153,7 +159,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     RenderGroup render_group = {};
-    start_render_group(&render_group, platform_render_push_buffer, &game_state->camera, V3(0, 0, 0));
+    // start_render_group(&render_group, platform_render_push_buffer, &game_state->camera, V3(0, 0, 0));
+    start_render_group(&render_group, platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0));
+
 #if 1
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;

@@ -414,6 +414,23 @@ init_camera(v3 p, v3 lookat_p, f32 focal_length)
     return result;
 }
 
+internal CircleCamera
+init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 focal_length)
+{
+    CircleCamera result = {};
+
+    result.p = p;
+    // TODO(gh) we are not allowing arbitrary point for this type of camera, for now.
+    assert(p.x == 0.0f && p.y == 0);
+    result.lookat_p = lookat_p;
+    result.distance_from_axis = distance_from_axis;
+    result.rad = 0;
+
+    result.focal_length = focal_length;
+
+    return result;
+}
+
 /* 
    NOTE(gh) Rotation matrix
    Let's say that we have a tranform matrix that looks like this
@@ -421,8 +438,8 @@ init_camera(v3 p, v3 lookat_p, f32 focal_length)
    |xb yb zb|
    |xc yc zc|
 
-   This means that whenever we multiply point with this, we are projecting the point into a coordinate system
-   with three axes : [xa ya za], [xb yb zb], [xb yb zb] by taking a dot product.
+   This means that whenever we multiply a point with this, we are projecting the point into a coordinate system
+   with three axes : [xa ya za], [xb yb zb], [xc yc zc] by taking a dot product.
    Common example for this would be world to camera transform matrix.
 
    Let's now setup the matrix in the other way by transposing the matrix above. 
@@ -447,31 +464,51 @@ init_camera(v3 p, v3 lookat_p, f32 focal_length)
 // To pack this into a single matrix, we need to multiply the translation by the camera axis matrix,
 // because otherwise it will be projection first and then translation -> which is completely different from
 // doing the translation and the projection.
-internal m4x4
-camera_transform(Camera *camera)
+internal m4x4 
+camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_axis)
 {
     m4x4 result = {};
-    
-    m3x3 camera_local_rotation = z_rotate(camera->roll) * y_rotate(camera->yaw) * x_rotate(camera->pitch);
-    
-    // NOTE(gh) camera aligns with the world coordinate in default.
-    v3 local_camera_x_axis = normalize(camera_local_rotation * V3(1, 0, 0));
-    v3 local_camera_y_axis = normalize(camera_local_rotation * V3(0, 1, 0));
-    v3 local_camera_z_axis = normalize(camera_local_rotation * V3(0, 0, 1));
-    m3x3 transpose_camera_local_rotation = transpose(camera_local_rotation);
 
     // NOTE(gh) to pack the rotation & translation into one matrix(with an order of translation and the rotation),
     // we need to first multiply the translation by the rotation matrix
-    v3 multiplied_translation = V3(dot(local_camera_x_axis, -camera->p), 
-                                    dot(local_camera_y_axis, -camera->p),
-                                    dot(local_camera_z_axis, -camera->p));
+    v3 multiplied_translation = V3(dot(camera_x_axis, -camera_p), 
+                                    dot(camera_y_axis, -camera_p),
+                                    dot(camera_z_axis, -camera_p));
 
-    result.rows[0] = V4(local_camera_x_axis, multiplied_translation.x);
-    result.rows[1] = V4(local_camera_y_axis, multiplied_translation.y);
-    result.rows[2] = V4(local_camera_z_axis, multiplied_translation.z);
-    result.rows[3] = V4(0.0f, 0.0f, 0.0f, 1.0f);
+    result.rows[0] = V4(camera_x_axis, multiplied_translation.x);
+    result.rows[1] = V4(camera_y_axis, multiplied_translation.y);
+    result.rows[2] = V4(camera_z_axis, multiplied_translation.z);
+    result.rows[3] = V4(0.0f, 0.0f, 0.0f, 1.0f); // Dont need to touch the w part, view matrix doesn't produce homogeneous coordinates
 
     return result;
+}
+
+internal m4x4
+camera_transform(Camera *camera)
+{
+    m3x3 camera_local_rotation = z_rotate(camera->roll) * y_rotate(camera->yaw) * x_rotate(camera->pitch);
+    
+    // NOTE(gh) camera aligns with the world coordinate in default.
+    v3 camera_x_axis = normalize(camera_local_rotation * V3(1, 0, 0));
+    v3 camera_y_axis = normalize(camera_local_rotation * V3(0, 1, 0));
+    v3 camera_z_axis = normalize(camera_local_rotation * V3(0, 0, 1));
+    m3x3 transpose_camera_local_rotation = transpose(camera_local_rotation);
+
+    return camera_transform(camera->p, camera_x_axis, camera_y_axis, camera_z_axis);
+}
+
+internal m4x4
+camera_transform(CircleCamera *camera)
+{
+    // -z is the looking direction
+    v3 camera_z_axis = -normalize(camera->lookat_p - camera->p);
+
+    // TODO(gh) This does not work if the camera was direction looking down or up in world z axis
+    assert(!(camera_z_axis.x == 0.0f && camera_z_axis.y == 0.0f));
+    v3 camera_x_axis = normalize(cross(V3(0, 0, 1), camera_z_axis));
+    v3 camera_y_axis = normalize(cross(camera_z_axis, camera_x_axis));
+
+    return camera_transform(camera->p, camera_x_axis, camera_y_axis, camera_z_axis);
 }
 
 internal v3
@@ -482,7 +519,6 @@ get_camera_lookat(Camera *camera)
 
     return result;
 }
-
 
 internal m4x4
 rhs_to_lhs(m4x4 m)
@@ -510,7 +546,7 @@ project(f32 focal_length, f32 aspect_ratio, f32 near, f32 far)
 }
 
 internal void
-start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_push_buffer, Camera *camera, v3 clear_color)
+start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_push_buffer, CircleCamera *camera, v3 clear_color)
 {
     assert(render_push_buffer->base)
     render_group->render_push_buffer = render_push_buffer;
