@@ -113,13 +113,13 @@ struct VertexPN
 // NOTE(gh) : vertex is a prefix for vertex shader
 vertex CubeVertexOutput
 cube_vertex(uint vertexID [[vertex_id]],
-                uint instanceID [[instance_id]],
-                constant PerFrameData *per_frame_data [[buffer(0)]],
-                constant PerObjectData *per_object_data [[buffer(1)]], 
+            uint instanceID [[instance_id]],
+            constant PerFrameData *per_frame_data [[buffer(0)]],
+            constant PerObjectData *per_object_data [[buffer(1)]], 
 
-                // TODO(gh) This is fine, as long as we will going to use instacing to draw the cubes
-                constant float *positions [[buffer(2)]], 
-                constant float *normals [[buffer(3)]])
+            // TODO(gh) This is fine, as long as we will going to use instacing to draw the cubes
+            constant float *positions [[buffer(2)]], 
+            constant float *normals [[buffer(3)]])
 {
     CubeVertexOutput result = {};
 
@@ -167,6 +167,30 @@ cube_frag(CubeVertexOutput vertex_output [[stage_in]])
     result.color = float4(vertex_output.color, 0.0f);
     result.depth = vertex_output.clip_p.z;
    
+    return result;
+}
+
+struct ShadowmapVertexOutput
+{
+    float4 clip_p[[position]];
+};
+
+// NOTE(gh) no fragment shader needed
+vertex ShadowmapVertexOutput
+directional_light_shadowmap_vert(uint vertexID [[vertex_id]],
+                                 constant float *positions [[buffer(0)]], 
+                                 constant float4x4 *model [[buffer(1)]],
+                                 constant float4x4 *proj_view [[buffer(2)]])
+{
+    ShadowmapVertexOutput result = {};
+
+    // TODO(gh) we can also get proj_view_model outside the GPU and pass it to the shader
+    result.clip_p = (*proj_view) * (*model) *
+                    float4(positions[3*vertexID+0], 
+                           positions[3*vertexID+1],
+                           positions[3*vertexID+2],
+                           1.0f);
+
     return result;
 }
 

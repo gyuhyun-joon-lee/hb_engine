@@ -225,8 +225,17 @@ metal_make_pipeline(id<MTLDevice> device,
 {
     assert(pixel_format_count == mask_count);
 
-    id<MTLFunction> vertex_shader = [shader_library newFunctionWithName:[NSString stringWithUTF8String:vertex_shader_name]];
-    id<MTLFunction> fragment_shader = [shader_library newFunctionWithName:[NSString stringWithUTF8String:fragment_shader_name]];
+    id<MTLFunction> vertex_shader = 0;
+    id<MTLFunction> fragment_shader = 0;
+    if(vertex_shader_name)
+    {
+        vertex_shader = [shader_library newFunctionWithName:[NSString stringWithUTF8String:vertex_shader_name]];
+    }
+
+    if(fragment_shader_name)
+    {
+        fragment_shader = [shader_library newFunctionWithName:[NSString stringWithUTF8String:fragment_shader_name]];
+    }
 
     MTLRenderPipelineDescriptor *pipeline_descriptor = [MTLRenderPipelineDescriptor new];
     pipeline_descriptor.label = [NSString stringWithUTF8String:pipeline_name];
@@ -290,6 +299,43 @@ metal_make_depth_state(id<MTLDevice> device, MTLCompareFunction compare_function
 
     id<MTLDepthStencilState> result = [device newDepthStencilStateWithDescriptor:depth_descriptor];
     [depth_descriptor release];
+
+    return result;
+}
+
+internal MTLRenderPassDescriptor *
+metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
+                      MTLStoreAction *store_actions, u32 store_action_count,
+                      id<MTLTexture> *textures, u32 texture_count,
+                      v4 *clear_colors, u32 clear_color_count,
+                      MTLLoadAction depth_load_action, MTLStoreAction depth_store_action, 
+                      id<MTLTexture> depth_texture,
+                      f32 depth_clear_value)
+{
+    assert(load_action_count == store_action_count); 
+    assert(load_action_count == texture_count); 
+    assert(load_action_count == clear_color_count);
+
+    MTLRenderPassDescriptor *result = [MTLRenderPassDescriptor new];
+
+    for(u32 color_attachment_index = 0;
+            color_attachment_index < texture_count;
+            ++color_attachment_index)
+    {
+        result.colorAttachments[color_attachment_index].loadAction = load_actions[color_attachment_index]; // Will DONTCARE work here?
+        result.colorAttachments[color_attachment_index].storeAction = store_actions[color_attachment_index];
+        result.colorAttachments[color_attachment_index].texture = textures[color_attachment_index];
+
+        result.colorAttachments[color_attachment_index].clearColor = {clear_colors[color_attachment_index].r,
+                                                                      clear_colors[color_attachment_index].g,
+                                                                      clear_colors[color_attachment_index].b,
+                                                                      clear_colors[color_attachment_index].a};
+    }
+
+    result.depthAttachment.loadAction = depth_load_action;
+    result.depthAttachment.storeAction = depth_store_action;
+    result.depthAttachment.texture = depth_texture;
+    result.depthAttachment.clearDepth = depth_clear_value;
 
     return result;
 }

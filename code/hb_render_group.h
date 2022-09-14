@@ -93,11 +93,12 @@ struct RenderEntryCube
 {
     RenderEntryHeader header;
 
+    // TODO(gh) Should we store the full model matrix to reduce time from
+    // getting the rendering material to acutally drawing it to the screen?(especially for Metal)
     v3 p;
     v3 dim;
-    // TODO(gh) Should we store the full matrix here to reduce time from
-    // getting the rendering material to acutally drawing it to the screen?(especially for Metal)
     quat orientation; // NOTE(gh) this should be a pure quaternion
+
     v3 color;
 };
 

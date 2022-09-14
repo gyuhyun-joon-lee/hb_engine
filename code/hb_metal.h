@@ -20,6 +20,14 @@ struct MetalManagedBuffer
     id<MTLBuffer> buffer;
 };
 
+// TODO(gh) maybe this is a good idea?
+struct MetalTexture2D
+{
+    id<MTLTexture> texture;
+    i32 width;
+    i32 height;
+};
+
 struct MetalRenderContext
 {
     id<MTLDevice> device;
@@ -27,21 +35,27 @@ struct MetalRenderContext
     id<MTLCommandQueue> command_queue;
 
     id<MTLDepthStencilState> depth_state; // compare <=, write : enabled
-    id<MTLDepthStencilState> disabled_depth_state; // compare <=, write : enabled
+    id<MTLDepthStencilState> disabled_depth_state; // write : disabled
 
     // Pipelines
     id<MTLRenderPipelineState> cube_pipeline;
     id<MTLRenderPipelineState> line_pipeline;
     id<MTLRenderPipelineState> deferred_lighting_pipeline;
+    id<MTLRenderPipelineState> directional_light_shadowmap_pipeline;
     
     // Renderpasses
     MTLRenderPassDescriptor *g_buffer_renderpass;
+    MTLRenderPassDescriptor *directional_light_shadowmap_renderpass;
 
     // Textures
     id<MTLTexture> g_buffer_position_texture;
     id<MTLTexture> g_buffer_normal_texture;
     id<MTLTexture> g_buffer_color_texture;
     id<MTLTexture> g_buffer_depth_texture;
+
+    i32 directional_light_shadowmap_depth_texture_width;
+    i32 directional_light_shadowmap_depth_texture_height;
+    id<MTLTexture> directional_light_shadowmap_depth_texture;
 
     // Buffers
     MetalManagedBuffer voxel_position_buffer;

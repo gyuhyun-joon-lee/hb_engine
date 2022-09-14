@@ -7,12 +7,10 @@
 #include "hb_font.h"
 #include "hb_simulation.h"
 #include "hb_entity.h"
-#include "hb_voxel.h"
 #include "hb_render_group.h"
 #include "hb.h"
 
 #include "hb_mesh_loader.cpp"
-#include "hb_voxel.cpp"
 #include "hb_ray.cpp"
 #include "hb_simulation.cpp"
 #include "hb_entity.cpp"
@@ -36,21 +34,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->max_entity_count = 1024;
         game_state->entities = (Entity *)malloc(sizeof(Entity) * game_state->max_entity_count);
 
-        u32 voxel_x_count = 8;
-        u32 voxel_y_count = 1;
-        u32 voxel_z_count = 8;
-        initialize_voxel_world(&game_state->voxel_world, voxel_x_count, voxel_y_count, voxel_z_count, V3(1, 1, 1));
-
-#if 0 
-        //PlatformReadFileResult vox_file = platform_api->read_file("/Volumes/hb/hb_renderer/data/vox/chr_knight.vox");
-        PlatformReadFileResult vox_file = platform_api->read_file("/Volumes/hb/hb_renderer/data/vox/monu10.vox");
-        load_vox_result loaded_vox = load_vox(vox_file.memory, vox_file.size);
-        platform_api->free_file_memory(vox_file.memory);
-
-        //add_voxel_entity_from_vox_file(game_state, loaded_vox);
-        free_loaded_vox(&loaded_vox);
-#endif
-
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
@@ -62,7 +45,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
 
-        add_voxel(&game_state->voxel_world, 0, 0, 0);
         add_floor_entity(game_state, V3(0, 0, 0), V3(10, 10, 10), V3(1, 1, 1));
         
         game_state->is_initialized = true;

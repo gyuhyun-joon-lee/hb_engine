@@ -20,9 +20,6 @@ struct GameState
 
     // TODO(gh) seed this properly
     RandomSeries random_series;
-
-    // NOTE(gh) voxel related things... need to clean up later
-    VoxelWorld voxel_world;
 };
 
 #endif

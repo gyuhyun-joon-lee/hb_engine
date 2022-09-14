@@ -517,7 +517,7 @@ start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_p
 
     // TODO(gh) APIs differ in how they define their NDC, so maybe just pull this out 
     // to the platform code and just pass the orientation quaternion
-    // TODO(gh) we can push the camera transform as a render entry, so that we can change the camera dynamically?
+    // TODO(gh) we can push the camera transform as a render entry, so that we can change the camera dynamically? (But how would that work, if we sort the entries?)
     m4x4 proj = project(camera->focal_length, render_push_buffer->width_over_height, 0.1f, 10000.0f);
     // TODO(gh) This should not be necessary?
     m4x4 view = rhs_to_lhs(camera_transform(camera));
