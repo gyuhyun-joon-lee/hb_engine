@@ -42,10 +42,14 @@ struct MetalRenderContext
     id<MTLRenderPipelineState> line_pipeline;
     id<MTLRenderPipelineState> deferred_lighting_pipeline;
     id<MTLRenderPipelineState> directional_light_shadowmap_pipeline;
+    id<MTLRenderPipelineState> screen_space_triangle_pipeline;
     
     // Renderpasses
-    MTLRenderPassDescriptor *g_buffer_renderpass;
     MTLRenderPassDescriptor *directional_light_shadowmap_renderpass;
+
+    // NOTE(gh) G buffer generation + lighting renderpass
+    // TODO(gh) One downside of this single pass is that we don't have access to depth buffer
+    MTLRenderPassDescriptor *single_lighting_renderpass; 
 
     // Textures
     id<MTLTexture> g_buffer_position_texture;

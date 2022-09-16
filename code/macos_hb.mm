@@ -1,4 +1,4 @@
-#include <Cocoa/Cocoa.h> // APPKIT
+# include <Cocoa/Cocoa.h> // APPKIT
 #include <CoreGraphics/CoreGraphics.h> 
 #include <mach/mach_time.h> // mach_absolute_time
 #include <stdio.h> // printf for debugging purpose
@@ -418,6 +418,8 @@ thread_proc(void *data)
 
 f32 cube_vertices[] = 
 {
+#if 0
+    -0.5f, -0.5f,  
     0.5f, -0.5f, -0.5f,
     0.5f, 0.5f, -0.5f,
     -0.5f, 0.5f, -0.5f,
@@ -427,63 +429,225 @@ f32 cube_vertices[] =
     0.5f, 0.5f, 0.5f,
     -0.5f, 0.5f, 0.5f,
     -0.5f, -0.5f, 0.5f, 
+#endif
+    // -x
+    -0.5f,-0.5f,-0.5f, // triangle 1 : begin
+    -0.5f,-0.5f, 0.5f,
+    -0.5f, 0.5f, 0.5f, // triangle 1 : end
+
+    // -z
+    0.5f, 0.5f,-0.5f, // triangle 2 : begin
+    -0.5f,-0.5f,-0.5f,
+    -0.5f, 0.5f,-0.5f, // triangle 2 : end
+
+    // -y
+    0.5f,-0.5f, 0.5f,
+    -0.5f,-0.5f,-0.5f,
+    0.5f,-0.5f,-0.5f,
+
+    // -z
+    0.5f, 0.5f,-0.5f,
+    0.5f,-0.5f,-0.5f,
+    -0.5f,-0.5f,-0.5f,
+
+    // -x
+    -0.5f,-0.5f,-0.5f,
+    -0.5f, 0.5f, 0.5f,
+    -0.5f, 0.5f,-0.5f,
+
+    // -y
+    0.5f,-0.5f, 0.5f,
+    -0.5f,-0.5f, 0.5f,
+    -0.5f,-0.5f,-0.5f,
+
+    // +z
+    -0.5f, 0.5f, 0.5f,
+    -0.5f,-0.5f, 0.5f,
+    0.5f,-0.5f, 0.5f,
+
+    // +x
+    0.5f, 0.5f, 0.5f,
+    0.5f,-0.5f,-0.5f,
+    0.5f, 0.5f,-0.5f,
+
+    // +x
+    0.5f,-0.5f,-0.5f,
+    0.5f, 0.5f, 0.5f,
+    0.5f,-0.5f, 0.5f,
+
+    // +y
+    0.5f, 0.5f, 0.5f,
+    0.5f, 0.5f,-0.5f,
+    -0.5f, 0.5f,-0.5f,
+
+    // +y
+    0.5f, 0.5f, 0.5f,
+    -0.5f, 0.5f,-0.5f,
+    -0.5f, 0.5f, 0.5f,
+
+    // +z
+    0.5f, 0.5f, 0.5f,
+    -0.5f, 0.5f, 0.5f,
+    0.5f,-0.5f, 0.5f    
 };
 
 f32 cube_normals[] = 
 {
-    0.5f, -0.5f, -0.5f,
-    0.5f, 0.5f, -0.5f,
-    -0.5f, 0.5f, -0.5f,
-    -0.5f, -0.5f, -0.5f, 
+    // -x
+    -1, 0, 0,
+    -1, 0, 0,
+    -1, 0, 0,
 
-    0.5f, -0.5f, 0.5f,
-    0.5f, 0.5f, 0.5f,
-    -0.5f, 0.5f, 0.5f,
-    -0.5f, -0.5f, 0.5f, 
-};
+    // -z
+    0, 0, -1,
+    0, 0, -1,
+    0, 0, -1,
 
-u32 cube_outward_facing_indices[]
-{
-    //+z
-    4, 5, 7,
-    5, 6, 7,
+    // -y
+    0, -1, 0,
+    0, -1, 0,
+    0, -1, 0,
 
-    //-z
-    0, 2, 1, 
-    0, 3, 2, 
+    // -z
+    0, 0, -1,
+    0, 0, -1,
+    0, 0, -1,
 
-    //+x
-    4, 0, 5,
-    0, 1, 5,
+    // -x
+    -1, 0, 0,
+    -1, 0, 0,
+    -1, 0, 0,
 
-    //-x
-    2, 3, 7,
-    2, 7, 6,
+    // -y
+    0, -1, 0,
+    0, -1, 0,
+    0, -1, 0,
 
-    //+y
-    1, 2, 6,
-    1, 6, 5,
+    // +z
+    0, 0, 1,
+    0, 0, 1,
+    0, 0, 1,
 
-    //-y
-    3, 0, 4,
-    3, 4, 7
+    // +x
+    1, 0, 0, 
+    1, 0, 0, 
+    1, 0, 0, 
+
+    // +x
+    1, 0, 0, 
+    1, 0, 0, 
+    1, 0, 0, 
+
+    // +y
+    0, 1, 0,
+    0, 1, 0,
+    0, 1, 0,
+
+    // +y
+    0, 1, 0,
+    0, 1, 0,
+    0, 1, 0,
+
+    // +z
+    0, 0, 1,
+    0, 0, 1,
+    0, 0, 1,
 };
 
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
 // and put them inside the render mesh so that the graphics API can render them.
 internal void
-metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, v3 light_p)
+metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 dt_per_frame)
 {
-    // NOTE(gh): renderpass descriptor is already configured for this frame
-    MTLRenderPassDescriptor *current_frame_renderpass = render_context->view.currentRenderPassDescriptor;
+    id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
 
-    if(current_frame_renderpass)
+    id<MTLRenderCommandEncoder> shadowmap_render_encoder = [command_buffer renderCommandEncoderWithDescriptor : render_context->directional_light_shadowmap_renderpass];
+    metal_set_viewport(shadowmap_render_encoder, 0, 0, 
+                       render_context->directional_light_shadowmap_depth_texture_width, render_context->directional_light_shadowmap_depth_texture_height, 
+                       0, 1); // TODO(gh) near and far value when rendering the shadowmap)
+    metal_set_scissor_rect(shadowmap_render_encoder, 0, 0, 
+                           render_context->directional_light_shadowmap_depth_texture_width, render_context->directional_light_shadowmap_depth_texture_height);
+    metal_set_triangle_fill_mode(shadowmap_render_encoder, MTLTriangleFillModeFill);
+    metal_set_front_facing_winding(shadowmap_render_encoder, MTLWindingCounterClockwise);
+    metal_set_cull_mode(shadowmap_render_encoder, MTLCullModeBack);
+    metal_set_detph_stencil_state(shadowmap_render_encoder, render_context->depth_state);
+    metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
+
+    local_persist f32 rad = 0.0f;
+    rad += dt_per_frame;
+    v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 5); 
+    v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
+
+    // TODO(gh) setup proj and view matrices properly!
+    // TODO(gh) These are totally made up near, far, width values 
+    m4x4 light_proj = perspective_projection(0.01f, 100.0f, 0.01f, 1.0f);
+    v3 directional_light_z_axis = -directional_light_direction;
+    v3 directional_light_x_axis = normalize(cross(V3(0, 0, 1), directional_light_z_axis));
+    v3 directional_light_y_axis = normalize(cross(directional_light_z_axis, directional_light_x_axis));
+    m4x4 light_view = camera_transform(directional_light_p, directional_light_x_axis, directional_light_y_axis, directional_light_z_axis);
+    m4x4 light_proj_view = transpose(light_proj * light_view); // Change to column major
+
+    // NOTE(gh) Render Shadow map
+    for(u32 consumed = 0;
+            consumed < render_push_buffer->used;
+            )
     {
-        id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
+        RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_push_buffer->base + consumed);
+
+        switch(header->type)
+        {
+            case RenderEntryType_Line:
+            {
+                RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
+                consumed += sizeof(*entry);
+            }break;
+
+            case RenderEntryType_AABB:
+            {
+                RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
+                consumed += sizeof(*entry);
+
+                m4x4 model = st_m4x4(entry->p, entry->dim);
+                model = transpose(model); // make the matrix column-major
+
+                metal_set_vertex_bytes(shadowmap_render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
+                metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
+
+                metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
+
+                metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
+            }break;
+
+            case RenderEntryType_Cube:
+            {
+                RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
+                consumed += sizeof(*entry);
+
+                invalid_code_path;
+            }break;
+
+            default: 
+            {
+                invalid_code_path;
+            }
+        }
+    }
+
+    metal_end_encoding(shadowmap_render_encoder);
+
+    id <MTLTexture> drawable_texture =  render_context->view.currentDrawable.texture;
+    if(drawable_texture)
+    {
+        render_context->single_lighting_renderpass.colorAttachments[0].texture = drawable_texture;
+        render_context->single_lighting_renderpass.colorAttachments[0].clearColor = {render_push_buffer->clear_color.r,
+                                                                                     render_push_buffer->clear_color.g,
+                                                                                     render_push_buffer->clear_color.b,
+                                                                                     1.0f};
+
         // TODO(gh) double check whether this thing is freed automatically or not
         // if not, we can pull this outside, and put this inside the render context
         // NOTE(gh) When we create a render_encoder, we cannot create another render encoder until we call endEncoding on the current one.
-        id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->g_buffer_renderpass];
+        id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->single_lighting_renderpass];
 
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
@@ -492,9 +656,15 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_cull_mode(render_encoder, MTLCullModeBack);
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
-
         PerFrameData per_frame_data = {};
-        per_frame_data.proj_view = render_push_buffer->proj_view; // already calculated from the game code
+
+        //m4x4 proj = orthogonal_projection(render_push_buffer->camera_near, render_push_buffer->camera_far,
+                                           //render_push_buffer->camera_width, render_push_buffer->width_over_height);
+
+        m4x4 proj = perspective_projection(render_push_buffer->camera_near, render_push_buffer->camera_far,
+                                           render_push_buffer->camera_width, render_push_buffer->width_over_height);
+
+        per_frame_data.proj_view = transpose(proj * render_push_buffer->view); // already calculated from the game code
 
         // NOTE(gh) per frame data is always the 0th buffer
         metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
@@ -550,16 +720,18 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                     metal_set_pipeline(render_encoder, render_context->cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                    metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 2);
+                    metal_set_vertex_bytes(render_encoder, cube_vertices, array_size(cube_vertices), 2);
                     metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
-                    metal_set_vertex_bytes(render_encoder, &light_p, sizeof(light_p), 4);
+                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 4);
 
-                    metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
-                            render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), 1);
+                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+
+                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
                 }break;
 
                 case RenderEntryType_Cube:
                 {
+#if 0
                     RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
@@ -576,9 +748,13 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 2);
                     metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
 
+                    metal_set_vertex_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+
                     metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
                             render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), 1);
 
+#endif
+                    invalid_code_path;
                 }break;
             }
         }
@@ -602,7 +778,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_vertex_bytes(render_encoder, &x_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
 
-        // y axis
+        /current_frame_renderpass/ y axis
         metal_set_vertex_bytes(render_encoder, y_axis, sizeof(f32) * array_count(y_axis), 1);
         metal_set_vertex_bytes(render_encoder, &y_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
@@ -613,94 +789,55 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
 #endif
 
-        metal_end_encoding(render_encoder);
+#if 1
+        // NOTE(gh) draw light cube for indication
+        m4x4 model = st_m4x4(directional_light_p, V3(0.5f, 0.5f, 0.5f));
+        model = transpose(model); // make the matrix column-major
+        PerObjectData per_object_data = {};
+        per_object_data.model = model;
+        per_object_data.color = V3(1, 0, 0);
 
-        id<MTLRenderCommandEncoder> shadowmap_render_encoder = [command_buffer renderCommandEncoderWithDescriptor : render_context->directional_light_shadowmap_renderpass];
-        metal_set_viewport(shadowmap_render_encoder, 0, 0, 
-                           render_context->directional_light_shadowmap_depth_texture_width, render_context->directional_light_shadowmap_depth_texture_height, 
-                           0, 1); // TODO(gh) near and far value when rendering the shadowmap)
-        metal_set_scissor_rect(shadowmap_render_encoder, 0, 0, 
-                               render_context->directional_light_shadowmap_depth_texture_width, render_context->directional_light_shadowmap_depth_texture_height);
-        metal_set_triangle_fill_mode(shadowmap_render_encoder, MTLTriangleFillModeFill);
-        metal_set_front_facing_winding(shadowmap_render_encoder, MTLWindingCounterClockwise);
-        metal_set_cull_mode(shadowmap_render_encoder, MTLCullModeBack);
-        metal_set_detph_stencil_state(shadowmap_render_encoder, render_context->depth_state);
-        metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
+        metal_set_pipeline(render_encoder, render_context->cube_pipeline);
+        metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
+        metal_set_vertex_bytes(render_encoder, cube_vertices, array_size(cube_vertices), 2);
+        metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
+        metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 4);
 
-        // NOTE(gh) Render Shadow map
-        for(u32 consumed = 0;
-                consumed < render_push_buffer->used;
-                )
-        {
-            RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_push_buffer->base + consumed);
+        metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
 
-            switch(header->type)
-            {
-                case RenderEntryType_Line:
-                {
-                    RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += sizeof(*entry);
-                }break;
+        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
+#endif
 
-                case RenderEntryType_AABB:
-                {
-                    RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += sizeof(*entry);
-
-                    m4x4 model = st_m4x4(entry->p, entry->dim);
-                    model = transpose(model); // make the matrix column-major
-
-                    // Also draw the entry into the shadowmap
-                    // TODO(gh) not feeling strong about this, I need to find out how render encoder works with the command buffer
-                    // and how they are queued up.
-                    metal_set_vertex_bytes(shadowmap_render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
-                    metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
-                    // TODO(gh) setup proj and view matrices properly!
-                    m4x4 light_proj = M4x4();
-                    m4x4 light_view = M4x4();
-                    m4x4 light_proj_view = per_frame_data.proj_view; //transpose(light_proj * light_view); // Change to column major
-                    metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
-
-                    metal_draw_indexed_instances(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
-                            render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), 1);
-                }break;
-
-                case RenderEntryType_Cube:
-                {
-                    RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += sizeof(*entry);
-                }break;
-
-                default: 
-                {
-                    invalid_code_path;
-                }
-            }
-        }
-
-        metal_end_encoding(shadowmap_render_encoder);
-
-
-        id<MTLRenderCommandEncoder> present_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: current_frame_renderpass];
-
-        metal_set_viewport(present_render_encoder, 0, 0, window_width, window_height, 0, 1);
-        metal_set_scissor_rect(present_render_encoder, 0, 0, window_width, window_height);
-        metal_set_triangle_fill_mode(present_render_encoder, MTLTriangleFillModeFill);
-        metal_set_front_facing_winding(present_render_encoder, MTLWindingCounterClockwise);
-        metal_set_cull_mode(present_render_encoder, MTLCullModeBack);
+        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
+        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
+        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
+        metal_set_cull_mode(render_encoder, MTLCullModeBack);
         // NOTE(gh) disable depth testing in current renderpass for deferred lighting(we should be overwriting the whole screen)
-        metal_set_detph_stencil_state(present_render_encoder, render_context->disabled_depth_state);
+        metal_set_detph_stencil_state(render_encoder, render_context->disabled_depth_state);
 
-        metal_set_pipeline(present_render_encoder, render_context->deferred_lighting_pipeline);
+        metal_set_pipeline(render_encoder, render_context->deferred_lighting_pipeline);
 
-        metal_set_fragment_texture(present_render_encoder, render_context->g_buffer_position_texture, 0);
-        metal_set_fragment_texture(present_render_encoder, render_context->g_buffer_normal_texture, 1);
-        metal_set_fragment_texture(present_render_encoder, render_context->g_buffer_color_texture, 2);
-        metal_set_fragment_texture(present_render_encoder, render_context->g_buffer_depth_texture, 3);
+        metal_set_vertex_bytes(render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
 
-        metal_draw_non_indexed(present_render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
+        // no need to set fragment texture anymore, we are going to load from tile memory diretly - love it!
 
-        metal_end_encoding(present_render_encoder);
+        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
+
+#if 0
+        v3 screen_space_triangle_vertices[] = 
+        {
+            {-0.7f, -0.7f, 1.0f},
+            {0.7f, -0.7f, 1.0f},
+            {0.0f, 0.7f, 1.0f},
+        };
+
+        metal_set_pipeline(present_render_encoder, render_context->screen_space_triangle_pipeline);
+        metal_set_vertex_bytes(present_render_encoder, screen_space_triangle_vertices, array_size(screen_space_triangle_vertices), 0);
+        metal_draw_non_indexed(present_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(screen_space_triangle_vertices));
+#endif
+
+        metal_end_encoding(render_encoder);
 
         metal_present_drawable(command_buffer, render_context->view);
 
@@ -887,51 +1024,79 @@ int main(void)
                                                                 error: &error];
     check_ns_error(error);
 
-    MTLPixelFormat cube_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatRGBA32Float, // position
-                                                                   MTLPixelFormatRGBA32Float, // normal
-                                                                   MTLPixelFormatRGBA8Unorm}; // color
-    MTLColorWriteMask cube_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll, MTLColorWriteMaskAll, MTLColorWriteMaskAll};
-    metal_render_context.cube_pipeline = metal_make_pipeline(device, "Cube Pipeline", "cube_vertex", "cube_frag", 
-                                                                         shader_library,
-                                                                         MTLPrimitiveTopologyClassTriangle,
-                                                                         cube_pipeline_color_attachment_pixel_formats, array_count(cube_pipeline_color_attachment_pixel_formats),
-                                                                         cube_pipeline_color_attachment_write_masks, array_count(cube_pipeline_color_attachment_write_masks),
-                                                                         view.depthStencilPixelFormat);
+    MTLPixelFormat cube_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm, // placeholder for single pass deferred rendering
+                                                                     MTLPixelFormatRGBA32Float, // position
+                                                                     MTLPixelFormatRGBA32Float, // normal
+                                                                     MTLPixelFormatRGBA8Unorm}; // color
+    MTLColorWriteMask cube_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskNone,
+                                                                      MTLColorWriteMaskAll, 
+                                                                      MTLColorWriteMaskAll,
+                                                                      MTLColorWriteMaskAll};
+    metal_render_context.cube_pipeline = 
+        metal_make_pipeline(device, "Cube Pipeline", 
+                            "cube_vertex", "cube_frag", 
+                            shader_library,
+                            MTLPrimitiveTopologyClassTriangle,
+                            cube_pipeline_color_attachment_pixel_formats, array_count(cube_pipeline_color_attachment_pixel_formats),
+                            cube_pipeline_color_attachment_write_masks, array_count(cube_pipeline_color_attachment_write_masks),
+                            view.depthStencilPixelFormat);
 
-    MTLPixelFormat deferred_lighting_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm}; // This is the default pixel format for displaying
-    MTLColorWriteMask deferred_lighting_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll};
-    metal_render_context.deferred_lighting_pipeline = metal_make_pipeline(device, "Deferred Lighting Pipeline", "deferred_lighting_vertex", "deferred_lighting_frag", 
-                                                                         shader_library,
-                                                                         MTLPrimitiveTopologyClassTriangle,
-                                                                         deferred_lighting_pipeline_color_attachment_pixel_formats, array_count(deferred_lighting_pipeline_color_attachment_pixel_formats),
-                                                                         deferred_lighting_pipeline_color_attachment_write_masks, array_count(deferred_lighting_pipeline_color_attachment_write_masks),
-                                                                         MTLPixelFormatDepth32Float);
+    MTLPixelFormat deferred_lighting_pipeline_color_attachment_pixel_formats[] = 
+        {MTLPixelFormatBGRA8Unorm, // This is the default pixel format for displaying
+         MTLPixelFormatRGBA32Float, 
+         MTLPixelFormatRGBA32Float,
+         MTLPixelFormatRGBA8Unorm};
+    MTLColorWriteMask deferred_lighting_pipeline_color_attachment_write_masks[] = 
+        {MTLColorWriteMaskAll,
+         MTLColorWriteMaskNone,
+         MTLColorWriteMaskNone,
+         MTLColorWriteMaskNone};
+    metal_render_context.deferred_lighting_pipeline = 
+        metal_make_pipeline(device, "Deferred Lighting Pipeline", 
+                            "deferred_lighting_vertex", "deferred_lighting_frag", 
+                            shader_library,
+                            MTLPrimitiveTopologyClassTriangle,
+                            deferred_lighting_pipeline_color_attachment_pixel_formats, array_count(deferred_lighting_pipeline_color_attachment_pixel_formats),
+                            deferred_lighting_pipeline_color_attachment_write_masks, array_count(deferred_lighting_pipeline_color_attachment_write_masks),
+                            MTLPixelFormatDepth32Float);
 
-    metal_render_context.directional_light_shadowmap_pipeline = metal_make_pipeline(device, "Directional Light Shadowmap Pipeline", 
-                                                                         "directional_light_shadowmap_vert", 0, 
-                                                                         shader_library,
-                                                                         MTLPrimitiveTopologyClassTriangle,
-                                                                         0, 0,
-                                                                         0, 0,
-                                                                         MTLPixelFormatDepth32Float);
+    metal_render_context.directional_light_shadowmap_pipeline = 
+        metal_make_pipeline(device, "Directional Light Shadowmap Pipeline", 
+                            "directional_light_shadowmap_vert", 0, 
+                            shader_library,
+                            MTLPrimitiveTopologyClassTriangle,
+                            0, 0,
+                            0, 0,
+                            MTLPixelFormatDepth32Float);
 
 
     MTLPixelFormat line_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm}; // This is the default pixel format for displaying
     MTLColorWriteMask line_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll};
-    metal_render_context.line_pipeline = metal_make_pipeline(device, "Line Pipeline", "line_vertex", "line_frag",
-                                                                         shader_library,
-                                                                         MTLPrimitiveTopologyClassLine,
-                                                                         line_pipeline_color_attachment_pixel_formats, array_count(line_pipeline_color_attachment_pixel_formats),
-                                                                         line_pipeline_color_attachment_write_masks, array_count(line_pipeline_color_attachment_write_masks),
-                                                                         view.depthStencilPixelFormat);
+    metal_render_context.line_pipeline = 
+        metal_make_pipeline(device, "Line Pipeline", "line_vertex", "line_frag",
+                            shader_library,
+                            MTLPrimitiveTopologyClassLine,
+                            line_pipeline_color_attachment_pixel_formats, array_count(line_pipeline_color_attachment_pixel_formats),
+                            line_pipeline_color_attachment_write_masks, array_count(line_pipeline_color_attachment_write_masks),
+                            view.depthStencilPixelFormat);
 
-
-
+    MTLPixelFormat screen_space_triangle_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm}; // This is the default pixel format for displaying
+    MTLColorWriteMask screen_space_triangle_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll};
+    metal_render_context.screen_space_triangle_pipeline = 
+        metal_make_pipeline(device, "Sreen Space Triangle Pipeline", "screen_space_triangle_vert", "screen_space_triangle_frag",
+                            shader_library,
+                            MTLPrimitiveTopologyClassTriangle,
+                            screen_space_triangle_pipeline_color_attachment_pixel_formats, array_count(screen_space_triangle_pipeline_color_attachment_pixel_formats),
+                            screen_space_triangle_pipeline_color_attachment_write_masks, array_count(screen_space_triangle_pipeline_color_attachment_write_masks),
+                            view.depthStencilPixelFormat);
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
 
 
     // NOTE(gh) Create required textures
+
+    // NOTE(gh) For apple silicons, we can use single pass deferred rendering,
+    // which requires MTLStorageModeMemoryless(cannot use MTLLoadActionLoad & MTLStoreActionStore))
     metal_render_context.g_buffer_position_texture  = 
         metal_make_texture_2D(device, 
                               MTLPixelFormatRGBA32Float, 
@@ -939,7 +1104,7 @@ int main(void)
                               window_height,
                               MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
-                              MTLStorageModePrivate);
+                              MTLStorageModeMemoryless);
 
     metal_render_context.g_buffer_normal_texture  = 
         metal_make_texture_2D(device, 
@@ -948,7 +1113,7 @@ int main(void)
                               window_height,
                               MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
-                              MTLStorageModePrivate);
+                              MTLStorageModeMemoryless);
 
     metal_render_context.g_buffer_color_texture  = 
         metal_make_texture_2D(device, 
@@ -957,7 +1122,7 @@ int main(void)
                               window_height,
                               MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
-                              MTLStorageModePrivate);
+                              MTLStorageModeMemoryless);
 
     metal_render_context.g_buffer_depth_texture  = 
         metal_make_texture_2D(device, 
@@ -966,27 +1131,34 @@ int main(void)
                               window_height,
                               MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
-                              MTLStorageModePrivate);
+                              MTLStorageModeMemoryless);
 
-    MTLLoadAction g_buffer_renderpass_color_attachment_load_actions[] = {MTLLoadActionClear,
-                                                                         MTLLoadActionClear,
-                                                                         MTLLoadActionClear};
-    MTLStoreAction g_buffer_renderpass_color_attachment_store_actions[] = {MTLStoreActionStore,
-                                                                         MTLStoreActionStore,
-                                                                         MTLStoreActionStore};
-    id<MTLTexture> g_buffer_renderpass_color_attachment_textures[] = {metal_render_context.g_buffer_position_texture,
-                                                                      metal_render_context.g_buffer_normal_texture,
-                                                                      metal_render_context.g_buffer_color_texture};
-    v4 g_buffer_renderpass_color_attachment_clear_colors[] = {{0, 0, 0, 0},
-                                                              {0, 0, 0, 0},
-                                                              {0, 0, 0, 0}};
-
-    metal_render_context.g_buffer_renderpass = 
-        metal_make_renderpass(g_buffer_renderpass_color_attachment_load_actions, array_count(g_buffer_renderpass_color_attachment_load_actions),
-                              g_buffer_renderpass_color_attachment_store_actions, array_count(g_buffer_renderpass_color_attachment_store_actions),
-                              g_buffer_renderpass_color_attachment_textures, array_count(g_buffer_renderpass_color_attachment_textures),
-                              g_buffer_renderpass_color_attachment_clear_colors, array_count(g_buffer_renderpass_color_attachment_clear_colors),
-                              MTLLoadActionClear, MTLStoreActionStore, 
+    MTLLoadAction single_lighting_renderpass_color_attachment_load_actions[] = 
+        {MTLLoadActionClear,
+        MTLLoadActionClear,
+        MTLLoadActionClear,
+        MTLLoadActionClear};
+    MTLStoreAction single_lighting_renderpass_color_attachment_store_actions[] = 
+        {MTLStoreActionStore,
+        MTLStoreActionDontCare,
+        MTLStoreActionDontCare,
+        MTLStoreActionDontCare};
+    id<MTLTexture> single_lighting_renderpass_color_attachment_textures[] = 
+        {0,
+        metal_render_context.g_buffer_position_texture,
+        metal_render_context.g_buffer_normal_texture,
+        metal_render_context.g_buffer_color_texture};
+    v4 single_lighting_renderpass_color_attachment_clear_colors[] = 
+        {{0, 0, 0, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}};
+    metal_render_context.single_lighting_renderpass = 
+        metal_make_renderpass(single_lighting_renderpass_color_attachment_load_actions, array_count(single_lighting_renderpass_color_attachment_load_actions),
+                              single_lighting_renderpass_color_attachment_store_actions, array_count(single_lighting_renderpass_color_attachment_store_actions),
+                              single_lighting_renderpass_color_attachment_textures, array_count(single_lighting_renderpass_color_attachment_textures),
+                              single_lighting_renderpass_color_attachment_clear_colors, array_count(single_lighting_renderpass_color_attachment_clear_colors),
+                              MTLLoadActionClear, MTLStoreActionDontCare, 
                               metal_render_context.g_buffer_depth_texture,
                               1.0f);
 
@@ -999,8 +1171,7 @@ int main(void)
                               metal_render_context.directional_light_shadowmap_depth_texture_height,
                               MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
-                              MTLStorageModeManaged);
-
+                              MTLStorageModePrivate);
     metal_render_context.directional_light_shadowmap_renderpass = 
         metal_make_renderpass(0, 0,
                               0, 0,
@@ -1015,12 +1186,6 @@ int main(void)
     metal_render_context.command_queue = command_queue;
 
     // TODO(gh) More robust way to manage these buffers??(i.e asset system?)
-    metal_render_context.voxel_position_buffer = metal_create_managed_buffer(device, megabytes(16));
-    metal_render_context.voxel_color_buffer = metal_create_managed_buffer(device, megabytes(4));
-    metal_render_context.cube_outward_facing_index_buffer = metal_create_managed_buffer(device, sizeof(u32) * array_count(cube_outward_facing_indices));
-    metal_append_to_managed_buffer(&metal_render_context.cube_outward_facing_index_buffer, 
-                                    cube_outward_facing_indices, 
-                                    metal_render_context.cube_outward_facing_index_buffer.max_size);
 
     CVDisplayLinkRef display_link;
     if(CVDisplayLinkCreateWithActiveCGDisplays(&display_link)== kCVReturnSuccess)
@@ -1107,12 +1272,10 @@ int main(void)
         @autoreleasepool
         {
             static f32 e = 0.0f;
-            v3 light_p = V3(100.0f*cosf(e), 0.0f, 100.0f*sinf(e));
-            light_p = V3(0, 0, 100.0f);
 
             // NOTE(gh) first, render to the g buffers
 
-            metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height, light_p);
+            metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height, target_seconds_per_frame);
             e += time_passed_in_sec;
         }
 

@@ -44,9 +44,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->random_series = start_random_series(123123);
 
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
-        game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 1.0f);
+        game_state->circle_camera = init_circle_camera(V3(0, 0, 10), V3(0, 0, 0), 10.0f, 0.01f, 10000.0f);
 
-        add_floor_entity(game_state, V3(0, 0, 0), V3(1, 1, 1), V3(1, 1, 1));
+        add_floor_entity(game_state, V3(0, 0, 2), V3(1, 1, 1), V3(1, 1, 1));
+        add_floor_entity(game_state, V3(0, 0, 0), V3(10, 10, 1), V3(1.0f, 1.0f, 1.0f));
         
         game_state->is_initialized = true;
     }
@@ -86,77 +87,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                     cosf(game_state->circle_camera.rad);
     game_state->circle_camera.p.y = game_state->circle_camera.distance_from_axis * 
                                     sinf(game_state->circle_camera.rad);
-    game_state->circle_camera.rad += 10.0f * platform_input->dt_per_frame;
-
-    /*
-        NOTE(gh) How we are going to update the entities (without the friction)
-        - move the entities, without thinking about the interpenetration
-            - knowing where the first collision p can be done, but very expensive
-        - generate collision data
-            - to avoid oop, we use the good-old push buffer, with header(entities, friction, restitution, data count),
-              followed by the data(contact point, normal, and penetration depth)
-        - resolve interpenetration
-        - resolve collision
-    */
+    // game_state->circle_camera.rad += 1.0f * platform_input->dt_per_frame;
     
     // NOTE(gh) update entity start
-    for(u32 entity_index = 0;
-        entity_index < game_state->entity_count;
-        ++entity_index)
-    {
-        Entity *entity = game_state->entities + entity_index;
-        switch(entity->type)
-        {
-            case Entity_Type_AABB:
-            {
-                //move_entity(game_state, entity, platform_input->dt_per_frame);
-            }break;
-
-            case Entity_Type_Mass_Agg:
-            {
-                // TODO(gh) make physics not to be dependent to the framerate?
-                if(is_entity_flag_set(entity, Entity_Flag_Movable))
-                {
-                    move_mass_agg_entity(game_state, entity, platform_input->dt_per_frame, platform_input->space);
-                }
-            }break;
-
-            case Entity_Type_Cube:
-            {
-                RigidBody *rb = &entity->rb;
-                // NOTE(gh) Always should happen for all rigid bodies at the start of their update
-                init_rigid_body_and_calculate_derived_parameters_for_frame(rb);
-
-#if 0
-                if(!compare_with_epsilon(rb->inv_mass, 0.0f))
-                {
-                    // TODO(gh) This is a waste of time, as we are going to negate the mass portion anyway
-                    rb->force += V3(0, 0, -9.8f) / rb->inv_mass;
-                }
-#endif
-
-                v3 ddp = (rb->inv_mass * rb->force);
-            
-                rb->dp += platform_input->dt_per_frame * ddp;
-
-                rb->p += platform_input->dt_per_frame*rb->dp;
-
-                v3 angular_ddp = rb->transform_inv_inertia_tensor * rb->torque;
-                rb->angular_dp += platform_input->dt_per_frame * angular_ddp;
-                // NOTE(gh) equation here is orientation += 0.5f*dt*angular_ddp*orientation
-                rb->orientation += 0.5f*
-                                   platform_input->dt_per_frame*
-                                   Quat(0, rb->angular_dp) *
-                                   rb->orientation;
-                assert(is_pure_quat(rb->orientation));
-
-                // NOTE(gh) clear computed parameters
-                // TODO(gh) would be nice if we can put this in intialize rb function,
-                entity->rb.force = V3();
-                entity->rb.torque = V3();
-            }break;
-        }
-    }
 
     RenderGroup render_group = {};
     // start_render_group(&render_group, platform_render_push_buffer, &game_state->camera, V3(0, 0, 0));

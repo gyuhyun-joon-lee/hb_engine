@@ -4,10 +4,56 @@
 {\
     if(error)\
     {\
-        printf("check_metal_error failed inside the domain: %s code: %ld\n", [error.domain UTF8String], (long)error.code);\
+        printf("domain: %s code: %ld, ", [error.domain UTF8String], (long)error.code);\
+        printf("%s\n", [[error localizedDescription] UTF8String]); \
         assert(0);\
     }\
 }\
+
+// NOTE(gh) orthogonal projection matrix for (-1, -1, 0) to (1, 1, 1) NDC like Metal
+inline m4x4
+orthogonal_projection(f32 n, f32 f, f32 width, f32 width_over_height)
+{
+    f32 height = width / width_over_height;
+
+    m4x4 result = {};
+
+    // TODO(gh) Even though the resulting coordinates should be same, 
+    // it seems like Metal requires the w part of the homogeneous coordinate to be positive.
+    // Maybe that's how they are doing the frustum culling..?
+    result.rows[0] = V4(1/(width/2), 0, 0, 0);
+    result.rows[1] = V4(0, 1/(height/2), 0, 0);
+    result.rows[2] = V4(0, 0, 1/(n-f), n/(n-f)); // X and Y value does not effect the z value
+    result.rows[3] = V4(0, 0, 0, 1); // orthogonal projection does not need homogeneous coordinates
+
+    return result;
+}
+
+// NOTE(gh) persepctive projection matrix for (-1, -1, 0) to (1, 1, 1) NDC like Metal
+/*
+    Little tip in how we get the persepctive projection matrix
+    Think as 2D plane(x and z OR y and z), use triangle similarity to get projected Xp and Yp
+    For Z, as x and y don't have any effect on Z, we can say (A * Ze + b) / -Ze = Zp (diving by -Ze because homogeneous coords)
+
+    Based on what NDC we are using, -n should produce 0 or -1 value, while -f should produce 1.
+*/
+inline m4x4
+perspective_projection(f32 n, f32 f, f32 width, f32 width_over_height)
+{
+    f32 height = width / width_over_height;
+
+    m4x4 result = {};
+
+    // TODO(gh) Even though the resulting coordinates should be same, 
+    // it seems like Metal requires the w part of the homogeneous coordinate to be positive.
+    // Maybe that's how they are doing the frustum culling..?
+    result.rows[0] = V4(n / (width / 2), 0, 0, 0);
+    result.rows[1] = V4(0, n / (height / 2), 0, 0);
+    result.rows[2] = V4(0, 0, f/(n-f), (n*f)/(n-f)); // X and Y value does not effect the z value
+    result.rows[3] = V4(0, 0, -1, 0); // As Xp and Yp are dependant to Z value, this is the only way to divide Xp and Yp by -Ze
+
+    return result;
+}
 
 internal void
 metal_set_viewport(id<MTLRenderCommandEncoder> render_encoder, f32 x, f32 y, f32 width, f32 height, f32 near, f32 far)
@@ -260,6 +306,7 @@ metal_make_pipeline(id<MTLDevice> device,
     NSError *error;
     id<MTLRenderPipelineState> result = [device newRenderPipelineStateWithDescriptor:pipeline_descriptor
                                                                 error:&error];
+
     check_ns_error(error);
 
     [pipeline_descriptor release];
@@ -324,12 +371,20 @@ metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
     {
         result.colorAttachments[color_attachment_index].loadAction = load_actions[color_attachment_index]; // Will DONTCARE work here?
         result.colorAttachments[color_attachment_index].storeAction = store_actions[color_attachment_index];
-        result.colorAttachments[color_attachment_index].texture = textures[color_attachment_index];
 
-        result.colorAttachments[color_attachment_index].clearColor = {clear_colors[color_attachment_index].r,
-                                                                      clear_colors[color_attachment_index].g,
-                                                                      clear_colors[color_attachment_index].b,
-                                                                      clear_colors[color_attachment_index].a};
+        // NOTE(gh) Both textures and clear_colors are not essential
+        if(textures)
+        {
+            result.colorAttachments[color_attachment_index].texture = textures[color_attachment_index];
+        }
+
+        if(clear_colors)
+        {
+            result.colorAttachments[color_attachment_index].clearColor = {clear_colors[color_attachment_index].r,
+                                                                          clear_colors[color_attachment_index].g,
+                                                                          clear_colors[color_attachment_index].b,
+                                                                          clear_colors[color_attachment_index].a};
+        }
     }
 
     result.depthAttachment.loadAction = depth_load_action;

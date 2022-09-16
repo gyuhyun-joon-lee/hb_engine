@@ -36,9 +36,15 @@ struct RawMesh
 */
 
 /*
-   NOTE(gh) To avoid any confusion, the following things are true
-   - By default, camera coordinates = world coordinates
-   - camera -Z is the lookat direction
+    NOTE(gh) To avoid any confusion, the following things are true
+    - By default, camera coordinates = world coordinates (if the camera is not a circling camera)
+    - camera -Z is the lookat direction. View matrix will take account of this, 
+      and transform the world coordinate into the camera coordinate.
+    - focal length == near plane value(in world unit).
+      However, because the camera -Z is the lookat direction, it will be negated before being used
+      in the projection matrix.
+    - So before the projection matrix, near < far (i.e 1 < 5). 
+      However, in the projection matrix, n > f (i.e -1 > -5) because both values will be negated.
 */
 
 struct Camera
@@ -65,7 +71,9 @@ struct CircleCamera
     f32 rad;
     // TODO(gh) Allow this camera to rotate along any axis!
 
-    f32 focal_length;
+    // NOTE(gh) values along the camera z axis
+    f32 near;
+    f32 far;
 };
 
 enum RenderEntryType

@@ -16,6 +16,29 @@ struct PerObjectData
     float3 color;
 };
 
+struct ScreenSpaceTriangleVertexOutput
+{
+    float4 clip_p[[position]];
+};
+
+vertex ScreenSpaceTriangleVertexOutput
+screen_space_triangle_vert(uint vertex_ID [[vertex_id]],
+                             constant float *vertices[[buffer(0)]])
+{
+    ScreenSpaceTriangleVertexOutput result = {};
+    result.clip_p = float4(vertices[3*vertex_ID + 0], vertices[3*vertex_ID + 1], vertices[3*vertex_ID + 2], 1.0f);
+    
+    return result;
+}
+
+fragment float4
+screen_space_triangle_frag(ScreenSpaceTriangleVertexOutput vertex_output [[stage_in]])
+{
+    float4 result = float4(1, 0, 0, 1);
+
+    return result;
+}
+
 struct LineVertexOutput
 {
     float4 clip_p[[position]];
@@ -101,6 +124,9 @@ struct CubeVertexOutput
 
     float3 p;
     float3 N;
+    float depth;
+
+    float3 p_in_light_coordinate;
 };
 
 // TODO(gh) I don't like this...
@@ -117,9 +143,12 @@ cube_vertex(uint vertexID [[vertex_id]],
             constant PerFrameData *per_frame_data [[buffer(0)]],
             constant PerObjectData *per_object_data [[buffer(1)]], 
 
-            // TODO(gh) This is fine, as long as we will going to use instacing to draw the cubes
+            // TODO(gh) This is only fine for simple objects with not a lot of vertices
             constant float *positions [[buffer(2)]], 
-            constant float *normals [[buffer(3)]])
+            constant float *normals [[buffer(3)]],
+
+            // TODO(gh) Make a light buffer so that we can just pass that
+            constant float4x4 *light_proj_view[[buffer(4)]])
 {
     CubeVertexOutput result = {};
 
@@ -141,31 +170,54 @@ cube_vertex(uint vertexID [[vertex_id]],
     result.p = world_p.xyz;
     result.N = normalize(world_normal.xyz);
     result.color = per_object_data->color;
+    result.depth = result.clip_p.z / result.clip_p.w;
+
+    // NOTE(gh) because metal doesn't allow to pass the matrix to the fragment shader,
+    // we cannot do the shadow lighting on the deferred lighting pass(cannot get the light coordinate position)
+    // which is why we are doing this here.
+    float4 p_in_light_coordinate = (*light_proj_view) * world_p;
+    result.p_in_light_coordinate = p_in_light_coordinate.xyz / p_in_light_coordinate.w;
+
+    // NOTE(gh) Because NDC goes from (-1, -1, 0) to (1, 1, 1) in Metal, we need to change X and Y to range from 0 to 1
+    result.p_in_light_coordinate.xy = 0.5 * result.p_in_light_coordinate.xy + float2(0.5f, 0.5f);
+    result.p_in_light_coordinate.y = 1 - result.p_in_light_coordinate.y;
 
     return result;
 }
 
-// NOTE(gh) This will be outputted by the deferred pass before the lighting pass
 struct GBuffers
 {
     // TODO(gh) maybe this is too big... shrink these down by sacrificing precisions
-    float4 position [[color(0)]];
-    float4 normal [[color(1)]];
-    float4 color [[color(2)]];
-
-    float depth [[color(3)]];
+    // NOTE(gh) This starts from 1, because if we wanna use single pass deferred rendering,
+    // the deferred lighting pass(which outputs the final color into the color attachment 0)
+    // should use the same numbers as these.
+    // so for the g buffer renderpass, colorattachment 0 will be specifed as invalid.
+    // and we will not output anything to that.
+    float4 position [[color(1)]];
+    float4 normal [[color(2)]];
+    float4 color [[color(3)]];
 };
 
-
 fragment GBuffers 
-cube_frag(CubeVertexOutput vertex_output [[stage_in]])
+cube_frag(CubeVertexOutput vertex_output [[stage_in]],
+          texture2d<float> shadowmap [[texture(0)]])
 {
     GBuffers result = {};
 
+    // TODO(gh) sample from shadowmap, and then compare it with the vertex_output.clip_p.z
+    constexpr sampler shadowmap_sampler = sampler(coord::normalized, 
+                                          filter::linear,
+                                          mip_filter::none,
+                                          address::clamp_to_edge,
+                                          compare_func::less);
+
+    float sampled_shadow_value = shadowmap.sample(shadowmap_sampler, vertex_output.p_in_light_coordinate.xy).x;
+    float shadow_factor = (sampled_shadow_value < vertex_output.p_in_light_coordinate.z)? 0.0f : 1.0f;
+
     result.position = float4(vertex_output.p, 0.0f);
-    result.normal = float4(vertex_output.N, 0.0f);
+    result.normal = float4(vertex_output.N, shadow_factor); // also storing the shadow factor to the unused 4th component
     result.color = float4(vertex_output.color, 0.0f);
-    result.depth = vertex_output.clip_p.z;
+    // result.depth = vertex_output.depth; 
    
     return result;
 }
@@ -184,7 +236,6 @@ directional_light_shadowmap_vert(uint vertexID [[vertex_id]],
 {
     ShadowmapVertexOutput result = {};
 
-    // TODO(gh) we can also get proj_view_model outside the GPU and pass it to the shader
     result.clip_p = (*proj_view) * (*model) *
                     float4(positions[3*vertexID+0], 
                            positions[3*vertexID+1],
@@ -209,44 +260,46 @@ constant float2 full_quad_vertices[]
 struct DeferredLightingVertexOutput
 {
     float4 clip_p [[position]];
-
-    // TODO(gh) just pass the perframedata to the fragment function
     float3 light_p;
 };
 
 vertex DeferredLightingVertexOutput
-deferred_lighting_vertex(uint vertexID [[vertex_id]])
+deferred_lighting_vertex(uint vertexID [[vertex_id]],
+                // TODO(gh) again, bad idea to pass this one by one...
+                         constant float *light_p[[buffer(0)]])
 {
     DeferredLightingVertexOutput result = {};
 
     result.clip_p = float4(full_quad_vertices[vertexID], 0.0f, 1.0f);
-
-    result.light_p = float3(100.0f, 100.0f, 2.0f);
-
+    result.light_p = float3(light_p[0], light_p[1], light_p[2]);
+    
     return result;
 }
 
+#if __METAL_VERSION__ >= 230
+// NOTE(gh) Single pass deferred rendering, which can be identified by the color attachments
+// rather than texture binding
 fragment float4 
 deferred_lighting_frag(DeferredLightingVertexOutput vertex_output [[stage_in]],
-                       texture2d<float> position_g_buffer [[texture(0)]],
-                       texture2d<float> normal_g_buffer [[texture(1)]],
-                       texture2d<float> color_g_buffer [[texture(2)]], 
-                       texture2d<float> depth_g_buffer [[texture(3)]])
+                       float4 position_g_buffer [[color(1)]],
+                       float4 normal_g_buffer [[color(2)]],
+                       float4 color_g_buffer [[color(3)]])
 {
-    // NOTE(gh) This is what Apple is doing in their deferred rendering sample
-    uint2 sample_p = uint2(vertex_output.clip_p.xy);
-
-    float3 p = position_g_buffer.read(sample_p).xyz;
-    float3 N = normal_g_buffer.read(sample_p).xyz;
-    float3 color = color_g_buffer.read(sample_p).xyz;
-    // float depth = depth_g_buffer.read(sample_p).x;
+    float3 p = position_g_buffer.xyz;
+    float4 N = normal_g_buffer;
+    float3 color = color_g_buffer.xyz;
 
     float3 L = normalize(vertex_output.light_p - p);
 
     float ambient = 0.2f;
-    float diffuse = max(dot(N, L), 0.1f);
+
+    float shadow_factor = N.w; // shadow factor is secretly baked with the normal texture
+    float diffuse = shadow_factor * max(dot(N.xyz, L), 0.0f);
 
     float4 result = float4(color * (ambient + diffuse), 1.0f);
 
     return result;
 }
+#else
+// TODO(gh) traditional deferred lighting pass?
+#endif

@@ -512,19 +512,6 @@ operator*=(v4 &a, f32 value)
     return a;
 }
 
-inline b32
-clip_space_top_is_one(void)
-{
-    b32 result = false;
-#if HB_METAL || HB_OPENGL
-    result = true;
-#elif HB_VULKAN
-    result = false;
-#endif
-
-    return result;
-}
-
 inline m3x3
 M3x3(f32 e00, f32 e01, f32 e02,
     f32 e10, f32 e11, f32 e12, 

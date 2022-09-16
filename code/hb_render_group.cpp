@@ -415,7 +415,7 @@ init_camera(v3 p, v3 lookat_p, f32 focal_length)
 }
 
 internal CircleCamera
-init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 focal_length)
+init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 near, f32 far)
 {
     CircleCamera result = {};
 
@@ -426,7 +426,8 @@ init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 focal_length)
     result.distance_from_axis = distance_from_axis;
     result.rad = 0;
 
-    result.focal_length = focal_length;
+    result.near = near;
+    result.far = far;
 
     return result;
 }
@@ -529,6 +530,7 @@ rhs_to_lhs(m4x4 m)
     return result;
 }
 
+#if 0
 // NOTE/gh : This assumes that the window width is always 1m
 inline m4x4
 project(f32 focal_length, f32 aspect_ratio, f32 near, f32 far)
@@ -544,6 +546,25 @@ project(f32 focal_length, f32 aspect_ratio, f32 near, f32 far)
 
     return result;
 }
+#endif
+
+// NOTE(gh) This is for (-1, -1, -1) to (1, 1, 1) NDC like openGL
+#if 0
+inline m4x4
+perspective_projection(f32 near, f32 far, f32 width, f32 width_over_height)
+{
+    f32 height = width / width_over_height;
+
+    m4x4 result = {};
+
+    result.rows[0] = V4(-near / (2 * width), 0, 0, 0);
+    result.rows[1] = V4(0, -near / (2 * height), 0, 0);
+    result.rows[2] = V4(0, 0, (near + far) / (far - near), 2*near*far / (far - near)); // X and Y value does not effect the z value
+    result.rows[3] = V4(0, 0, 1, 0);
+
+    return result;
+}
+#endif
 
 internal void
 start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_push_buffer, CircleCamera *camera, v3 clear_color)
@@ -551,15 +572,10 @@ start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_p
     assert(render_push_buffer->base)
     render_group->render_push_buffer = render_push_buffer;
 
-    // TODO(gh) APIs differ in how they define their NDC, so maybe just pull this out 
-    // to the platform code and just pass the orientation quaternion
-    // TODO(gh) we can push the camera transform as a render entry, so that we can change the camera dynamically? (But how would that work, if we sort the entries?)
-    m4x4 proj = project(camera->focal_length, render_push_buffer->width_over_height, 0.1f, 10000.0f);
-    // TODO(gh) This should not be necessary?
-    m4x4 view = rhs_to_lhs(camera_transform(camera));
-    m4x4 proj_view = transpose(proj * view); // Change to column major
-
-    render_push_buffer->proj_view = proj_view;
+    render_push_buffer->view = camera_transform(camera);
+    render_push_buffer->camera_near = camera->near;
+    render_push_buffer->camera_far = camera->far;
+    render_push_buffer->camera_width = 0.01f; // TODO(gh) 0.01f sized window?? Seems like a bit off..
     render_push_buffer->clear_color = clear_color;
 
     render_group->render_push_buffer->used = 0;

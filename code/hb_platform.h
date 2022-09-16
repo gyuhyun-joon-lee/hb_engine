@@ -13,6 +13,7 @@ extern "C" {
 
 #define assert(expression) if(!(expression)) {int *a = 0; *a = 0;}
 #define array_count(array) (sizeof(array) / sizeof(array[0]))
+#define array_size(array) (sizeof(array))
 #define invalid_code_path assert(0)
 
 #define global static
@@ -295,7 +296,10 @@ struct PlatformRenderPushBuffer
     f32 width_over_height; 
 
     // NOTE(joon) game code needs to fill these up
-    m4x4 proj_view;
+    m4x4 view;
+    f32 camera_near;
+    f32 camera_far;
+    f32 camera_width; // In world unit
     v3 clear_color;
 
     u8 *base;
