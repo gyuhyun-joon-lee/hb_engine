@@ -200,16 +200,10 @@ struct GBuffers
 
 fragment GBuffers 
 cube_frag(CubeVertexOutput vertex_output [[stage_in]],
-          depth2d<float> shadowmap [[texture(0)]])
+          depth2d<float> shadowmap [[texture(0)]],
+          sampler shadowmap_sampler[[sampler(0)]])
 {
     GBuffers result = {};
-
-    // TODO(gh) sample from shadowmap, and then compare it with the vertex_output.clip_p.z
-    constexpr sampler shadowmap_sampler = sampler(coord::normalized, 
-                                          filter::linear,
-                                          mip_filter::none,
-                                          address::clamp_to_edge,
-                                          compare_func::less);
 
     float shadow_factor = 1.0f;
     // if(vertex_output.p_in_light_coordinate.x <= 1.0f && vertex_output.p_in_light_coordinate.y <= 1.0f)

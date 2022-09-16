@@ -614,8 +614,10 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                 metal_set_vertex_bytes(shadowmap_render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
-
                 metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
+
+                // TODO(gh) This reduces the moire pattern, but how????
+                metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
                 metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
             }break;
@@ -725,6 +727,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_set_vertex_bytes(render_encoder, cube_vertices, array_size(cube_vertices), 2);
                     metal_set_vertex_bytes(render_encoder, cube_normals, array_size(cube_normals), 3);
                     metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 4);
+
+                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
 
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
 
@@ -1000,15 +1004,7 @@ int main(void)
     NSString *name = device.name;
     bool has_unified_memory = device.hasUnifiedMemory;
 
-    MTLSamplerDescriptor *sampler_descriptor = [[MTLSamplerDescriptor alloc] init];
-    sampler_descriptor.normalizedCoordinates = true;
-    sampler_descriptor.sAddressMode = MTLSamplerAddressModeClampToEdge; // width coordinate
-    sampler_descriptor.tAddressMode = MTLSamplerAddressModeClampToEdge; // height coordinate
-    sampler_descriptor.rAddressMode = MTLSamplerAddressModeClampToEdge; // depth coordinate
-    sampler_descriptor.minFilter = MTLSamplerMinMagFilterLinear;
-    sampler_descriptor.magFilter = MTLSamplerMinMagFilterLinear;
-    sampler_descriptor.compareFunction = MTLCompareFunctionLess;
-    [device newSamplerStateWithDescriptor : sampler_descriptor];
+    assert(has_unified_memory);
 
     MTKView *view = [[MTKView alloc] initWithFrame : window_rect
                                         device:device];
@@ -1144,6 +1140,11 @@ int main(void)
                               MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
                               MTLStorageModeMemoryless);
+
+    // NOTE(gh) Create samplers
+    metal_render_context.shadowmap_sampler = 
+        metal_make_sampler(device, true, MTLSamplerAddressModeClampToEdge, 
+                          MTLSamplerMinMagFilterLinear, MTLSamplerMipFilterNotMipmapped, MTLCompareFunctionLess);
 
     MTLLoadAction single_lighting_renderpass_color_attachment_load_actions[] = 
         {MTLLoadActionClear,

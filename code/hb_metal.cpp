@@ -203,6 +203,19 @@ metal_set_fragment_texture(id<MTLRenderCommandEncoder> render_encoder, id<MTLTex
 }
 
 internal void
+metal_set_fragment_sampler(id<MTLRenderCommandEncoder> render_encoder, id<MTLSamplerState> sampler, u32 index)
+{
+    [render_encoder setFragmentSamplerState : sampler
+                                atIndex : index];
+}
+
+internal void
+metal_set_depth_bias(id<MTLRenderCommandEncoder> render_encoder, f32 depth_bias, f32 slope_scale, f32 clamp)
+{
+    [render_encoder setDepthBias:depth_bias slopeScale:slope_scale clamp:clamp];
+}
+
+internal void
 metal_draw_non_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, 
                         u32 vertex_start, u32 vertex_count)
 {
@@ -396,16 +409,19 @@ metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
 }
 
 internal id<MTLSamplerState> 
-metal_make_sampler(id<MTLDevice> device)
+metal_make_sampler(id<MTLDevice> device, b32 normalized_coordinates, MTLSamplerAddressMode address_mode, 
+                   MTLSamplerMinMagFilter min_mag_filter, MTLSamplerMipFilter mip_filter, MTLCompareFunction compare_function)
 {
     MTLSamplerDescriptor *sampler_descriptor = [[MTLSamplerDescriptor alloc] init];
-    sampler_descriptor.normalizedCoordinates = true;
-    sampler_descriptor.sAddressMode = MTLSamplerAddressModeClampToEdge; // width coordinate
-    sampler_descriptor.tAddressMode = MTLSamplerAddressModeClampToEdge; // height coordinate
-    sampler_descriptor.rAddressMode = MTLSamplerAddressModeClampToEdge; // depth coordinate
-    sampler_descriptor.minFilter = MTLSamplerMinMagFilterLinear;
-    sampler_descriptor.magFilter = MTLSamplerMinMagFilterLinear;
-    sampler_descriptor.compareFunction = MTLCompareFunctionLess;
+    sampler_descriptor.normalizedCoordinates = normalized_coordinates;
+    sampler_descriptor.sAddressMode = address_mode; // width coordinate
+    sampler_descriptor.tAddressMode = address_mode; // height coordinate
+    sampler_descriptor.rAddressMode = address_mode; // depth coordinate
+    sampler_descriptor.minFilter = min_mag_filter;
+    sampler_descriptor.magFilter = min_mag_filter;
+    sampler_descriptor.mipFilter = mip_filter;
+    sampler_descriptor.maxAnisotropy = 1;
+    sampler_descriptor.compareFunction = compare_function;
 
     id<MTLSamplerState> result = [device newSamplerStateWithDescriptor : sampler_descriptor];
 

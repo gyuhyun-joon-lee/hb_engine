@@ -38,6 +38,9 @@ struct MetalRenderContext
     id<MTLDepthStencilState> disabled_depth_state; // write : disabled
 
     // Samplers
+    // Samplers defined inside the shader don't have full capability,
+    // which is why we are passing these samplers that are made exeternally.
+    id<MTLSamplerState> shadowmap_sampler;
 
     // Pipelines
     id<MTLRenderPipelineState> cube_pipeline;
