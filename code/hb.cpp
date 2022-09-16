@@ -46,8 +46,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
         game_state->circle_camera = init_circle_camera(V3(0, 0, 10), V3(0, 0, 0), 10.0f, 0.01f, 10000.0f);
 
-        add_floor_entity(game_state, V3(0, 0, 2), V3(1, 1, 1), V3(1, 1, 1));
-        add_floor_entity(game_state, V3(0, 0, 0), V3(10, 10, 1), V3(1.0f, 1.0f, 1.0f));
+        add_floor_entity(game_state, V3(0, 0, 2), V3(2, 2, 2), V3(1, 1, 1));
+        add_floor_entity(game_state, V3(0, 0, 0), V3(10, 10, 2), V3(1, 1, 1));
         
         game_state->is_initialized = true;
     }

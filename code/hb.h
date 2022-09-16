@@ -22,6 +22,8 @@ struct GameState
 
     // TODO(gh) seed this properly
     RandomSeries random_series;
+
+    // TODO(gh) More structured light information
 };
 
 #endif

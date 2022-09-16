@@ -198,6 +198,7 @@ struct GBuffers
     float4 color [[color(3)]];
 };
 
+
 fragment GBuffers 
 cube_frag(CubeVertexOutput vertex_output [[stage_in]],
           depth2d<float> shadowmap [[texture(0)]],
@@ -205,6 +206,27 @@ cube_frag(CubeVertexOutput vertex_output [[stage_in]],
 {
     GBuffers result = {};
 
+#if 1
+    // multisampling shadow
+    float shadow_factor = 0.0f;
+    float one_over_shadowmap_texture_width = 1.0f / shadowmap.get_width();
+    float one_over_shadowmap_texture_height = 1.0f / shadowmap.get_height();
+
+    for(int y = -1;
+            y <= 1;
+            ++y)
+    {
+        for(int x = -1;
+                x <= 1;
+                ++x)
+        {
+            float2 sample_p = vertex_output.p_in_light_coordinate.xy + float2(x, y) * float2(one_over_shadowmap_texture_width, one_over_shadowmap_texture_height);
+            shadow_factor += shadowmap.sample_compare(shadowmap_sampler, sample_p, vertex_output.p_in_light_coordinate.z);
+        }
+    }
+
+    shadow_factor /= 9; // Because we sampled from 9 different texels
+#else 
     float shadow_factor = 1.0f;
     // if(vertex_output.p_in_light_coordinate.x <= 1.0f && vertex_output.p_in_light_coordinate.y <= 1.0f)
     {
@@ -212,6 +234,7 @@ cube_frag(CubeVertexOutput vertex_output [[stage_in]],
         shadow_factor = 
             shadowmap.sample_compare(shadowmap_sampler, vertex_output.p_in_light_coordinate.xy, vertex_output.p_in_light_coordinate.z);
     }
+#endif
 
     result.position = float4(vertex_output.p, 0.0f);
     result.normal = float4(vertex_output.N, shadow_factor); // also storing the shadow factor to the unused 4th component

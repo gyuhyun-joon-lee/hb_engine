@@ -575,7 +575,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
     metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
 
     local_persist f32 rad = 0.0f;
-    rad += 0.5f*dt_per_frame;
+    rad += 0.1f*dt_per_frame;
     v3 directional_light_p = V3(10 * cosf(rad), 10 * sinf(rad), 5); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
@@ -616,7 +616,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
-                // TODO(gh) This reduces the moire pattern, but how????
+                // NOTE(gh) Mitigates the moire pattern by biasing, 
+                // making the shadow map to place under the fragments that are being shaded.
                 metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
                 metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
@@ -1175,6 +1176,7 @@ int main(void)
                               metal_render_context.g_buffer_depth_texture,
                               1.0f);
 
+    // TODO(gh) peter panning happens when the resolution is too 
     metal_render_context.directional_light_shadowmap_depth_texture_width = 512;
     metal_render_context.directional_light_shadowmap_depth_texture_height = 512;
     metal_render_context.directional_light_shadowmap_depth_texture = 
