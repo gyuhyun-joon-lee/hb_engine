@@ -179,8 +179,8 @@ cube_vertex(uint vertexID [[vertex_id]],
     result.p_in_light_coordinate = p_in_light_coordinate.xyz / p_in_light_coordinate.w;
 
     // NOTE(gh) Because NDC goes from (-1, -1, 0) to (1, 1, 1) in Metal, we need to change X and Y to range from 0 to 1
-    result.p_in_light_coordinate.xy = 0.5 * result.p_in_light_coordinate.xy + float2(0.5f, 0.5f);
-    result.p_in_light_coordinate.y = 1 - result.p_in_light_coordinate.y;
+    // and flip y, as Metal texture is top-down
+    result.p_in_light_coordinate.xy = float2(0.5f, -0.5f) * result.p_in_light_coordinate.xy + float2(0.5f, 0.5f);
 
     return result;
 }
@@ -200,7 +200,7 @@ struct GBuffers
 
 fragment GBuffers 
 cube_frag(CubeVertexOutput vertex_output [[stage_in]],
-          texture2d<float> shadowmap [[texture(0)]])
+          depth2d<float> shadowmap [[texture(0)]])
 {
     GBuffers result = {};
 
@@ -211,8 +211,13 @@ cube_frag(CubeVertexOutput vertex_output [[stage_in]],
                                           address::clamp_to_edge,
                                           compare_func::less);
 
-    float sampled_shadow_value = shadowmap.sample(shadowmap_sampler, vertex_output.p_in_light_coordinate.xy).x;
-    float shadow_factor = (sampled_shadow_value < vertex_output.p_in_light_coordinate.z)? 0.0f : 1.0f;
+    float shadow_factor = 1.0f;
+    // if(vertex_output.p_in_light_coordinate.x <= 1.0f && vertex_output.p_in_light_coordinate.y <= 1.0f)
+    {
+        // NOTE(gh) If the shadowmap value is smaller(light was closer to another object), this point should be in shadow.
+        shadow_factor = 
+            shadowmap.sample_compare(shadowmap_sampler, vertex_output.p_in_light_coordinate.xy, vertex_output.p_in_light_coordinate.z);
+    }
 
     result.position = float4(vertex_output.p, 0.0f);
     result.normal = float4(vertex_output.N, shadow_factor); // also storing the shadow factor to the unused 4th component

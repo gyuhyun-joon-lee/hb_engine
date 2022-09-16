@@ -395,6 +395,26 @@ metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
     return result;
 }
 
+internal id<MTLSamplerState> 
+metal_make_sampler(id<MTLDevice> device)
+{
+    MTLSamplerDescriptor *sampler_descriptor = [[MTLSamplerDescriptor alloc] init];
+    sampler_descriptor.normalizedCoordinates = true;
+    sampler_descriptor.sAddressMode = MTLSamplerAddressModeClampToEdge; // width coordinate
+    sampler_descriptor.tAddressMode = MTLSamplerAddressModeClampToEdge; // height coordinate
+    sampler_descriptor.rAddressMode = MTLSamplerAddressModeClampToEdge; // depth coordinate
+    sampler_descriptor.minFilter = MTLSamplerMinMagFilterLinear;
+    sampler_descriptor.magFilter = MTLSamplerMinMagFilterLinear;
+    sampler_descriptor.compareFunction = MTLCompareFunctionLess;
+
+    id<MTLSamplerState> result = [device newSamplerStateWithDescriptor : sampler_descriptor];
+
+    [sampler_descriptor release];
+
+    return result;
+}
+
+
         
 
 

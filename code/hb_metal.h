@@ -37,6 +37,8 @@ struct MetalRenderContext
     id<MTLDepthStencilState> depth_state; // compare <=, write : enabled
     id<MTLDepthStencilState> disabled_depth_state; // write : disabled
 
+    // Samplers
+
     // Pipelines
     id<MTLRenderPipelineState> cube_pipeline;
     id<MTLRenderPipelineState> line_pipeline;

@@ -571,16 +571,18 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
     metal_set_front_facing_winding(shadowmap_render_encoder, MTLWindingCounterClockwise);
     metal_set_cull_mode(shadowmap_render_encoder, MTLCullModeBack);
     metal_set_detph_stencil_state(shadowmap_render_encoder, render_context->depth_state);
+
     metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
 
     local_persist f32 rad = 0.0f;
-    rad += dt_per_frame;
-    v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 5); 
+    rad += 0.5f*dt_per_frame;
+    v3 directional_light_p = V3(10 * cosf(rad), 10 * sinf(rad), 5); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
     // TODO(gh) setup proj and view matrices properly!
     // TODO(gh) These are totally made up near, far, width values 
-    m4x4 light_proj = perspective_projection(0.01f, 100.0f, 0.01f, 1.0f);
+    // m4x4 light_proj = perspective_projection(0.01f, 100.0f, 0.01f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_width);
+    m4x4 light_proj = orthogonal_projection(0.01f, 100.0f, 10.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_width);
     v3 directional_light_z_axis = -directional_light_direction;
     v3 directional_light_x_axis = normalize(cross(V3(0, 0, 1), directional_light_z_axis));
     v3 directional_light_y_axis = normalize(cross(directional_light_z_axis, directional_light_x_axis));
@@ -664,7 +666,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         m4x4 proj = perspective_projection(render_push_buffer->camera_near, render_push_buffer->camera_far,
                                            render_push_buffer->camera_width, render_push_buffer->width_over_height);
 
-        per_frame_data.proj_view = transpose(proj * render_push_buffer->view); // already calculated from the game code
+        per_frame_data.proj_view = transpose(proj * render_push_buffer->view);
 
         // NOTE(gh) per frame data is always the 0th buffer
         metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
@@ -721,7 +723,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_set_pipeline(render_encoder, render_context->cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_bytes(render_encoder, cube_vertices, array_size(cube_vertices), 2);
-                    metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
+                    metal_set_vertex_bytes(render_encoder, cube_normals, array_size(cube_normals), 3);
                     metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 4);
 
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
@@ -997,6 +999,16 @@ int main(void)
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     NSString *name = device.name;
     bool has_unified_memory = device.hasUnifiedMemory;
+
+    MTLSamplerDescriptor *sampler_descriptor = [[MTLSamplerDescriptor alloc] init];
+    sampler_descriptor.normalizedCoordinates = true;
+    sampler_descriptor.sAddressMode = MTLSamplerAddressModeClampToEdge; // width coordinate
+    sampler_descriptor.tAddressMode = MTLSamplerAddressModeClampToEdge; // height coordinate
+    sampler_descriptor.rAddressMode = MTLSamplerAddressModeClampToEdge; // depth coordinate
+    sampler_descriptor.minFilter = MTLSamplerMinMagFilterLinear;
+    sampler_descriptor.magFilter = MTLSamplerMinMagFilterLinear;
+    sampler_descriptor.compareFunction = MTLCompareFunctionLess;
+    [device newSamplerStateWithDescriptor : sampler_descriptor];
 
     MTKView *view = [[MTKView alloc] initWithFrame : window_rect
                                         device:device];
