@@ -2,12 +2,15 @@
 #rm -f *.metallib 2> /dev/null
 #rm -f *.metallibsym 2> /dev/null
 
-# NOTE(joon): We can make .metallib file straight up, but xcode will fail to load our metallibsym file.
+# NOTE(gh) type xcrun metal --help to see every flag
+
+# NOTE(gh) We can make .metallib file straight up, but xcode will fail to load our metallibsym file.
 # create .air
 xcrun -sdk macosx metal -c -gline-tables-only -frecord-sources shader.metal
+xcrun -sdk macosx metal -c -gline-tables-only -frecord-sources singlepass_shader.metal
 
 # create .metallib 
-xcrun -sdk macosx metal -gline-tables-only -frecord-sources -o shader.metallib shader.air
+xcrun -sdk macosx metal -gline-tables-only -frecord-sources -o shader.metallib shader.air singlepass_shader.metal
 
 # create .metallibsym
 xcrun -sdk macosx metal-dsymutil -flat -remove-source shader.metallib

@@ -10,6 +10,13 @@
     }\
 }\
 
+internal b32
+metal_does_support_gpu_family(id<MTLDevice> device, MTLGPUFamily gpu_family)
+{
+    b32 result = [device supportsFamily : gpu_family];
+    return result;
+}
+
 // NOTE(gh) orthogonal projection matrix for (-1, -1, 0) to (1, 1, 1) NDC like Metal
 inline m4x4
 orthogonal_projection(f32 n, f32 f, f32 width, f32 width_over_height)
@@ -24,7 +31,7 @@ orthogonal_projection(f32 n, f32 f, f32 width, f32 width_over_height)
     result.rows[0] = V4(1/(width/2), 0, 0, 0);
     result.rows[1] = V4(0, 1/(height/2), 0, 0);
     result.rows[2] = V4(0, 0, 1/(n-f), n/(n-f)); // X and Y value does not effect the z value
-    result.rows[3] = V4(0, 0, 0, 1); // orthogonal projection does not need homogeneous coordinates
+    result.rows[3] = V4(0, 0, 0, 1); // orthogonal projection doesn't need homogeneous coordinates
 
     return result;
 }
@@ -37,6 +44,8 @@ orthogonal_projection(f32 n, f32 f, f32 width, f32 width_over_height)
 
     Based on what NDC we are using, -n should produce 0 or -1 value, while -f should produce 1.
 */
+// TODO(gh) Make this to be dependent to the FOV, not the actual width
+// because it becomes irrelevant when we change the near plane. 
 inline m4x4
 perspective_projection(f32 n, f32 f, f32 width, f32 width_over_height)
 {
