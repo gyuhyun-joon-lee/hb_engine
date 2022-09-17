@@ -198,7 +198,6 @@ struct GBuffers
     float4 color [[color(3)]];
 };
 
-
 fragment GBuffers 
 cube_frag(CubeVertexOutput vertex_output [[stage_in]],
           depth2d<float> shadowmap [[texture(0)]],

@@ -561,15 +561,20 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 {
     id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
 
+    // NOTE(gh) render shadow map
     id<MTLRenderCommandEncoder> shadowmap_render_encoder = [command_buffer renderCommandEncoderWithDescriptor : render_context->directional_light_shadowmap_renderpass];
     metal_set_viewport(shadowmap_render_encoder, 0, 0, 
-                       render_context->directional_light_shadowmap_depth_texture_width, render_context->directional_light_shadowmap_depth_texture_height, 
+                       render_context->directional_light_shadowmap_depth_texture_width, 
+                       render_context->directional_light_shadowmap_depth_texture_height, 
                        0, 1); // TODO(gh) near and far value when rendering the shadowmap)
     metal_set_scissor_rect(shadowmap_render_encoder, 0, 0, 
-                           render_context->directional_light_shadowmap_depth_texture_width, render_context->directional_light_shadowmap_depth_texture_height);
+                           render_context->directional_light_shadowmap_depth_texture_width, 
+                           render_context->directional_light_shadowmap_depth_texture_height);
     metal_set_triangle_fill_mode(shadowmap_render_encoder, MTLTriangleFillModeFill);
     metal_set_front_facing_winding(shadowmap_render_encoder, MTLWindingCounterClockwise);
-    metal_set_cull_mode(shadowmap_render_encoder, MTLCullModeBack);
+    // Culling front facing triangles when rendering shadowmap to avoid shadow acne
+    // TODO(gh) This does not work for thin objects!!!!
+    metal_set_cull_mode(shadowmap_render_encoder, MTLCullModeFront); 
     metal_set_detph_stencil_state(shadowmap_render_encoder, render_context->depth_state);
 
     metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
@@ -579,14 +584,17 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
     v3 directional_light_p = V3(10 * cosf(rad), 10 * sinf(rad), 5); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
-    // TODO(gh) setup proj and view matrices properly!
     // TODO(gh) These are totally made up near, far, width values 
-    // m4x4 light_proj = perspective_projection(0.01f, 100.0f, 0.01f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_width);
-    m4x4 light_proj = orthogonal_projection(0.01f, 100.0f, 10.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_width);
+    // m4x4 light_proj = perspective_projection(0.01f, 100.0f, 0.01f, (f32)render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_width);
+    m4x4 light_proj = 
+        orthogonal_projection(0.01f, 100.0f, 10.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_width);
     v3 directional_light_z_axis = -directional_light_direction;
     v3 directional_light_x_axis = normalize(cross(V3(0, 0, 1), directional_light_z_axis));
     v3 directional_light_y_axis = normalize(cross(directional_light_z_axis, directional_light_x_axis));
-    m4x4 light_view = camera_transform(directional_light_p, directional_light_x_axis, directional_light_y_axis, directional_light_z_axis);
+    m4x4 light_view = camera_transform(directional_light_p, 
+                                       directional_light_x_axis, 
+                                       directional_light_y_axis, 
+                                       directional_light_z_axis);
     m4x4 light_proj_view = transpose(light_proj * light_view); // Change to column major
 
     // NOTE(gh) Render Shadow map
@@ -618,7 +626,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                 // NOTE(gh) Mitigates the moire pattern by biasing, 
                 // making the shadow map to place under the fragments that are being shaded.
-                metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
+                // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
                 metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
             }break;
@@ -658,13 +666,10 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
         metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-        metal_set_cull_mode(render_encoder, MTLCullModeBack);
+        metal_set_cull_mode(render_encoder, MTLCullModeBack); 
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
         PerFrameData per_frame_data = {};
-
-        //m4x4 proj = orthogonal_projection(render_push_buffer->camera_near, render_push_buffer->camera_far,
-                                           //render_push_buffer->camera_width, render_push_buffer->width_over_height);
 
         m4x4 proj = perspective_projection(render_push_buffer->camera_near, render_push_buffer->camera_far,
                                            render_push_buffer->camera_width, render_push_buffer->width_over_height);
@@ -1176,9 +1181,9 @@ int main(void)
                               metal_render_context.g_buffer_depth_texture,
                               1.0f);
 
-    // TODO(gh) peter panning happens when the resolution is too 
-    metal_render_context.directional_light_shadowmap_depth_texture_width = 512;
-    metal_render_context.directional_light_shadowmap_depth_texture_height = 512;
+    // TODO(gh) peter panning happens when the resolution is too low. 
+    metal_render_context.directional_light_shadowmap_depth_texture_width = 2048;
+    metal_render_context.directional_light_shadowmap_depth_texture_height = 2048;
     metal_render_context.directional_light_shadowmap_depth_texture = 
         metal_make_texture_2D(device, 
                               MTLPixelFormatDepth32Float, 
