@@ -47,17 +47,20 @@ orthogonal_projection(f32 n, f32 f, f32 width, f32 width_over_height)
 // TODO(gh) Make this to be dependent to the FOV, not the actual width
 // because it becomes irrelevant when we change the near plane. 
 inline m4x4
-perspective_projection(f32 n, f32 f, f32 width, f32 width_over_height)
+perspective_projection(f32 fov, f32 n, f32 f, f32 width_over_height)
 {
-    f32 height = width / width_over_height;
+    assert(fov < 180);
+
+    f32 half_near_plane_width = n*tanf(0.5f*fov)*0.5f;
+    f32 half_near_plane_height = half_near_plane_width / width_over_height;
 
     m4x4 result = {};
 
     // TODO(gh) Even though the resulting coordinates should be same, 
     // it seems like Metal requires the w part of the homogeneous coordinate to be positive.
     // Maybe that's how they are doing the frustum culling..?
-    result.rows[0] = V4(n / (width / 2), 0, 0, 0);
-    result.rows[1] = V4(0, n / (height / 2), 0, 0);
+    result.rows[0] = V4(n / half_near_plane_width, 0, 0, 0);
+    result.rows[1] = V4(0, n / half_near_plane_height, 0, 0);
     result.rows[2] = V4(0, 0, f/(n-f), (n*f)/(n-f)); // X and Y value does not effect the z value
     result.rows[3] = V4(0, 0, -1, 0); // As Xp and Yp are dependant to Z value, this is the only way to divide Xp and Yp by -Ze
 

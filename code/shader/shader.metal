@@ -1,20 +1,4 @@
-#include <metal_stdlib>
-
-using namespace metal;
-
-// NOTE(gh) this is a consequence of not having a shared file
-// between metal and the platform code.. which is a rabbit hole
-// that I do not want to go inside :(
-struct PerFrameData
-{
-    float4x4 proj_view;
-};
-
-struct PerObjectData
-{
-    float4x4 model;
-    float3 color;
-};
+#include "shader_common.h"
 
 struct ScreenSpaceTriangleVertexOutput
 {
@@ -38,8 +22,6 @@ screen_space_triangle_frag(ScreenSpaceTriangleVertexOutput vertex_output [[stage
 
     return result;
 }
-
-
 
 struct VoxelVertexOutput
 {
@@ -88,76 +70,6 @@ voxel_frag(VoxelVertexOutput vertex_output [[stage_in]])
 
     return result;
 }
-
-struct CubeVertexOutput
-{
-    float4 clip_p [[position]];
-    float3 color;
-
-    float3 p;
-    float3 N;
-    float depth;
-
-    float3 p_in_light_coordinate;
-};
-
-// TODO(gh) I don't like this...
-struct VertexPN
-{
-    float3 p;
-    float3 N;
-};
-
-// NOTE(gh) : vertex is a prefix for vertex shader
-vertex CubeVertexOutput
-singlepass_cube_vertex(uint vertexID [[vertex_id]],
-            uint instanceID [[instance_id]],
-            constant PerFrameData *per_frame_data [[buffer(0)]],
-            constant PerObjectData *per_object_data [[buffer(1)]], 
-
-            // TODO(gh) This is only fine for simple objects with not a lot of vertices
-            constant float *positions [[buffer(2)]], 
-            constant float *normals [[buffer(3)]],
-
-            // TODO(gh) Make a light buffer so that we can just pass that
-            constant float4x4 *light_proj_view[[buffer(4)]])
-{
-    CubeVertexOutput result = {};
-
-    float4 world_p = per_object_data->model * 
-                        float4(positions[3*vertexID+0], 
-                                positions[3*vertexID+1],
-                                positions[3*vertexID+2],
-                                1.0f);
-
-    float4 world_normal = per_object_data->model * 
-                        float4(normals[3*vertexID+0], 
-                                normals[3*vertexID+1],
-                                normals[3*vertexID+2],
-                                0.0f);
-
-    result.clip_p = per_frame_data->proj_view * world_p;
-    result.color = per_object_data->color;
-
-    result.p = world_p.xyz;
-    result.N = normalize(world_normal.xyz);
-    result.color = per_object_data->color;
-    result.depth = result.clip_p.z / result.clip_p.w;
-
-    // NOTE(gh) because metal doesn't allow to pass the matrix to the fragment shader,
-    // we cannot do the shadow lighting on the deferred lighting pass(cannot get the light coordinate position)
-    // which is why we are doing this here.
-    float4 p_in_light_coordinate = (*light_proj_view) * world_p;
-    result.p_in_light_coordinate = p_in_light_coordinate.xyz / p_in_light_coordinate.w;
-
-    // NOTE(gh) Because NDC goes from (-1, -1, 0) to (1, 1, 1) in Metal, we need to change X and Y to range from 0 to 1
-    // and flip y, as Metal texture is top-down
-    result.p_in_light_coordinate.xy = float2(0.5f, -0.5f) * result.p_in_light_coordinate.xy + float2(0.5f, 0.5f);
-
-    return result;
-}
-
-
 
 struct ShadowmapVertexOutput
 {

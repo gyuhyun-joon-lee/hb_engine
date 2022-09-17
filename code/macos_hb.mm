@@ -585,8 +585,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
     // TODO(gh) These are totally made up near, far, width values 
-    // m4x4 light_proj = perspective_projection(0.01f, 100.0f, 0.01f, (f32)render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
-     m4x4 light_proj = orthogonal_projection(0.01f, 100.0f, 10.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
+    m4x4 light_proj = perspective_projection(degree_to_radian(120), 0.01f, 100.0f, (f32)render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
+    // m4x4 light_proj = orthogonal_projection(0.01f, 100.0f, 10.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
     v3 directional_light_z_axis = -directional_light_direction;
     v3 directional_light_x_axis = normalize(cross(V3(0, 0, 1), directional_light_z_axis));
     v3 directional_light_y_axis = normalize(cross(directional_light_z_axis, directional_light_x_axis));
@@ -670,8 +670,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
         PerFrameData per_frame_data = {};
 
-        m4x4 proj = perspective_projection(render_push_buffer->camera_near, render_push_buffer->camera_far,
-                                           render_push_buffer->camera_width, render_push_buffer->width_over_height);
+        m4x4 proj = perspective_projection(render_push_buffer->camera_fov, render_push_buffer->camera_near, render_push_buffer->camera_far,
+                                           render_push_buffer->width_over_height);
 
         per_frame_data.proj_view = transpose(proj * render_push_buffer->view);
 
@@ -820,7 +820,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
 
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
-#endif
 
 #if 0
         v3 screen_space_triangle_vertices[] = 

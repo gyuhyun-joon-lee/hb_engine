@@ -415,7 +415,7 @@ init_camera(v3 p, v3 lookat_p, f32 focal_length)
 }
 
 internal CircleCamera
-init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 near, f32 far)
+init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 fov_in_degree, f32 near, f32 far)
 {
     CircleCamera result = {};
 
@@ -425,6 +425,8 @@ init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 near, f32 far)
     result.lookat_p = lookat_p;
     result.distance_from_axis = distance_from_axis;
     result.rad = 0;
+
+    result.fov = (fov_in_degree / 180)*pi_32;
 
     result.near = near;
     result.far = far;
@@ -575,7 +577,7 @@ start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_p
     render_push_buffer->view = camera_transform(camera);
     render_push_buffer->camera_near = camera->near;
     render_push_buffer->camera_far = camera->far;
-    render_push_buffer->camera_width = 0.01f; // TODO(gh) 0.01f sized window?? Seems like a bit off..
+    render_push_buffer->camera_fov = camera->fov;
     render_push_buffer->clear_color = clear_color;
 
     render_group->render_push_buffer->used = 0;

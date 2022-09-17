@@ -74,6 +74,8 @@ struct CircleCamera
     // NOTE(gh) values along the camera z axis
     f32 near;
     f32 far;
+
+    f32 fov; // in radian
 };
 
 enum RenderEntryType

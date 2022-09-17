@@ -38,6 +38,7 @@ extern "C" {
 
 #define pi_32 3.14159265358979323846264338327950288419716939937510582097494459230f
 #define half_pi_32 (pi_32/2.0f)
+#define degree_to_radian(degree) ((degree / 180.0f)*pi_32)
 
 #include <math.h>
 
@@ -299,7 +300,7 @@ struct PlatformRenderPushBuffer
     m4x4 view;
     f32 camera_near;
     f32 camera_far;
-    f32 camera_width; // In world unit
+    f32 camera_fov;
     v3 clear_color;
 
     u8 *base;
