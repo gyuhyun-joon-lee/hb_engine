@@ -554,128 +554,128 @@ f32 cube_normals[] =
     0, 0, 1,
 };
 
-f32 grass_vertices[] = 
+v3 grass_vertices[] = 
 {
     // 1
-    0.0f, -0.5f, 0.0f,
-    0.0f, 0.5f, 0.0f,
-    0.0f, -0.5f, 0.1f,
+    {0.0f, -0.5f, 0.0f},
+    {0.0f, 0.5f, 0.0f},
+    {0.0f, -0.5f, 0.1f},
 
-    0.0f, 0.5f, 0.0f,
-    0.0f, 0.5f, 0.1f,
-    0.0f, -0.5f, 0.1f,
+    {0.0f, 0.5f, 0.0f},
+    {0.0f, 0.5f, 0.1f},
+    {0.0f, -0.5f, 0.1f},
 
     //2 
-    0.0f, -0.5f, 0.1f,
-    0.0f, 0.5f, 0.1f,
-    0.0f, -0.5f, 0.2f,
+    {0.0f, -0.5f, 0.1f},
+    {0.0f, 0.5f, 0.1f},
+    {0.0f, -0.5f, 0.2f},
 
-    0.0f, 0.5f, 0.1f,
-    0.0f, 0.5f, 0.2f,
-    0.0f, -0.5f, 0.2f,
+    {0.0f, 0.5f, 0.1f},
+    {0.0f, 0.5f, 0.2f},
+    {0.0f, -0.5f, 0.2f},
 
     // 3
-    0.0f, -0.5f, 0.2f,
-    0.0f, 0.5f, 0.2f,
-    0.0f, -0.5f, 0.3f,
+    {0.0f, -0.5f, 0.2f},
+    {0.0f, 0.5f, 0.2f},
+    {0.0f, -0.5f, 0.3f},
 
-    0.0f, 0.5f, 0.2f,
-    0.0f, 0.5f, 0.3f,
-    0.0f, -0.5f, 0.3f,
+    {0.0f, 0.5f, 0.2f},
+    {0.0f, 0.5f, 0.3f},
+    {0.0f, -0.5f, 0.3f},
 
     // 4
-    0.0f, -0.5f, 0.3f,
-    0.0f, 0.5f, 0.3f,
-    0.0f, -0.5f, 0.4f,
+    {0.0f, -0.5f, 0.3f},
+    {0.0f, 0.5f, 0.3f},
+    {0.0f, -0.5f, 0.4f},
 
-    0.0f, 0.5f, 0.3f,
-    0.0f, 0.5f, 0.4f,
-    0.0f, -0.5f, 0.4f,
+    {0.0f, 0.5f, 0.3f},
+    {0.0f, 0.5f, 0.4f},
+    {0.0f, -0.5f, 0.4f},
 
     // 5 
-    0.0f, -0.5f, 0.4f,
-    0.0f, 0.5f, 0.4f,
-    0.0f, -0.5f, 0.5f,
+    {0.0f, -0.5f, 0.4f},
+    {0.0f, 0.5f, 0.4f},
+    {0.0f, -0.5f, 0.5f},
 
-    0.0f, 0.5f, 0.4f,
-    0.0f, 0.5f, 0.5f,
-    0.0f, -0.5f, 0.5f,
+    {0.0f, 0.5f, 0.4f},
+    {0.0f, 0.5f, 0.5f},
+    {0.0f, -0.5f, 0.5f},
 
     // 6
-    0.0f, -0.5f, 0.5f,
-    0.0f, 0.5f, 0.5f,
-    0.0f, -0.5f, 0.6f,
+    {0.0f, -0.5f, 0.5f},
+    {0.0f, 0.5f, 0.5f},
+    {0.0f, -0.5f, 0.6f},
 
-    0.0f, 0.5f, 0.5f,
-    0.0f, 0.5f, 0.6f,
-    0.0f, -0.5f, 0.6f,
+    {0.0f, 0.5f, 0.5f},
+    {0.0f, 0.5f, 0.6f},
+    {0.0f, -0.5f, 0.6f},
 
     // 7
-    0.0f, -0.5f, 0.6f,
-    0.0f, 0.5f, 0.6f,
-    0.0f, 0.0f, 0.7f,
+    {0.0f, -0.5f, 0.6f},
+    {0.0f, 0.5f, 0.6f},
+    {0.0f, 0.0f, 0.7f},
 };
 
-f32 grass_normals[] = 
+v3 grass_normals[] = 
 {
     // 1
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
     // 2 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
     // 3 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
     // 4 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
     // 5 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
     // 6 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 
     // 7
-    1, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
+    {1, 0, 0},
+    {1, 0, 0},
+    {1, 0, 0},
 };
 
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
@@ -744,7 +744,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 m4x4 model = st_m4x4(entry->p, entry->dim);
                 model = transpose(model); // make the matrix column-major
 
-                metal_set_vertex_bytes(shadowmap_render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 0);
+                metal_set_vertex_bytes(shadowmap_render_encoder, cube_vertices, array_size(cube_vertices), 0);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
@@ -763,7 +763,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 m4x4 model = st_m4x4(entry->p, V3(1, 1, 5));
                 model = transpose(model); // make the matrix column-major
 
-                metal_set_vertex_bytes(shadowmap_render_encoder, grass_vertices, sizeof(f32) * array_count(grass_vertices), 0);
+                metal_set_vertex_bytes(shadowmap_render_encoder, grass_vertices, array_size(grass_vertices), 0);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
@@ -771,7 +771,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 // making the shadow map to place under the fragments that are being shaded.
                 // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
-                metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(grass_vertices) / 3);
+                metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(grass_vertices));
             }break;
 
             default: 
@@ -887,7 +887,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
 
-                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(grass_vertices) / 3);
+                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(grass_vertices));
                 }break;
 
                 default:

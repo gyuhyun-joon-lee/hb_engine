@@ -26,7 +26,6 @@ struct Entity
 
     // TODO(joon) some kind of entity system, 
     // so that we don't have to store entity_specific things in all of the entities
-    MassAgg mass_agg;
     RigidBody rb; // TODO(joon) make this a pointer!
 
     // TODO(joon) CollisionVolumeGroup!

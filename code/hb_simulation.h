@@ -20,24 +20,6 @@ struct ParticleConnection
     f32 rest_length;
 };
 
-// NOTE(joon) used inside mass aggregation physics
-struct MassParticle
-{
-    f32 inv_mass;
-    v3 p; // this is in world pos, and not relative to the entity p
-    v3 dp; // velocity
-    
-    // NOTE(joon) this is where we accumulate the force while interacting with 
-    // other particles(i.e elastic force)
-    // IMPORTANT(joon) Should be cleared to 0 every frame!
-    v3 this_frame_force;
-    v3 this_frame_ddp;
-
-    // NOTE(joon) Direct connections will be always gathered when simulating the particle.
-    //u32 direct_connection_count;
-    //ParticleConnection direct_connections;
-};
-
 struct ParticleFace
 {
     // NOTE(joon) these are the indices to the particles, in counter clockwise order.
@@ -56,25 +38,6 @@ struct PiecewiseMassParticleConnection
     u32 ID_1;
 
     f32 rest_length;
-};
-
-struct MassAgg
-{
-    MassParticle *particles;
-    u32 particle_count;
-
-    ParticleFace *faces;
-    u32 face_count;
-
-    // TODO(joon) any way to collapse face and connection?
-    PiecewiseMassParticleConnection *connections;
-    u32 connection_count;
-
-    // NOTE(joon) hooks law
-    f32 elastic_value;
-
-    // NOTE(joon) this is a imaginary sphere that will prevent certain particle to go through the 
-    f32 inner_sphere_r;
 };
 
 enum CollisionVolumeType

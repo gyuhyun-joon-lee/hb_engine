@@ -92,6 +92,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     
     // NOTE(gh) update entity start
 
+    // NOTE(gh) render entity start
     init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
 
 #if 1

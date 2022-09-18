@@ -349,6 +349,18 @@ lerp(v3 min, f32 t, v3 max)
     return result;
 }
 
+// NOTE(gh) simplifed form of (1-t)*{(1-t)*p0+t*p1} + t*{(1-t)*p1+t*p2}
+inline v3
+quadratic_bezier(v3 p0, v3 p1, v3 p2, f32 t)
+{
+    // assert(t <= 1.0f && t >= 0.0f);
+    f32 one_minus_t = 1-t;
+
+    v3 result = one_minus_t*one_minus_t*p0 + 2*t*one_minus_t*p1 + t*t*p2;
+
+    return result;
+}
+
 inline f32
 max_element(v3 a)
 {
