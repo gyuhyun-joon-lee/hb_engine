@@ -426,7 +426,7 @@ init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 fov_in_degree,
     result.distance_from_axis = distance_from_axis;
     result.rad = 0;
 
-    result.fov = (fov_in_degree / 180)*pi_32;
+    result.fov = degree_to_radian(fov_in_degree);
 
     result.near = near;
     result.far = far;
@@ -607,20 +607,6 @@ push_line(RenderGroup *render_group, v3 start, v3 end, v3 color)
 
     entry->start = start;
     entry->end = end;
-    entry->color = color;
-}
- 
-internal void
-push_cube(RenderGroup *render_group, v3 p, v3 half_dim, v3 color, quat orientation)
-{
-    RenderEntryCube *entry = (RenderEntryCube *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
-    render_group->render_push_buffer->used += sizeof(*entry);
-    assert(render_group->render_push_buffer->used <= render_group->render_push_buffer->total_size);
-
-    entry->header.type = RenderEntryType_Cube;
-    entry->p = p;
-    entry->dim = 2.0f * half_dim; // TODO(gh) do we store half_dim instead?
-    entry->orientation = orientation;
     entry->color = color;
 }
 

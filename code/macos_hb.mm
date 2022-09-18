@@ -572,21 +572,22 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                            render_context->directional_light_shadowmap_depth_texture_height);
     metal_set_triangle_fill_mode(shadowmap_render_encoder, MTLTriangleFillModeFill);
     metal_set_front_facing_winding(shadowmap_render_encoder, MTLWindingCounterClockwise);
-    // Culling front facing triangles when rendering shadowmap to avoid shadow acne
+    // Culling front facing triangles when rendering shadowmap to avoid 
+    // shadow acne(moire pattern in non-shaded sides). This effectively 'biases' the shadowmap value down
     // TODO(gh) This does not work for thin objects!!!!
     metal_set_cull_mode(shadowmap_render_encoder, MTLCullModeFront); 
     metal_set_detph_stencil_state(shadowmap_render_encoder, render_context->depth_state);
 
     metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
 
-    local_persist f32 rad = 0.0f;
-    rad += 0.1f*dt_per_frame;
+    local_persist f32 rad = 2.4f;
+    // rad += 0.1f*dt_per_frame;
     v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 5); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
     // TODO(gh) These are totally made up near, far, width values 
-    m4x4 light_proj = perspective_projection(degree_to_radian(120), 0.01f, 100.0f, (f32)render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
-    // m4x4 light_proj = orthogonal_projection(0.01f, 100.0f, 10.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
+    // m4x4 light_proj = perspective_projection(degree_to_radian(120), 0.01f, 100.0f, (f32)render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
+    m4x4 light_proj = orthogonal_projection(0.01f, 100.0f, 10.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
     v3 directional_light_z_axis = -directional_light_direction;
     v3 directional_light_x_axis = normalize(cross(V3(0, 0, 1), directional_light_z_axis));
     v3 directional_light_y_axis = normalize(cross(directional_light_z_axis, directional_light_x_axis));
@@ -628,14 +629,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
                 metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
-            }break;
-
-            case RenderEntryType_Cube:
-            {
-                RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
-                consumed += sizeof(*entry);
-
-                invalid_code_path;
             }break;
 
             default: 
@@ -728,39 +721,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                     metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
                 }break;
-
-                case RenderEntryType_Cube:
-                {
-#if 0
-                    RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += sizeof(*entry);
-
-                    m4x4 model = srt_m4x4(entry->p, entry->orientation, entry->dim);
-                    model = transpose(model); // make the matrix column-major
-                    PerObjectData per_object_data = {};
-                    per_object_data.model = model;
-                    per_object_data.color = entry->color;
-
-                    // TODO(gh) changing pipeline can be expensive, meaure the performance and
-                    // sort the entries so that this only happens once per entry type.
-                    metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
-                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                    metal_set_vertex_bytes(render_encoder, cube_vertices, sizeof(f32) * array_count(cube_vertices), 2);
-                    metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
-
-                    metal_set_vertex_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-
-                    metal_draw_indexed_instances(render_encoder, MTLPrimitiveTypeTriangle, 
-                            render_context->cube_outward_facing_index_buffer.buffer, array_count(cube_outward_facing_indices), 1);
-
-#endif
-                    invalid_code_path;
-                }break;
             }
         }
-
-
-
 
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);

@@ -82,7 +82,6 @@ enum RenderEntryType
 {
     RenderEntryType_AABB,
     RenderEntryType_Line,
-    RenderEntryType_Cube,
     RenderEntryType_Sphere,
 };
 
@@ -109,19 +108,6 @@ struct RenderEntryLine
 
     v3 start;
     v3 end;
-    v3 color;
-};
-
-struct RenderEntryCube
-{
-    RenderEntryHeader header;
-
-    // TODO(gh) Should we store the full model matrix to reduce time from
-    // getting the rendering material to acutally drawing it to the screen?(especially for Metal)
-    v3 p;
-    v3 dim;
-    quat orientation; // NOTE(gh) this should be a pure quaternion
-
     v3 color;
 };
 

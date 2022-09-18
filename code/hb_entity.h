@@ -6,8 +6,7 @@ enum EntityType
     Entity_Type_Null,
     Entity_Type_AABB,
     Entity_Type_Floor,
-    Entity_Type_Mass_Agg,
-    Entity_Type_Cube,
+    Entity_Type_Grass,
 };
 
 enum EntityFlag
@@ -22,7 +21,7 @@ struct Entity
     EntityType type;
     u32 flags;
 
-    // TODO(joon) For the voxels, we can have a palette that is relatve to this entity, similiar to the teardown engine
+    v3 p; // TODO(gh) such objects like rigid body does not make use of this!!!
     v3 color;
 
     // TODO(joon) some kind of entity system, 

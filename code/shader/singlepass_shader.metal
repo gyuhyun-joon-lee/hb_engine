@@ -138,7 +138,7 @@ singlepass_cube_frag(CubeVertexOutput vertex_output [[stage_in]],
         }
     }
 
-    shadow_factor /= 9; // Because we sampled from 9 different texels
+    shadow_factor /= 9.0f; // Because we sampled from 9 different texels
 #else 
     float shadow_factor = 1.0f;
     // if(vertex_output.p_in_light_coordinate.x <= 1.0f && vertex_output.p_in_light_coordinate.y <= 1.0f)
@@ -146,6 +146,7 @@ singlepass_cube_frag(CubeVertexOutput vertex_output [[stage_in]],
         // NOTE(gh) If the shadowmap value is smaller(light was closer to another object), this point should be in shadow.
         shadow_factor = 
             shadowmap.sample_compare(shadowmap_sampler, vertex_output.p_in_light_coordinate.xy, vertex_output.p_in_light_coordinate.z);
+        // shadow_factor = vertex_output.p_in_light_coordinate.z;
     }
 #endif
 

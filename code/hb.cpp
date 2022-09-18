@@ -46,8 +46,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
         game_state->circle_camera = init_circle_camera(V3(0, 0, 10), V3(0, 0, 0), 10.0f, 135, 0.01f, 10000.0f);
 
-        add_floor_entity(game_state, V3(0, 0, 2), V3(2, 2, 2), V3(1, 1, 1));
-        add_floor_entity(game_state, V3(0, 0, 0), V3(10, 10, 2), V3(1, 1, 1));
+        // add_floor_entity(game_state, V3(0, 0, 2), V3(2, 2, 2), V3(1, 1, 1));
+        add_floor_entity(game_state, V3(0, 0, -1), V3(10, 10, 2), V3(1, 1, 1));
+
+        add_grass_entity(game_state, V3(0, 0, 0), V3(0, 1, 0.2f));
         
         game_state->is_initialized = true;
     }
@@ -65,11 +67,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
     if(platform_input->action_left)
     {
-        // camera->roll += camera_rotation_speed;
+        game_state->circle_camera.rad -= 0.6f * platform_input->dt_per_frame;
     }
     if(platform_input->action_right)
     {
-        // camera->roll -= camera_rotation_speed;
+        game_state->circle_camera.rad += 0.6f * platform_input->dt_per_frame;
     }
 
     v3 camera_dir = get_camera_lookat(camera);
@@ -87,7 +89,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                     cosf(game_state->circle_camera.rad);
     game_state->circle_camera.p.y = game_state->circle_camera.distance_from_axis * 
                                     sinf(game_state->circle_camera.rad);
-    // game_state->circle_camera.rad += 1.0f * platform_input->dt_per_frame;
     
     // NOTE(gh) update entity start
 
@@ -110,26 +111,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                           entity->aabb.p, 2.0f*entity->aabb.half_dim, 
                           entity->color);
                 // push_cube(&render_group, entity->aabb.p, 2.0f * entity->aabb.half_dim, V3(1, 1, 1), Quat(1, 0, 0, 0));
-            }break;
-
-            case Entity_Type_Mass_Agg:
-            {
-                for(u32 connection_index = 0;
-                        connection_index < entity->mass_agg.connection_count;
-                        ++connection_index)
-                {
-                    PiecewiseMassParticleConnection *connection = entity->mass_agg.connections + connection_index;
-
-                    MassParticle *particle_0 = entity->mass_agg.particles + connection->ID_0;
-                    MassParticle *particle_1 = entity->mass_agg.particles + connection->ID_1;
-                    push_line(&render_group, particle_0->p, particle_1->p, entity->color);
-                }
-            }break;
-
-            case Entity_Type_Cube:
-            {
-                // TODO(gh) collision volume independent rendering?
-                push_cube(&render_group, entity->rb.p + entity->cv.offset, entity->cv.half_dim, entity->color, entity->rb.orientation);
             }break;
         }
     }
