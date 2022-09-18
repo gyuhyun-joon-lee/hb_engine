@@ -92,9 +92,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     
     // NOTE(gh) update entity start
 
-    RenderGroup render_group = {};
-    // start_render_group(&render_group, platform_render_push_buffer, &game_state->camera, V3(0, 0, 0));
-    start_render_group(&render_group, platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0));
+    init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
 
 #if 1
     for(u32 entity_index = 0;
@@ -104,13 +102,18 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         Entity *entity = game_state->entities + entity_index;
         switch(entity->type)
         {
-            case Entity_Type_Floor:
-            case Entity_Type_AABB:
+            case EntityType_Floor:
+            case EntityType_AABB:
             {
-                push_aabb(&render_group, 
+                push_aabb(platform_render_push_buffer, 
                           entity->aabb.p, 2.0f*entity->aabb.half_dim, 
                           entity->color);
                 // push_cube(&render_group, entity->aabb.p, 2.0f * entity->aabb.half_dim, V3(1, 1, 1), Quat(1, 0, 0, 0));
+            }break;
+
+            case EntityType_Grass:
+            {
+                push_grass(platform_render_push_buffer, entity->p, entity->color);
             }break;
         }
     }

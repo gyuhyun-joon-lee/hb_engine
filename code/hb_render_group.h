@@ -82,7 +82,7 @@ enum RenderEntryType
 {
     RenderEntryType_AABB,
     RenderEntryType_Line,
-    RenderEntryType_Sphere,
+    RenderEntryType_Grass,
 };
 
 // TODO(gh) Do we have enough reason to keep this header?
@@ -111,29 +111,12 @@ struct RenderEntryLine
     v3 color;
 };
 
-struct RenderEntrySphere
+struct RenderEntryGrass
 {
     RenderEntryHeader header;
 
     v3 p;
-    v3 r;
     v3 color;
-};
-
-#if 0
-struct RenderEntryParticleFaces
-{
-    RenderEntryHeader header;
-    ParticleFaces *faces;
-    u32 face_count;
-};
-#endif
-
-// TODO(gh) Do we even need to keep the concept of 'render group'
-struct RenderGroup
-{
-    // NOTE(gh) provided by the platform layer
-    PlatformRenderPushBuffer *render_push_buffer;
 };
 
 // TODO(gh) move the shader related structs(i.e uniform) into seperate file? (hb_shader.h)

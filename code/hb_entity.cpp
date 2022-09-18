@@ -24,7 +24,7 @@ add_entity(GameState *game_state, EntityType type, u32 flags)
 internal Entity *
 add_floor_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 {
-    Entity *result = add_entity(game_state, Entity_Type_Floor, Entity_Flag_Collides);
+    Entity *result = add_entity(game_state, EntityType_Floor, Entity_Flag_Collides);
     result->aabb = init_aabb(p, 0.5f * dim, 0.0f);
 
     result->color = color;
@@ -35,7 +35,7 @@ add_floor_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 internal Entity *
 add_grass_entity(GameState *game_state, v3 p, v3 color)
 {
-    Entity *result = add_entity(game_state, Entity_Type_Grass, 0);
+    Entity *result = add_entity(game_state, EntityType_Grass, 0);
     result->p = p;
     result->color = color;
 

@@ -753,7 +753,7 @@ move_mass_agg_entity(GameState *game_state, Entity *entity, f32 dt_per_frame, b3
                         if(entity != test_entity && 
                             is_entity_flag_set(test_entity, Entity_Flag_Collides))
                         {
-                            if(test_entity->type == Entity_Type_Floor)
+                            if(test_entity->type == EntityType_Floor)
                             {
                                 AABB *test_aabb = &test_entity->aabb;
 

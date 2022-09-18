@@ -162,6 +162,8 @@ struct DeferredLightingVertexOutput
 {
     float4 clip_p [[position]];
     float3 light_p;
+
+    bool enable_shadow;
 };
 
 // NOTE(gh) This generates one full quad, assuming that the vertexID is 0, 1, 2 ... 5
@@ -179,12 +181,15 @@ constant float2 full_quad_vertices[]
 vertex DeferredLightingVertexOutput
 singlepass_deferred_lighting_vertex(uint vertexID [[vertex_id]],
                 // TODO(gh) again, bad idea to pass this one by one...
-                         constant float *light_p[[buffer(0)]])
+                         constant float *light_p[[buffer(0)]],
+                         constant bool *enable_shadow[[buffer(1)]])
 {
     DeferredLightingVertexOutput result = {};
 
     result.clip_p = float4(full_quad_vertices[vertexID], 0.0f, 1.0f);
     result.light_p = float3(light_p[0], light_p[1], light_p[2]);
+
+    result.enable_shadow = *enable_shadow;
     
     return result;
 }
@@ -206,7 +211,11 @@ singlepass_deferred_lighting_frag(DeferredLightingVertexOutput vertex_output [[s
 
     float ambient = 0.2f;
 
-    float shadow_factor = N.w; // shadow factor is secretly baked with the normal texture
+    float shadow_factor = 1.0f;
+    if(vertex_output.enable_shadow)
+    {
+        shadow_factor = N.w; // shadow factor is secretly baked with the normal texture
+    }
     float diffuse = shadow_factor * max(dot(N.xyz, L), 0.0f);
 
     float4 result = float4(color * (ambient + diffuse), 1.0f);

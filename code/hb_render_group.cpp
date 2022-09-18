@@ -569,10 +569,10 @@ perspective_projection(f32 near, f32 far, f32 width, f32 width_over_height)
 #endif
 
 internal void
-start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_push_buffer, CircleCamera *camera, v3 clear_color)
+init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCamera *camera, v3 clear_color, 
+                        b32 enable_shadow)
 {
-    assert(render_push_buffer->base)
-    render_group->render_push_buffer = render_push_buffer;
+    assert(render_push_buffer->base);
 
     render_push_buffer->view = camera_transform(camera);
     render_push_buffer->camera_near = camera->near;
@@ -580,15 +580,18 @@ start_render_group(RenderGroup *render_group, PlatformRenderPushBuffer *render_p
     render_push_buffer->camera_fov = camera->fov;
     render_push_buffer->clear_color = clear_color;
 
-    render_group->render_push_buffer->used = 0;
+    render_push_buffer->enable_shadow = enable_shadow;
+
+    render_push_buffer->used = 0;
 }
  
 internal void
-push_aabb(RenderGroup *render_group, v3 p, v3 dim, v3 color)
+push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color)
 {
-    RenderEntryAABB *entry = (RenderEntryAABB *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
-    render_group->render_push_buffer->used += sizeof(*entry);
-    assert(render_group->render_push_buffer->used <= render_group->render_push_buffer->total_size);
+    RenderEntryAABB *entry = (RenderEntryAABB *)(render_push_buffer->base + render_push_buffer->used);
+    render_push_buffer->used += sizeof(*entry);
+
+    assert(render_push_buffer->used <= render_push_buffer->total_size);
 
     entry->header.type = RenderEntryType_AABB;
     entry->p = p;
@@ -599,14 +602,27 @@ push_aabb(RenderGroup *render_group, v3 p, v3 dim, v3 color)
 
 // TODO(gh) do we want to collape this to single line_group or something to save memory(color, type)?
 internal void
-push_line(RenderGroup *render_group, v3 start, v3 end, v3 color)
+push_line(PlatformRenderPushBuffer *render_push_buffer, v3 start, v3 end, v3 color)
 {
-    RenderEntryLine *entry = (RenderEntryLine *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
+    RenderEntryLine *entry = (RenderEntryLine *)(render_push_buffer->base + render_push_buffer->used);
+    render_push_buffer->used += sizeof(*entry);
     entry->header.type = RenderEntryType_Line;
-    render_group->render_push_buffer->used += sizeof(*entry);
 
     entry->start = start;
     entry->end = end;
+    entry->color = color;
+}
+
+internal void
+push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 color)
+{
+    RenderEntryGrass *entry = (RenderEntryGrass *)(render_push_buffer->base + render_push_buffer->used);
+    render_push_buffer->used += sizeof(*entry);
+
+    assert(render_push_buffer->used <= render_push_buffer->total_size);
+
+    entry->header.type = RenderEntryType_Grass;
+    entry->p = p;
     entry->color = color;
 }
 

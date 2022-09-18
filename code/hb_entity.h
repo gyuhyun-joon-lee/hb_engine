@@ -3,10 +3,10 @@
 
 enum EntityType
 {
-    Entity_Type_Null,
-    Entity_Type_AABB,
-    Entity_Type_Floor,
-    Entity_Type_Grass,
+    EntityType_Null,
+    EntityType_AABB,
+    EntityType_Floor,
+    EntityType_Grass,
 };
 
 enum EntityFlag

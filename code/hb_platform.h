@@ -303,6 +303,9 @@ struct PlatformRenderPushBuffer
     f32 camera_fov;
     v3 clear_color;
 
+    // TODO(joon) Make configuration as struct
+    b32 enable_shadow;
+
     u8 *base;
     u32 total_size;
     u32 used;
