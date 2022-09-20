@@ -17,15 +17,103 @@ add_entity(GameState *game_state, EntityType type, u32 flags)
     return entity;
 }
 
+f32 cube_vertices[] = 
+{
+    // -x
+    -0.5f,-0.5f,-0.5f,  -1, 0, 0,
+    -0.5f,-0.5f, 0.5f,  -1, 0, 0,
+    -0.5f, 0.5f, 0.5f,  -1, 0, 0,
+
+    // -z
+    0.5f, 0.5f,-0.5f,  0, 0, -1,
+    -0.5f,-0.5f,-0.5f,  0, 0, -1,
+    -0.5f, 0.5f,-0.5f,  0, 0, -1,
+
+    // -y
+    0.5f,-0.5f, 0.5f,  0, -1, 0,
+    -0.5f,-0.5f,-0.5f,  0, -1, 0,
+    0.5f,-0.5f,-0.5f,  0, -1, 0,
+
+    // -z
+    0.5f, 0.5f,-0.5f,  0, 0, -1,
+    0.5f,-0.5f,-0.5f,  0, 0, -1,
+    -0.5f,-0.5f,-0.5f,  0, 0, -1,
+
+    // -x
+    -0.5f,-0.5f,-0.5f,  -1, 0, 0,
+    -0.5f, 0.5f, 0.5f,  -1, 0, 0,
+    -0.5f, 0.5f,-0.5f,  -1, 0, 0,
+
+    // -y
+    0.5f,-0.5f, 0.5f,  0, -1, 0,
+    -0.5f,-0.5f, 0.5f,  0, -1, 0,
+    -0.5f,-0.5f,-0.5f,  0, -1, 0,
+
+    // +z
+    -0.5f, 0.5f, 0.5f,  0, 0, 1,
+    -0.5f,-0.5f, 0.5f,  0, 0, 1,
+    0.5f,-0.5f, 0.5f,  0, 0, 1,
+
+    // +x
+    0.5f, 0.5f, 0.5f,  1, 0, 0,
+    0.5f,-0.5f,-0.5f,  1, 0, 0,
+    0.5f, 0.5f,-0.5f,  1, 0, 0,
+
+    // +x
+    0.5f,-0.5f,-0.5f,  1, 0, 0,
+    0.5f, 0.5f, 0.5f,  1, 0, 0,
+    0.5f,-0.5f, 0.5f,  1, 0, 0,
+
+    // +y
+    0.5f, 0.5f, 0.5f,  0, 1, 0,
+    0.5f, 0.5f,-0.5f,  0, 1, 0,
+    -0.5f, 0.5f,-0.5f,  0, 1, 0,
+
+    // +y
+    0.5f, 0.5f, 0.5f,  0, 1, 0,
+    -0.5f, 0.5f,-0.5f,  0, 1, 0,
+    -0.5f, 0.5f, 0.5f,  0, 1, 0,
+
+    // +z
+    0.5f, 0.5f, 0.5f,  0, 0, 1,
+    -0.5f, 0.5f, 0.5f,  0, 0, 1,
+    0.5f,-0.5f, 0.5f,   0, 0, 1,
+};
+
 // NOTE(gh) floor is non_movable entity with infinite mass
 internal Entity *
 add_floor_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 {
     Entity *result = add_entity(game_state, EntityType_Floor, Entity_Flag_Collides);
-    result->aabb = init_aabb(p, 0.5f * dim, 0.0f);
-
+    result->p = p;
+    result->dim = dim;
     result->color = color;
-    
+
+    result->vertices = (CommonVertex *)malloc(sizeof(CommonVertex) * result->vertex_count);
+    result->vertex_count = array_count(cube_vertices) / 6;
+    for(u32 i = 0;
+            i < result->vertex_count;
+            ++i)
+    {
+        result->vertices[i].p.x = cube_vertices[6*i+0];
+        result->vertices[i].p.y = cube_vertices[6*i+1];
+        result->vertices[i].p.z = cube_vertices[6*i+2];
+
+        result->vertices[i].normal.x = cube_vertices[6*i+3];
+        result->vertices[i].normal.y = cube_vertices[6*i+4];
+        result->vertices[i].normal.z = cube_vertices[6*i+5];
+    }
+
+    result->index_count = result->vertex_count;
+    result->indices = (u32 *)malloc(sizeof(u32) * result->index_count);
+
+    for(u32 i = 0;
+            i < result->index_count;
+            ++i)
+    {
+        result->indices[i] = i;
+    }
+
     return result;
 }
 

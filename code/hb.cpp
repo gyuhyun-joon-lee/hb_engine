@@ -107,9 +107,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_AABB:
             {
                 push_aabb(platform_render_push_buffer, 
-                          entity->aabb.p, 2.0f*entity->aabb.half_dim, 
-                          entity->color);
-                // push_cube(&render_group, entity->aabb.p, 2.0f * entity->aabb.half_dim, V3(1, 1, 1), Quat(1, 0, 0, 0));
+                          entity->p, entity->dim, entity->color, 
+                          entity->vertices, entity->vertex_count, entity->indices, entity->index_count);
             }break;
 
             case EntityType_Grass:

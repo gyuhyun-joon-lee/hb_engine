@@ -587,21 +587,6 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCame
 
     render_push_buffer->used = 0;
 }
- 
-internal void
-push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color)
-{
-    RenderEntryAABB *entry = (RenderEntryAABB *)(render_push_buffer->base + render_push_buffer->used);
-    render_push_buffer->used += sizeof(*entry);
-
-    assert(render_push_buffer->used <= render_push_buffer->total_size);
-
-    entry->header.type = RenderEntryType_AABB;
-    entry->p = p;
-    entry->dim = dim;
-    
-    entry->color = color;
-}
 
 // TODO(gh) do we want to collape this to single line_group or something to save memory(color, type)?
 internal void
@@ -651,9 +636,30 @@ push_index_data(PlatformRenderPushBuffer *render_push_buffer, u32 *indices, u32 
     // returns original used index buffer
     return result;
 }
+ 
+internal void
+push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
+          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+{
+    RenderEntryAABB *entry = (RenderEntryAABB *)(render_push_buffer->base + render_push_buffer->used);
+    render_push_buffer->used += sizeof(*entry);
+
+    assert(render_push_buffer->used <= render_push_buffer->total_size);
+
+    entry->header.type = RenderEntryType_AABB;
+    entry->p = p;
+    entry->dim = dim;
+    
+    entry->color = color;
+
+    entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);
+    entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);
+    entry->index_count = index_count;
+}
 
 internal void
-push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 color, CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 color, 
+          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count)
 {
     RenderEntryGrass *entry = (RenderEntryGrass *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
@@ -669,18 +675,6 @@ push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 color, CommonV
     entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);
     entry->index_count = index_count;
 }
-
-#if 0
-internal void
-push_particle_faces(RenderGroup *render_group, v3 v_0, v3 v_1, v3 v_2, v3 color)
-{
-    RenderEntryParticleFaces *entry = (RenderEntryParticleFaces *)(render_group->render_push_buffer->base + render_group->render_push_buffer->used);
-    entry->header.type = RenderEntryType_Particle_Faces;
-    render_group->render_push_buffer->used += sizeof(*entry);
-
-    entry->faces = ;
-}
-#endif
 
 
 

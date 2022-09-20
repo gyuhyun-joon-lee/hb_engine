@@ -413,69 +413,6 @@ thread_proc(void *data)
     return 0;
 }
 
-f32 cube_vertices[] = 
-{
-    // -x
-    -0.5f,-0.5f,-0.5f,  -1, 0, 0,
-    -0.5f,-0.5f, 0.5f,  -1, 0, 0,
-    -0.5f, 0.5f, 0.5f,  -1, 0, 0,
-
-    // -z
-    0.5f, 0.5f,-0.5f,  0, 0, -1,
-    -0.5f,-0.5f,-0.5f,  0, 0, -1,
-    -0.5f, 0.5f,-0.5f,  0, 0, -1,
-
-    // -y
-    0.5f,-0.5f, 0.5f,  0, -1, 0,
-    -0.5f,-0.5f,-0.5f,  0, -1, 0,
-    0.5f,-0.5f,-0.5f,  0, -1, 0,
-
-    // -z
-    0.5f, 0.5f,-0.5f,  0, 0, -1,
-    0.5f,-0.5f,-0.5f,  0, 0, -1,
-    -0.5f,-0.5f,-0.5f,  0, 0, -1,
-
-    // -x
-    -0.5f,-0.5f,-0.5f,  -1, 0, 0,
-    -0.5f, 0.5f, 0.5f,  -1, 0, 0,
-    -0.5f, 0.5f,-0.5f,  -1, 0, 0,
-
-    // -y
-    0.5f,-0.5f, 0.5f,  0, -1, 0,
-    -0.5f,-0.5f, 0.5f,  0, -1, 0,
-    -0.5f,-0.5f,-0.5f,  0, -1, 0,
-
-    // +z
-    -0.5f, 0.5f, 0.5f,  0, 0, 1,
-    -0.5f,-0.5f, 0.5f,  0, 0, 1,
-    0.5f,-0.5f, 0.5f,  0, 0, 1,
-
-    // +x
-    0.5f, 0.5f, 0.5f,  1, 0, 0,
-    0.5f,-0.5f,-0.5f,  1, 0, 0,
-    0.5f, 0.5f,-0.5f,  1, 0, 0,
-
-    // +x
-    0.5f,-0.5f,-0.5f,  1, 0, 0,
-    0.5f, 0.5f, 0.5f,  1, 0, 0,
-    0.5f,-0.5f, 0.5f,  1, 0, 0,
-
-    // +y
-    0.5f, 0.5f, 0.5f,  0, 1, 0,
-    0.5f, 0.5f,-0.5f,  0, 1, 0,
-    -0.5f, 0.5f,-0.5f,  0, 1, 0,
-
-    // +y
-    0.5f, 0.5f, 0.5f,  0, 1, 0,
-    -0.5f, 0.5f,-0.5f,  0, 1, 0,
-    -0.5f, 0.5f, 0.5f,  0, 1, 0,
-
-    // +z
-    0.5f, 0.5f, 0.5f,  0, 0, 1,
-    -0.5f, 0.5f, 0.5f,  0, 0, 1,
-    0.5f,-0.5f, 0.5f,   0, 0, 1,
-};
-
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
 // and put them inside the render mesh so that the graphics API can render them.
 internal void
@@ -547,7 +484,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 m4x4 model = st_m4x4(entry->p, entry->dim);
                 model = transpose(model); // make the matrix column-major
 
-                metal_set_vertex_bytes(shadowmap_render_encoder, cube_vertices, array_size(cube_vertices), 0);
+                metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
@@ -555,7 +492,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 // making the shadow map to place under the fragments that are being shaded.
                 // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
-                metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 6);
+                metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
+                                  render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
             }break;
 
             case RenderEntryType_Grass:
@@ -656,14 +594,17 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                     metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                    metal_set_vertex_bytes(render_encoder, cube_vertices, array_size(cube_vertices), 2);
+                    metal_set_vertex_buffer(render_encoder, 
+                                            render_context->combined_vertex_buffer.buffer, 
+                                            entry->vertex_buffer_offset, 2);
                     metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
 
                     metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
 
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
 
-                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 6);
+                    metal_draw_indexed(render_encoder, MTLPrimitiveTypeTriangle, 
+                            render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
                 }break;
 
                 case RenderEntryType_Grass:
@@ -671,7 +612,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
-                    m4x4 model = st_m4x4(entry->p, V3(1, 1, 5));
+                    m4x4 model = st_m4x4(entry->p, V3(2, 2, 2));
                     model = transpose(model); // make the matrix column-major
 
                     PerObjectData per_object_data = {};

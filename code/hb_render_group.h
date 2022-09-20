@@ -98,8 +98,13 @@ struct RenderEntryAABB
 
     v3 p;
     v3 dim;
-
     v3 color;
+
+    // TODO(gh) Make this as a struct?
+    // NOTE(gh) offset to the combined vertex & index buffer
+    u32 vertex_buffer_offset;
+    u32 index_buffer_offset;
+    u32 index_count;
 };
 
 struct RenderEntryLine
