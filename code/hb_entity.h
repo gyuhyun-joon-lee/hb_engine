@@ -27,7 +27,9 @@ struct Entity
     v3 color;
 
     // NOTE(gh) bezier curve properties
+    u32 grass_divided_count;
     v3 p1; // midpoint
+    f32 p2_bob_dt; // Determines the position of p2
 
     CommonVertex *vertices;
     u32 vertex_count;

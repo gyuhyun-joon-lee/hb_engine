@@ -30,11 +30,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     GameState *game_state = (GameState *)platform_memory->permanent_memory;
     if(!game_state->is_initialized)
     {
+        game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
+
         // TODO(gh) entity arena?
         game_state->max_entity_count = 1024;
-        game_state->entities = (Entity *)malloc(sizeof(Entity) * game_state->max_entity_count);
-
-        game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
+        game_state->entities = push_array(&game_state->transient_arena, Entity, game_state->max_entity_count);
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
                                                     game_state->transient_arena.total_size + 
@@ -47,9 +47,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->circle_camera = init_circle_camera(V3(0, 0, 10), V3(0, 0, 0), 10.0f, 135, 0.01f, 10000.0f);
 
         // add_floor_entity(game_state, V3(0, 0, 2), V3(2, 2, 2), V3(1, 1, 1));
-        add_floor_entity(game_state, V3(0, 0, -1), V3(10, 10, 2), V3(1, 1, 1));
+        add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, -1), V3(10, 10, 2), V3(1, 1, 1));
 
-        add_grass_entity(game_state, platform_render_push_buffer, V3(0, 0, 0), V3(0, 1, 0.2f), V3(0, 0, 1));
+        add_grass_entity(game_state, platform_render_push_buffer, &game_state->transient_arena, V3(0, 0, 0), V3(1, 1, 1), V3(0, 1, 0.2f), V3(0, 0, 1));
         
         game_state->is_initialized = true;
     }
@@ -91,6 +91,29 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                     sinf(game_state->circle_camera.rad);
     
     // NOTE(gh) update entity start
+    for(u32 entity_index = 0;
+        entity_index < game_state->entity_count;
+        ++entity_index)
+    {
+        Entity *entity = game_state->entities + entity_index;
+        switch(entity->type)
+        {
+            case EntityType_Floor:
+            case EntityType_AABB:
+            {
+            }break;
+
+            case EntityType_Grass:
+            {
+                // TODO(gh) More solid way to handle this, maybe by storing p2 in grass entity
+                v3 p2 = V3(0, 1, 1 + 0.2f*sinf(entity->p2_bob_dt));
+                populate_grass_vertices(V3(0, 0, 0), entity->p1, p2, entity->grass_divided_count, 
+                                        entity->vertices, entity->vertex_count);
+
+                entity->p2_bob_dt += 2.0f*platform_input->dt_per_frame;
+            }break;
+        }
+    }
 
     // NOTE(gh) render entity start
     init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
@@ -113,7 +136,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case EntityType_Grass:
             {
-                push_grass(platform_render_push_buffer, entity->p, entity->color, 
+                push_grass(platform_render_push_buffer, entity->p, entity->dim, entity->color, 
                             entity->vertices, entity->vertex_count, entity->indices, entity->index_count);
             }break;
         }

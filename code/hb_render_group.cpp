@@ -658,7 +658,7 @@ push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color,
 }
 
 internal void
-push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 color, 
+push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
           CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count)
 {
     RenderEntryGrass *entry = (RenderEntryGrass *)(render_push_buffer->base + render_push_buffer->used);
@@ -669,6 +669,7 @@ push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 color,
 
     entry->header.type = RenderEntryType_Grass;
     entry->p = p;
+    entry->dim = dim;
     entry->color = color;
 
     entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);

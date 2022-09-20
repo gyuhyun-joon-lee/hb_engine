@@ -121,6 +121,7 @@ struct RenderEntryGrass
     RenderEntryHeader header;
 
     v3 p;
+    v3 dim;
     v3 color;
 
     // NOTE(gh) offset to the combined vertex & index buffer
