@@ -71,24 +71,23 @@ singlepass_cube_vertex(uint vertexID [[vertex_id]],
             constant PerObjectData *per_object_data [[buffer(1)]], 
 
             // TODO(gh) This is only fine for simple objects with not a lot of vertices
-            constant float *positions [[buffer(2)]], 
-            constant float *normals [[buffer(3)]],
+            constant float *vertices [[buffer(2)]], 
 
             // TODO(gh) Make a light buffer so that we can just pass that
-            constant float4x4 *light_proj_view[[buffer(4)]])
+            constant float4x4 *light_proj_view[[buffer(3)]])
 {
     CubeVertexOutput result = {};
 
     float4 world_p = per_object_data->model * 
-                        float4(positions[3*vertexID+0], 
-                                positions[3*vertexID+1],
-                                positions[3*vertexID+2],
+                        float4(vertices[6*vertexID+0], 
+                                vertices[6*vertexID+1],
+                                vertices[6*vertexID+2],
                                 1.0f);
 
     float4 world_normal = per_object_data->model * 
-                        float4(normals[3*vertexID+0], 
-                                normals[3*vertexID+1],
-                                normals[3*vertexID+2],
+                        float4(vertices[6*vertexID+3], 
+                                vertices[6*vertexID+4],
+                                vertices[6*vertexID+5],
                                 0.0f);
 
     result.clip_p = per_frame_data->proj_view * world_p;

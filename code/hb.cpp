@@ -49,7 +49,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // add_floor_entity(game_state, V3(0, 0, 2), V3(2, 2, 2), V3(1, 1, 1));
         add_floor_entity(game_state, V3(0, 0, -1), V3(10, 10, 2), V3(1, 1, 1));
 
-        add_grass_entity(game_state, V3(0, 0, 0), V3(0, 1, 0.2f));
+        add_grass_entity(game_state, platform_render_push_buffer, V3(0, 0, 0), V3(0, 1, 0.2f), V3(0, 0, 1));
         
         game_state->is_initialized = true;
     }
@@ -114,7 +114,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case EntityType_Grass:
             {
-                push_grass(platform_render_push_buffer, entity->p, entity->color);
+                push_grass(platform_render_push_buffer, entity->p, entity->color, 
+                            entity->vertices, entity->vertex_count, entity->indices, entity->index_count);
             }break;
         }
     }

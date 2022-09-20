@@ -117,6 +117,11 @@ struct RenderEntryGrass
 
     v3 p;
     v3 color;
+
+    // NOTE(gh) offset to the combined vertex & index buffer
+    u32 vertex_buffer_offset;
+    u32 index_buffer_offset;
+    u32 index_count;
 };
 
 // TODO(gh) move the shader related structs(i.e uniform) into seperate file? (hb_shader.h)

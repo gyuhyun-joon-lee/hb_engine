@@ -581,6 +581,9 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCame
     render_push_buffer->clear_color = clear_color;
 
     render_push_buffer->enable_shadow = enable_shadow;
+    
+    render_push_buffer->used_vertex_buffer = 0;
+    render_push_buffer->used_index_buffer = 0;
 
     render_push_buffer->used = 0;
 }
@@ -613,17 +616,58 @@ push_line(PlatformRenderPushBuffer *render_push_buffer, v3 start, v3 end, v3 col
     entry->color = color;
 }
 
+// TODO(gh) not sure how this will hold up when the scene gets complicated(with a lot or vertices)
+// so keep an eye on this method
+internal u32
+push_vertex_data(PlatformRenderPushBuffer *render_push_buffer, CommonVertex *vertices, u32 vertex_count)
+{
+    u32 result = render_push_buffer->used_vertex_buffer;
+
+    u32 size_to_copy = sizeof(vertices[0]) * vertex_count;
+
+    void *dst = (u8 *)render_push_buffer->combined_vertex_buffer + render_push_buffer->used_vertex_buffer;
+    memcpy(dst, vertices, size_to_copy);
+
+    render_push_buffer->used_vertex_buffer += size_to_copy;
+    assert(render_push_buffer->used_vertex_buffer <= render_push_buffer->vertex_buffer_size);
+
+    // returns original used vertex buffer
+    return result;
+}
+
+internal u32
+push_index_data(PlatformRenderPushBuffer *render_push_buffer, u32 *indices, u32 index_count)
+{
+    u32 result = render_push_buffer->used_index_buffer;
+
+    u32 size_to_copy = sizeof(indices[0]) * index_count;
+    
+    void *dst = (u8 *)render_push_buffer->combined_index_buffer + render_push_buffer->used_index_buffer;
+    memcpy(dst, indices, size_to_copy);
+
+    render_push_buffer->used_index_buffer += size_to_copy;
+    assert(render_push_buffer->used_index_buffer <= render_push_buffer->index_buffer_size);
+
+    // returns original used index buffer
+    return result;
+}
+
 internal void
-push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 color)
+push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 color, CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count)
 {
     RenderEntryGrass *entry = (RenderEntryGrass *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
 
     assert(render_push_buffer->used <= render_push_buffer->total_size);
+    assert(vertex_count != 0 && index_count != 0);
 
     entry->header.type = RenderEntryType_Grass;
     entry->p = p;
     entry->color = color;
+
+    entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);
+    entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);
+    entry->index_count = index_count;
 }
 
 #if 0

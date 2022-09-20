@@ -137,9 +137,6 @@ app_delegate : NSObject<NSApplicationDelegate>
 
 @end
 
-
-
-
 internal CVReturn 
 display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_time, const CVTimeStamp* output_time,
                 CVOptionFlags ignored_0, CVOptionFlags* ignored_1, void* displayLinkContext)
@@ -386,7 +383,7 @@ macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
 }
 
 internal 
-PLATFORM_COMPLETE_ALL_ThreadWorkQueue_ITEMS(macos_complete_all_ThreadWorkQueue_items)
+PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_ThreadWorkQueue_items)
 {
     // TODO(gh): If there was a last thread that was working on the item,
     // this does not guarantee that the last work will be finished.
@@ -418,264 +415,65 @@ thread_proc(void *data)
 
 f32 cube_vertices[] = 
 {
-#if 0
-    -0.5f, -0.5f,  
-    0.5f, -0.5f, -0.5f,
-    0.5f, 0.5f, -0.5f,
-    -0.5f, 0.5f, -0.5f,
-    -0.5f, -0.5f, -0.5f, 
-
-    0.5f, -0.5f, 0.5f,
-    0.5f, 0.5f, 0.5f,
-    -0.5f, 0.5f, 0.5f,
-    -0.5f, -0.5f, 0.5f, 
-#endif
     // -x
-    -0.5f,-0.5f,-0.5f, // triangle 1 : begin
-    -0.5f,-0.5f, 0.5f,
-    -0.5f, 0.5f, 0.5f, // triangle 1 : end
+    -0.5f,-0.5f,-0.5f,  -1, 0, 0,
+    -0.5f,-0.5f, 0.5f,  -1, 0, 0,
+    -0.5f, 0.5f, 0.5f,  -1, 0, 0,
 
     // -z
-    0.5f, 0.5f,-0.5f, // triangle 2 : begin
-    -0.5f,-0.5f,-0.5f,
-    -0.5f, 0.5f,-0.5f, // triangle 2 : end
+    0.5f, 0.5f,-0.5f,  0, 0, -1,
+    -0.5f,-0.5f,-0.5f,  0, 0, -1,
+    -0.5f, 0.5f,-0.5f,  0, 0, -1,
 
     // -y
-    0.5f,-0.5f, 0.5f,
-    -0.5f,-0.5f,-0.5f,
-    0.5f,-0.5f,-0.5f,
+    0.5f,-0.5f, 0.5f,  0, -1, 0,
+    -0.5f,-0.5f,-0.5f,  0, -1, 0,
+    0.5f,-0.5f,-0.5f,  0, -1, 0,
 
     // -z
-    0.5f, 0.5f,-0.5f,
-    0.5f,-0.5f,-0.5f,
-    -0.5f,-0.5f,-0.5f,
+    0.5f, 0.5f,-0.5f,  0, 0, -1,
+    0.5f,-0.5f,-0.5f,  0, 0, -1,
+    -0.5f,-0.5f,-0.5f,  0, 0, -1,
 
     // -x
-    -0.5f,-0.5f,-0.5f,
-    -0.5f, 0.5f, 0.5f,
-    -0.5f, 0.5f,-0.5f,
+    -0.5f,-0.5f,-0.5f,  -1, 0, 0,
+    -0.5f, 0.5f, 0.5f,  -1, 0, 0,
+    -0.5f, 0.5f,-0.5f,  -1, 0, 0,
 
     // -y
-    0.5f,-0.5f, 0.5f,
-    -0.5f,-0.5f, 0.5f,
-    -0.5f,-0.5f,-0.5f,
+    0.5f,-0.5f, 0.5f,  0, -1, 0,
+    -0.5f,-0.5f, 0.5f,  0, -1, 0,
+    -0.5f,-0.5f,-0.5f,  0, -1, 0,
 
     // +z
-    -0.5f, 0.5f, 0.5f,
-    -0.5f,-0.5f, 0.5f,
-    0.5f,-0.5f, 0.5f,
+    -0.5f, 0.5f, 0.5f,  0, 0, 1,
+    -0.5f,-0.5f, 0.5f,  0, 0, 1,
+    0.5f,-0.5f, 0.5f,  0, 0, 1,
 
     // +x
-    0.5f, 0.5f, 0.5f,
-    0.5f,-0.5f,-0.5f,
-    0.5f, 0.5f,-0.5f,
+    0.5f, 0.5f, 0.5f,  1, 0, 0,
+    0.5f,-0.5f,-0.5f,  1, 0, 0,
+    0.5f, 0.5f,-0.5f,  1, 0, 0,
 
     // +x
-    0.5f,-0.5f,-0.5f,
-    0.5f, 0.5f, 0.5f,
-    0.5f,-0.5f, 0.5f,
+    0.5f,-0.5f,-0.5f,  1, 0, 0,
+    0.5f, 0.5f, 0.5f,  1, 0, 0,
+    0.5f,-0.5f, 0.5f,  1, 0, 0,
 
     // +y
-    0.5f, 0.5f, 0.5f,
-    0.5f, 0.5f,-0.5f,
-    -0.5f, 0.5f,-0.5f,
+    0.5f, 0.5f, 0.5f,  0, 1, 0,
+    0.5f, 0.5f,-0.5f,  0, 1, 0,
+    -0.5f, 0.5f,-0.5f,  0, 1, 0,
 
     // +y
-    0.5f, 0.5f, 0.5f,
-    -0.5f, 0.5f,-0.5f,
-    -0.5f, 0.5f, 0.5f,
+    0.5f, 0.5f, 0.5f,  0, 1, 0,
+    -0.5f, 0.5f,-0.5f,  0, 1, 0,
+    -0.5f, 0.5f, 0.5f,  0, 1, 0,
 
     // +z
-    0.5f, 0.5f, 0.5f,
-    -0.5f, 0.5f, 0.5f,
-    0.5f,-0.5f, 0.5f    
-};
-
-f32 cube_normals[] = 
-{
-    // -x
-    -1, 0, 0,
-    -1, 0, 0,
-    -1, 0, 0,
-
-    // -z
-    0, 0, -1,
-    0, 0, -1,
-    0, 0, -1,
-
-    // -y
-    0, -1, 0,
-    0, -1, 0,
-    0, -1, 0,
-
-    // -z
-    0, 0, -1,
-    0, 0, -1,
-    0, 0, -1,
-
-    // -x
-    -1, 0, 0,
-    -1, 0, 0,
-    -1, 0, 0,
-
-    // -y
-    0, -1, 0,
-    0, -1, 0,
-    0, -1, 0,
-
-    // +z
-    0, 0, 1,
-    0, 0, 1,
-    0, 0, 1,
-
-    // +x
-    1, 0, 0, 
-    1, 0, 0, 
-    1, 0, 0, 
-
-    // +x
-    1, 0, 0, 
-    1, 0, 0, 
-    1, 0, 0, 
-
-    // +y
-    0, 1, 0,
-    0, 1, 0,
-    0, 1, 0,
-
-    // +y
-    0, 1, 0,
-    0, 1, 0,
-    0, 1, 0,
-
-    // +z
-    0, 0, 1,
-    0, 0, 1,
-    0, 0, 1,
-};
-
-v3 grass_vertices[] = 
-{
-    // 1
-    {0.0f, -0.5f, 0.0f},
-    {0.0f, 0.5f, 0.0f},
-    {0.0f, -0.5f, 0.1f},
-
-    {0.0f, 0.5f, 0.0f},
-    {0.0f, 0.5f, 0.1f},
-    {0.0f, -0.5f, 0.1f},
-
-    //2 
-    {0.0f, -0.5f, 0.1f},
-    {0.0f, 0.5f, 0.1f},
-    {0.0f, -0.5f, 0.2f},
-
-    {0.0f, 0.5f, 0.1f},
-    {0.0f, 0.5f, 0.2f},
-    {0.0f, -0.5f, 0.2f},
-
-    // 3
-    {0.0f, -0.5f, 0.2f},
-    {0.0f, 0.5f, 0.2f},
-    {0.0f, -0.5f, 0.3f},
-
-    {0.0f, 0.5f, 0.2f},
-    {0.0f, 0.5f, 0.3f},
-    {0.0f, -0.5f, 0.3f},
-
-    // 4
-    {0.0f, -0.5f, 0.3f},
-    {0.0f, 0.5f, 0.3f},
-    {0.0f, -0.5f, 0.4f},
-
-    {0.0f, 0.5f, 0.3f},
-    {0.0f, 0.5f, 0.4f},
-    {0.0f, -0.5f, 0.4f},
-
-    // 5 
-    {0.0f, -0.5f, 0.4f},
-    {0.0f, 0.5f, 0.4f},
-    {0.0f, -0.5f, 0.5f},
-
-    {0.0f, 0.5f, 0.4f},
-    {0.0f, 0.5f, 0.5f},
-    {0.0f, -0.5f, 0.5f},
-
-    // 6
-    {0.0f, -0.5f, 0.5f},
-    {0.0f, 0.5f, 0.5f},
-    {0.0f, -0.5f, 0.6f},
-
-    {0.0f, 0.5f, 0.5f},
-    {0.0f, 0.5f, 0.6f},
-    {0.0f, -0.5f, 0.6f},
-
-    // 7
-    {0.0f, -0.5f, 0.6f},
-    {0.0f, 0.5f, 0.6f},
-    {0.0f, 0.0f, 0.7f},
-};
-
-v3 grass_normals[] = 
-{
-    // 1
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    // 2 
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    // 3 
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    // 4 
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    // 5 
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    // 6 
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
-
-    // 7
-    {1, 0, 0},
-    {1, 0, 0},
-    {1, 0, 0},
+    0.5f, 0.5f, 0.5f,  0, 0, 1,
+    -0.5f, 0.5f, 0.5f,  0, 0, 1,
+    0.5f,-0.5f, 0.5f,   0, 0, 1,
 };
 
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
@@ -683,6 +481,11 @@ v3 grass_normals[] =
 internal void
 metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 dt_per_frame)
 {
+    // Update gpu side of combined vertex and index buffer
+    // TODO(gh) Do we need to sync before we render??
+    metal_flush_managed_buffer(&render_context->combined_vertex_buffer, render_push_buffer->used_vertex_buffer);
+    metal_flush_managed_buffer(&render_context->combined_index_buffer, render_push_buffer->used_index_buffer);
+
     id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
 
     // NOTE(gh) render shadow map
@@ -752,7 +555,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 // making the shadow map to place under the fragments that are being shaded.
                 // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
-                metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
+                metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 6);
             }break;
 
             case RenderEntryType_Grass:
@@ -763,15 +566,15 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 m4x4 model = st_m4x4(entry->p, V3(1, 1, 5));
                 model = transpose(model); // make the matrix column-major
 
-                metal_set_vertex_bytes(shadowmap_render_encoder, grass_vertices, array_size(grass_vertices), 0);
+                metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
                 metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
                 // NOTE(gh) Mitigates the moire pattern by biasing, 
                 // making the shadow map to place under the fragments that are being shaded.
                 // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
-
-                metal_draw_non_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(grass_vertices));
+                metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
+                                  render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
             }break;
 
             default: 
@@ -828,6 +631,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 case RenderEntryType_Line:
                 {
                     RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += sizeof(*entry);
 #if 0
                     metal_set_pipeline(render_encoder, render_context->line_pipeline);
                     f32 start_and_end[6] = {entry->start.x, entry->start.y, entry->start.z, entry->end.x, entry->end.y, entry->end.z};
@@ -837,8 +641,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                     metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
 #endif
-
-                    consumed += sizeof(*entry);
                 }break;
 
                 case RenderEntryType_AABB:
@@ -855,14 +657,13 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_bytes(render_encoder, cube_vertices, array_size(cube_vertices), 2);
-                    metal_set_vertex_bytes(render_encoder, cube_normals, array_size(cube_normals), 3);
-                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 4);
+                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
 
                     metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
 
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
 
-                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
+                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 6);
                 }break;
 
                 case RenderEntryType_Grass:
@@ -878,16 +679,19 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     per_object_data.color = entry->color;
 
                     metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
+
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                    metal_set_vertex_bytes(render_encoder, grass_vertices, array_size(grass_vertices), 2);
-                    metal_set_vertex_bytes(render_encoder, grass_normals, array_size(grass_normals), 3);
-                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 4);
+                    metal_set_vertex_buffer(render_encoder, 
+                                            render_context->combined_vertex_buffer.buffer, 
+                                            entry->vertex_buffer_offset, 2);
+                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
 
                     metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
 
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
 
-                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(grass_vertices));
+                    metal_draw_indexed(render_encoder, MTLPrimitiveTypeTriangle, 
+                            render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
                 }break;
 
                 default:
@@ -940,6 +744,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_vertex_bytes(render_encoder, &z_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
 
+#if 0
         // NOTE(gh) draw light cube for indication
         m4x4 model = st_m4x4(directional_light_p, V3(0.5f, 0.5f, 0.5f));
         model = transpose(model); // make the matrix column-major
@@ -956,6 +761,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
 
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
+#endif
 
 #if 0
         v3 screen_space_triangle_vertices[] = 
@@ -1329,6 +1135,9 @@ int main(void)
                               MTLLoadActionClear, MTLStoreActionStore,
                               metal_render_context.directional_light_shadowmap_depth_texture,
                               1.0f);
+    
+    metal_render_context.combined_vertex_buffer = metal_make_managed_buffer(device, gigabytes(1));
+    metal_render_context.combined_index_buffer = metal_make_managed_buffer(device, megabytes(256));
 
     metal_render_context.device = device;
     metal_render_context.view = view;
@@ -1350,6 +1159,11 @@ int main(void)
     platform_render_push_buffer.base = (u8 *)malloc(platform_render_push_buffer.total_size);
     // TODO(gh) Make sure to update this value whenever we resize the window
     platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
+
+    platform_render_push_buffer.combined_vertex_buffer = metal_render_context.combined_vertex_buffer.memory;
+    platform_render_push_buffer.vertex_buffer_size = metal_render_context.combined_vertex_buffer.size;
+    platform_render_push_buffer.combined_index_buffer = metal_render_context.combined_index_buffer.memory;
+    platform_render_push_buffer.index_buffer_size = metal_render_context.combined_index_buffer.size;
 
     [app activateIgnoringOtherApps:YES];
     [app run];

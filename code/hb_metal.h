@@ -13,11 +13,10 @@ struct MetalSharedBuffer
 // NOTE(joon) shared buffer between CPU and GPU, but needs to be exclusively synchronized(flushed)
 struct MetalManagedBuffer
 {
-    u32 max_size;
-    void *memory; // host memory
-
-    u32 used;
     id<MTLBuffer> buffer;
+
+    u32 size;
+    void *memory; // host memory
 };
 
 // TODO(gh) maybe this is a good idea?
@@ -73,6 +72,9 @@ struct MetalRenderContext
     id<MTLTexture> directional_light_shadowmap_depth_texture;
 
     // Buffers
+    MetalManagedBuffer combined_vertex_buffer;
+    MetalManagedBuffer combined_index_buffer;
+
     MetalManagedBuffer voxel_position_buffer;
     MetalManagedBuffer voxel_color_buffer;
 

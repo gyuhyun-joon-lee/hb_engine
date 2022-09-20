@@ -18,17 +18,29 @@ enum EntityFlag
 
 struct Entity
 {
+    u32 ID;
     EntityType type;
     u32 flags;
 
     v3 p; // TODO(gh) such objects like rigid body does not make use of this!!!
+    v3 dim;
     v3 color;
 
-    // TODO(joon) some kind of entity system, 
-    // so that we don't have to store entity_specific things in all of the entities
-    RigidBody rb; // TODO(joon) make this a pointer!
+    // NOTE(gh) bezier curve properties
+    v3 p1; // midpoint
 
-    // TODO(joon) CollisionVolumeGroup!
+    CommonVertex *vertices;
+    u32 vertex_count;
+
+    // TODO(gh) We don't really need to hold the indices, as long as we have the index buffer.
+    u32 *indices; 
+    u32 index_count;
+
+    // TODO(gh) some kind of entity system, 
+    // so that we don't have to store entity_specific things in all of the entities
+    RigidBody rb; // TODO(gh) make this a pointer!
+
+    // TODO(gh) CollisionVolumeGroup!
     CollisionVolumeCube cv;
 
     AABB aabb; 

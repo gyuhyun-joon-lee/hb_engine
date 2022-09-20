@@ -98,7 +98,7 @@ metal_set_scissor_rect(id<MTLRenderCommandEncoder> render_encoder, u32 x, u32 y,
 // NOTE(joon) creates a shared memory between CPU and GPU
 // TODO(joon) Do we want the buffer to be more than 4GB?
 internal MetalSharedBuffer
-metal_create_shared_buffer(id<MTLDevice> device, u32 max_size)
+metal_make_shared_buffer(id<MTLDevice> device, u32 max_size)
 {
     MetalSharedBuffer result = {};
     result.buffer = [device 
@@ -119,37 +119,25 @@ metal_write_shared_buffer(MetalSharedBuffer *buffer, void *source, u32 source_si
 }
 
 internal MetalManagedBuffer
-metal_create_managed_buffer(id<MTLDevice> device, u32 max_size)
+metal_make_managed_buffer(id<MTLDevice> device, u32 size)
 {
     MetalManagedBuffer result = {};
     result.buffer = [device 
-                    newBufferWithLength:max_size
+                    newBufferWithLength:size
                     options:MTLResourceStorageModeManaged];
 
     result.memory = [result.buffer contents];
-    result.max_size = max_size;
+    result.size = size;
 
     return result;
 }
 
 internal void
-metal_append_to_managed_buffer(MetalManagedBuffer *buffer, void *source, u32 source_size)
+metal_flush_managed_buffer(MetalManagedBuffer *buffer, u32 size_to_flush)
 {
-    memcpy((u8 *)buffer->memory + buffer->used, source, source_size);
-    buffer->used += source_size;
-
-    assert(buffer->used <= buffer->max_size);
-}
-
-internal void
-metal_flush_managed_buffer(MetalManagedBuffer *buffer)
-{
-    if(buffer->used)
-    {
-        NSRange range = NSMakeRange(0, buffer->used);
-        [buffer->buffer didModifyRange:range];
-        buffer->used = 0;
-    }
+    assert(size_to_flush <= buffer->size);
+    NSRange range = NSMakeRange(0, size_to_flush);
+    [buffer->buffer didModifyRange:range];
 }
 
 // NOTE(joon) wrapping functions
@@ -246,6 +234,16 @@ metal_draw_non_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTL
                     vertexCount: vertex_count 
                     instanceCount: instance_count 
                     baseInstance: instance_start];
+}
+
+internal void
+metal_draw_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, id<MTLBuffer> index_buffer, u32 index_offset, u32 index_count)
+{
+    [render_encoder drawIndexedPrimitives : primitive_type
+                   indexCount : index_count 
+                    indexType : MTLIndexTypeUInt32 
+                  indexBuffer : index_buffer 
+            indexBufferOffset : index_offset];
 }
 
 internal void
@@ -441,7 +439,6 @@ metal_make_sampler(id<MTLDevice> device, b32 normalized_coordinates, MTLSamplerA
 
     return result;
 }
-
 
         
 

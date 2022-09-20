@@ -1,5 +1,5 @@
 /*
- * Written by Gyuhyun 'Joon' Lee
+ * Written by Gyuhyun Lee
  */
 
 #ifndef HB_PLATFORM_H
@@ -28,12 +28,12 @@ extern "C" {
 
 #define sec_to_nano_sec 1.0e+9f
 #define sec_to_micro_sec 1000.0f
-//#define nano_sec_to_micro_sec 0.0001f // TODO(joon): Find the correct value :(
+//#define nano_sec_to_micro_sec 0.0001f // TODO(gh): Find the correct value :(
 
 #define maximum(a, b) ((a>b)? a:b) 
 #define minimum(a, b) ((a<b)? a:b) 
 
-// NOTE(joon): *(u32 *)c == "stri" does not work because of the endianess issues
+// NOTE(gh): *(u32 *)c == "stri" does not work because of the endianess issues
 #define four_cc(string) (((string[0] & 0xff) << 0) | ((string[1] & 0xff) << 8) | ((string[2] & 0xff) << 16) | ((string[3] & 0xff) << 24))
 
 #define pi_32 3.14159265358979323846264338327950288419716939937510582097494459230f
@@ -45,7 +45,7 @@ extern "C" {
 struct PlatformReadFileResult
 {
     u8 *memory;
-    u64 size; // TOOD/joon : make this to be at least 64bit
+    u64 size; // TOOD/gh : make this to be at least 64bit
 };
 
 #define PLATFORM_GET_FILE_SIZE(name) u64 (name)(char *filename)
@@ -84,9 +84,9 @@ struct PlatformInput
     f32 dt_per_frame;
 };
 
-// TODO(joon) Make this string to be similar to what Casey has done in his HH project
+// TODO(gh) Make this string to be similar to what Casey has done in his HH project
 // which is non-null terminated string with the size
-// NOTE(joon) this function has no bound check
+// NOTE(gh) this function has no bound check
 internal void
 unsafe_string_append(char *dest, const char *source, u32 source_size)
 {
@@ -101,7 +101,7 @@ unsafe_string_append(char *dest, const char *source, u32 source_size)
     }
 }
 
-// NOTE(joon) this function has no bound check
+// NOTE(gh) this function has no bound check
 internal void
 unsafe_string_append(char *dest, const char *source)
 {
@@ -125,7 +125,7 @@ struct PlatformMemory
     u64 transient_memory_size;
 };
 
-// TODO(joon) sub_arena!
+// TODO(gh) sub_arena!
 struct MemoryArena
 {
     void *base;
@@ -143,7 +143,7 @@ start_memory_arena(void *base, size_t size, b32 should_be_zero = true)
     result.base = (u8 *)base;
     result.total_size = size;
 
-    // TODO/joon :zeroing memory every time might not be a best idea
+    // TODO/gh :zeroing memory every time might not be a best idea
     if(should_be_zero)
     {
         zero_memory(result.base, result.total_size);
@@ -152,11 +152,11 @@ start_memory_arena(void *base, size_t size, b32 should_be_zero = true)
     return result;
 }
 
-// NOTE(joon): Works for both platform memory(world arena) & temp memory
+// NOTE(gh): Works for both platform memory(world arena) & temp memory
 #define push_array(memory, type, count) (type *)push_size(memory, count * sizeof(type))
 #define push_struct(memory, type) (type *)push_size(memory, sizeof(type))
 
-// TODO(joon) : Alignment might be an issue, always take account of that
+// TODO(gh) : Alignment might be an issue, always take account of that
 internal void *
 push_size(MemoryArena *memory_arena, size_t size, size_t alignment = 0)
 {
@@ -174,13 +174,13 @@ struct TempMemory
 {
     MemoryArena *memory_arena;
 
-    // TODO/Joon: temp memory is for arrays only, so dont need to keep track of 'used'?
+    // TODO/gh: temp memory is for arrays only, so dont need to keep track of 'used'?
     void *base;
     size_t total_size;
     size_t used;
 };
 
-// TODO(joon) : Alignment might be an issue, always take account of that
+// TODO(gh) : Alignment might be an issue, always take account of that
 internal void *
 push_size(TempMemory *temp_memory, size_t size, size_t alignment = 0)
 {
@@ -213,16 +213,16 @@ start_temp_memory(MemoryArena *memory_arena, size_t size, b32 should_be_zero = t
     return result;
 }
 
-// TODO(joon) no need to pass the pointer
+// TODO(gh) no need to pass the pointer
 internal void
 end_temp_memory(TempMemory *temp_memory)
 {
     MemoryArena *memory_arena = temp_memory->memory_arena;
-    // NOTE(joon) : safe guard for using this temp memory after ending it 
+    // NOTE(gh) : safe guard for using this temp memory after ending it 
     temp_memory->base = 0;
 
     memory_arena->temp_memory_count--;
-    // IMPORTANT(joon) : As the nature of this, all temp memories should be cleared at once
+    // IMPORTANT(gh) : As the nature of this, all temp memories should be cleared at once
     memory_arena->used -= temp_memory->total_size;
 }
 
@@ -261,7 +261,7 @@ struct ThreadWorkQueue;
 #define THREAD_WORK_CALLBACK(name) void name(void *data)
 typedef THREAD_WORK_CALLBACK(ThreadWorkCallback);
 
-// TODO(joon) task_with_memory
+// TODO(gh) task_with_memory
 struct thread_work_item
 {
     ThreadWorkCallback *callback;
@@ -270,17 +270,17 @@ struct thread_work_item
     b32 written; // indicates whether this item is properly filled or not
 };
 
-#define PLATFORM_COMPLETE_ALL_ThreadWorkQueue_ITEMS(name) void name(ThreadWorkQueue *queue)
-typedef PLATFORM_COMPLETE_ALL_ThreadWorkQueue_ITEMS(platform_complete_all_ThreadWorkQueue_items);
+#define PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(name) void name(ThreadWorkQueue *queue)
+typedef PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(platform_complete_all_thread_work_queue_items);
 
 #define PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(name) void name(ThreadWorkQueue *queue, ThreadWorkCallback *thread_work_callback, void *data)
 typedef PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(platform_add_thread_work_queue_item);
 
-// IMPORTANT(joon): There is no safeguard for the situation where one work takes too long, and meanwhile the work queue was filled so quickly
+// IMPORTANT(gh): There is no safeguard for the situation where one work takes too long, and meanwhile the work queue was filled so quickly
 // causing writeItem == readItem
 struct ThreadWorkQueue
 {
-    // NOTE(joon) : volatile forces the compiler not to optimize the value out, and always to the load(as other thread can change it)
+    // NOTE(gh) : volatile forces the compiler not to optimize the value out, and always to the load(as other thread can change it)
     int volatile work_index; // index to the queue that is currently under work
     int volatile add_index;
 
@@ -288,24 +288,42 @@ struct ThreadWorkQueue
 
     // now this can be passed onto other codes, such as seperate game code to be used as rendering 
     platform_add_thread_work_queue_item *add_ThreadWorkQueue_item;
-    platform_complete_all_ThreadWorkQueue_items * complete_all_ThreadWorkQueue_items;
+    platform_complete_all_thread_work_queue_items * complete_all_ThreadWorkQueue_items;
+};
+
+struct CommonVertex
+{
+    v3 p;
+    v3 normal;
 };
 
 struct PlatformRenderPushBuffer
 {
-    // NOTE(joon) provided by the platform layer
+    // NOTE(gh) provided by the platform layer
+    void *device;
     f32 width_over_height; 
 
-    // NOTE(joon) game code needs to fill these up
+    // NOTE(gh) game code needs to fill these up
     m4x4 view;
     f32 camera_near;
     f32 camera_far;
     f32 camera_fov;
     v3 clear_color;
 
-    // TODO(joon) Make configuration as struct
+    // TODO(gh) Make configuration as struct
+    b32 enable_complex_lighting; // when disabled, only use ambient value
     b32 enable_shadow;
 
+    // NOTE(gh) This is a cpu side memory, needs to be flushed later to the GPU.
+    void *combined_vertex_buffer;
+    u32 vertex_buffer_size;
+    u32 used_vertex_buffer;
+
+    void *combined_index_buffer;
+    u32 index_buffer_size;
+    u32 used_index_buffer;
+
+    // TODO(gh) Rename this into command buffer or something
     u8 *base;
     u32 total_size;
     u32 used;
