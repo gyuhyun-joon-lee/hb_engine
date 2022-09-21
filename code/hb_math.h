@@ -182,6 +182,17 @@ V3(f32 x, f32 y, f32 z)
     return result;
 }
 
+inline v3
+V3(v2 xy, f32 z)
+{
+    v3 result = {};
+
+    result.xy = xy;
+    result.z = z;
+
+    return result;
+}
+
 inline f32
 length(v3 a)
 {
@@ -357,6 +368,15 @@ quadratic_bezier(v3 p0, v3 p1, v3 p2, f32 t)
     f32 one_minus_t = 1-t;
 
     v3 result = one_minus_t*one_minus_t*p0 + 2*t*one_minus_t*p1 + t*t*p2;
+
+    return result;
+}
+
+// NOTE(gh) first derivative = 2*(1-t)*(p1-p0) + 2*t*(p2-p1)
+inline v3
+quadratic_bezier_first_derivative(v3 p0, v3 p1, v3 p2, f32 t)
+{
+    v3 result = 2*(1-t)*(p1-p0) + 2*t*(p2-p1);
 
     return result;
 }

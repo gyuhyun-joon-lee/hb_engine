@@ -49,7 +49,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // add_floor_entity(game_state, V3(0, 0, 2), V3(2, 2, 2), V3(1, 1, 1));
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, -1), V3(10, 10, 2), V3(1, 1, 1));
 
-        add_grass_entity(game_state, platform_render_push_buffer, &game_state->transient_arena, V3(0, 0, 0), V3(1, 1, 1), V3(0, 1, 0.2f), V3(0, 0, 1));
+        add_grass_entity(game_state, platform_render_push_buffer, &game_state->transient_arena, 
+                         V3(0, 0, 0), 0.2f, V3(0, 1, 0.2f),
+                         V2(1, 0), 1.0f, 0.5f);
         
         game_state->is_initialized = true;
     }
@@ -105,12 +107,15 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case EntityType_Grass:
             {
-                // TODO(gh) More solid way to handle this, maybe by storing p2 in grass entity
-                v3 p2 = V3(0, 1, 1 + 0.2f*sinf(entity->p2_bob_dt));
-                populate_grass_vertices(V3(0, 0, 0), entity->p1, p2, entity->grass_divided_count, 
+                local_persist f32 t = 0.0f;
+
+                // entity->tilt_direction = V2(cosf(t), sinf(t));
+                entity->width = 5.0f;
+                entity->tilt = 4.0f;
+                populate_grass_vertices(V3(0, 0, 0), entity->width, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
                                         entity->vertices, entity->vertex_count);
 
-                entity->p2_bob_dt += 2.0f*platform_input->dt_per_frame;
+                t += platform_input->dt_per_frame;
             }break;
         }
     }
@@ -118,7 +123,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     // NOTE(gh) render entity start
     init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
 
-#if 1
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;
         ++entity_index)
@@ -141,7 +145,5 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
-#endif
-
 }
 

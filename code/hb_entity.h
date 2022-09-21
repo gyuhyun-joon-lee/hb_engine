@@ -27,9 +27,12 @@ struct Entity
     v3 color;
 
     // NOTE(gh) bezier curve properties
+    // TODO(gh) us dim for these values?
+    f32 width;
     u32 grass_divided_count;
-    v3 p1; // midpoint
-    f32 p2_bob_dt; // Determines the position of p2
+    f32 tilt; // == p2.z
+    f32 bend; // controls p1
+    v2 tilt_direction; // only x and y values, z == 0
 
     CommonVertex *vertices;
     u32 vertex_count;

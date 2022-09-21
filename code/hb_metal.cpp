@@ -57,7 +57,7 @@ perspective_projection(f32 fov, f32 n, f32 f, f32 width_over_height)
     m4x4 result = {};
 
     // TODO(gh) Even though the resulting coordinates should be same, 
-    // it seems like Metal requires the w part of the homogeneous coordinate to be positive.
+    // it seems like in Metal w value should be positive.
     // Maybe that's how they are doing the frustum culling..?
     result.rows[0] = V4(n / half_near_plane_width, 0, 0, 0);
     result.rows[1] = V4(0, n / half_near_plane_height, 0, 0);

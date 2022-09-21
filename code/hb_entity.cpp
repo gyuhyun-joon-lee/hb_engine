@@ -118,7 +118,7 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
 }
 
 /*
-   If the grass looked like this,
+   If the grass looks like this,
    /\
    ||
    ||
@@ -127,40 +127,60 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
    grass_divided_count == 5
 */
 internal void
-populate_grass_vertices(v3 p0, v3 p1, v3 p2, u32 grass_divided_count, CommonVertex *vertices, u32 vertex_count)
+populate_grass_vertices(v3 p0, f32 width, v2 facing_direction, 
+                        f32 tilt, f32 bend, f32 grass_divided_count, 
+                        CommonVertex *vertices, u32 vertex_count)
 {
+    assert(compare_with_epsilon(length_square(facing_direction), 1.0f));
+
+    v3 p2 = V3(facing_direction, tilt); // TODO(gh) Am I using the tilt value correctly? 
+    v3 orthogonal_normal = V3(-facing_direction.y, facing_direction.x, 0.0f); // Direction of the width of the grass blade
+
+    v3 blade_normal = normalize(cross(p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
+    
+    // TODO(gh) bend value is a bit unintuitive, because this is not represented in world unit.
+    // But if bend value is 0, it means the grass will be completely flat
+    v3 p1 = (3.0f/4.0f) * (p2 - p0) + bend * blade_normal;
+
     for(u32 i = 0;
             i < grass_divided_count; 
             ++i)
     {
         f32 t = (f32)i/(f32)grass_divided_count;
 
-        v3 r = quadratic_bezier(p0, p1, p2, t);
+        v3 point_on_bezier_curve = quadratic_bezier(p0, p1, p2, t);
 
-        vertices[2*i].p = r;
-        vertices[2*i].p.x = -0.5f;
-        vertices[2*i+1].p = r;
-        vertices[2*i+1].p.x = 0.5f;
+        // The first vertex is the point on the bezier curve,
+        // and the next vertex is along the line that starts from the first vertex
+        // and goes toward the orthogonal normal.
+        // TODO(gh) Taper the grass blade down
+        vertices[2*i].p = point_on_bezier_curve;
+        vertices[2*i+1].p = point_on_bezier_curve + width * orthogonal_normal;
+
+        v3 normal = normalize(cross(quadratic_bezier_first_derivative(p0, p1, p2, t), orthogonal_normal));
+        vertices[2*i].normal = normal;
+        vertices[2*i+1].normal = normal;
     }
+
     // Manually add the tip
     vertices[vertex_count - 1].p = p2;
-
-    // TODO(gh) Also populate the normal
-
+    vertices[vertex_count - 1].normal = normalize(cross(quadratic_bezier_first_derivative(p0, p1, p2, 1.0f), orthogonal_normal));
 }
 
-// NOTE(gh) Grass uses quadratic bezier curve for now(original implementation uses cubic bezier curve for whatever reason).
-// p0 is always {0, 0, 0}, p2 is {0, 1, 1}, and p1(midpoint) should be provided.  
-// All three of them will be offset by the provided position of the grass.
 internal Entity *
-add_grass_entity(GameState *game_state, PlatformRenderPushBuffer *render_push_buffer, MemoryArena *arena, v3 p, v3 dim, v3 color, v3 p1, u32 grass_divided_count = 7)
+add_grass_entity(GameState *game_state, PlatformRenderPushBuffer *render_push_buffer, MemoryArena *arena, 
+                 v3 p, f32 width, v3 color, 
+                 v2 tilt_direction, f32 tilt, f32 bend, u32 grass_divided_count = 7)
 {
     Entity *result = add_entity(game_state, EntityType_Grass, 0);
     result->p = p;
-    result->dim = dim;
+    result->dim = V3(1, 1, 1); // Does not have effect on the grass
+    result->width = width;
     result->color = color;
-    result->p1 = p1;
-    result->p2_bob_dt = 0.0f; 
+
+    result->tilt = tilt;
+    result->bend = bend;
+    result->tilt_direction = tilt_direction;
 
     result->grass_divided_count = grass_divided_count;
     result->vertex_count = 2*result->grass_divided_count + 1;
@@ -169,24 +189,29 @@ add_grass_entity(GameState *game_state, PlatformRenderPushBuffer *render_push_bu
     result->index_count = 3 * (2*(result->grass_divided_count - 1)+1);
     result->indices = push_array(arena, u32, result->index_count);
 
-    v3 p2 = V3(0, 1, 1); // TODO(gh) also make this configurable?
-
-    populate_grass_vertices(V3(0, 0, 0), result->p1, p2, result->grass_divided_count, 
+    populate_grass_vertices(V3(0, 0, 0), result->width, result->tilt_direction, result->tilt, result->bend, result->grass_divided_count, 
                                         result->vertices, result->vertex_count);
 
     // populate indices
+    // NOTE(gh) Normals are facing the generally opposite direction of tilt direction
+    /*
+        ||
+       3  2
+        ||
+       1  0
+    */
     u32 populated_index_count = 0;
     for(u32 i = 0;
-            i < result->grass_divided_count - 1; // the last point should be manually added, as it should be tappered down
+            i < result->grass_divided_count - 1; // tip of the grass will be added later
             ++i)
     {
         result->indices[populated_index_count++] = 2*i + 0;
-        result->indices[populated_index_count++] = 2*i + 1;
-        result->indices[populated_index_count++] = 2*i + 2;
-
-        result->indices[populated_index_count++] = 2*i + 1;
         result->indices[populated_index_count++] = 2*i + 3;
+        result->indices[populated_index_count++] = 2*i + 1;
+
+        result->indices[populated_index_count++] = 2*i + 0;
         result->indices[populated_index_count++] = 2*i + 2;
+        result->indices[populated_index_count++] = 2*i + 3;
     }
 
     // Add the tip triangle

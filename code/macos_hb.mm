@@ -445,7 +445,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
     metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
 
     local_persist f32 rad = 2.4f;
-    // rad += 0.1f*dt_per_frame;
+    rad += 1.f*dt_per_frame;
     v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 5); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
@@ -542,7 +542,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
         metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-        metal_set_cull_mode(render_encoder, MTLCullModeBack); 
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
         PerFrameData per_frame_data = {};
@@ -592,6 +591,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     per_object_data.model = model;
                     per_object_data.color = entry->color;
 
+                    // TODO(gh) Sort the render entry based on cull mode
+                    metal_set_cull_mode(render_encoder, MTLCullModeBack); 
                     metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_buffer(render_encoder, 
@@ -619,6 +620,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     per_object_data.model = model;
                     per_object_data.color = entry->color;
 
+                    // metal_set_cull_mode(render_encoder, MTLCullModeNone); 
                     metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
 
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
