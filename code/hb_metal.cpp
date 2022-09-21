@@ -278,9 +278,16 @@ metal_present_drawable(id<MTLCommandBuffer> command_buffer, MTKView *view)
 }
 
 internal void
-metal_commit_command_buffer(id<MTLCommandBuffer> command_buffer, MTKView *view)
+metal_commit_command_buffer(id<MTLCommandBuffer> command_buffer)
 {
+    // NOTE(gh) also enqueues the command buffer into command queue
     [command_buffer commit];
+}
+
+internal void
+metal_wait_until_command_buffer_completed(id<MTLCommandBuffer> command_buffer)
+{
+    [command_buffer waitUntilCompleted];
 }
 
 internal id<MTLRenderPipelineState>
@@ -439,8 +446,7 @@ metal_make_sampler(id<MTLDevice> device, b32 normalized_coordinates, MTLSamplerA
 
     return result;
 }
-
-        
+       
 
 
 

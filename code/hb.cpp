@@ -33,7 +33,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
 
         // TODO(gh) entity arena?
-        game_state->max_entity_count = 4096;
+        game_state->max_entity_count = 8192;
         game_state->entities = push_array(&game_state->transient_arena, Entity, game_state->max_entity_count);
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
@@ -54,7 +54,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
 #if 1
         plant_grasses_using_white_noise(game_state, platform_render_push_buffer, &game_state->transient_arena, 
-                                        floor_width, floor_height, 0, 3000);
+                                        floor_width, floor_height, 0, 1000);
 #endif
         
         game_state->is_initialized = true;

@@ -31,8 +31,6 @@
 global v2 last_mouse_p;
 global v2 mouse_diff;
 
-global u64 last_time;
-
 global b32 is_game_running;
 global dispatch_semaphore_t semaphore;
 
@@ -141,6 +139,7 @@ internal CVReturn
 display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_time, const CVTimeStamp* output_time,
                 CVOptionFlags ignored_0, CVOptionFlags* ignored_1, void* displayLinkContext)
 {
+    local_persist u64 last_time = 0;
     // NOTE(gh) : display link automatically adjust the framerate.
     // TODO(gh) : Find out in what condition it adjusts the framerate?
     u32 last_frame_diff = (u32)(output_time->hostTime - last_time);
@@ -416,7 +415,7 @@ thread_proc(void *data)
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
 // and put them inside the render mesh so that the graphics API can render them.
 internal void
-metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 dt_per_frame)
+metal_render_and_wait_until_completion(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 dt_per_frame)
 {
     // Update gpu side of combined vertex and index buffer
     // TODO(gh) Do we need to sync before we render??
@@ -610,6 +609,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                             render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
                 }break;
 
+                // TODO(gh) Use instancing stride to render all the grasses, use seperate pipeline for that without model matrix multiplication)
                 case RenderEntryType_Grass:
                 {
                     RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
@@ -644,21 +644,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 }
             }
         }
-
-        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
-        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
-        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
-        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-        metal_set_cull_mode(render_encoder, MTLCullModeBack);
-        // NOTE(gh) disable depth testing & writing for deferred lighting
-        metal_set_detph_stencil_state(render_encoder, render_context->disabled_depth_state);
-
-        metal_set_pipeline(render_encoder, render_context->singlepass_deferred_lighting_pipeline);
-
-        metal_set_vertex_bytes(render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
-        metal_set_vertex_bytes(render_encoder, &render_push_buffer->enable_shadow, sizeof(render_push_buffer->enable_shadow), 1);
-
-        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
 
 //////// NOTE(gh) Forward rendering start
         // NOTE(gh) draw axis lines
@@ -719,15 +704,38 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_vertex_bytes(present_render_encoder, screen_space_triangle_vertices, array_size(screen_space_triangle_vertices), 0);
         metal_draw_non_indexed(present_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(screen_space_triangle_vertices));
 #endif
+        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
+        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
+        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
+        metal_set_cull_mode(render_encoder, MTLCullModeBack);
+        // NOTE(gh) disable depth testing & writing for deferred lighting
+        metal_set_detph_stencil_state(render_encoder, render_context->disabled_depth_state);
+
+        metal_set_pipeline(render_encoder, render_context->singlepass_deferred_lighting_pipeline);
+
+        metal_set_vertex_bytes(render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
+        metal_set_vertex_bytes(render_encoder, &render_push_buffer->enable_shadow, sizeof(render_push_buffer->enable_shadow), 1);
+
+        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
 
         metal_end_encoding(render_encoder);
 
-        metal_present_drawable(command_buffer, render_context->view);
-
-        // TODO(gh): Sync with the swap buffer!
-        metal_commit_command_buffer(command_buffer, render_context->view);
+        metal_commit_command_buffer(command_buffer);
+        // TODO(gh) Double check whether this is syncing correctly...
+        metal_wait_until_command_buffer_completed(command_buffer);
     }
 }
+
+internal void
+metal_display(MetalRenderContext *render_context)
+{
+    id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
+
+    metal_present_drawable(command_buffer, render_context->view);
+    metal_commit_command_buffer(command_buffer);
+}
+ 
 
 // NOTE(gh): returns the base path where all the folders(code, misc, data) are located
 internal void
@@ -804,10 +812,6 @@ macos_load_game_code(MacOSGameCode *game_code, char *file_name)
 
 int main(void)
 { 
-    struct mach_timebase_info mach_time_info;
-    mach_timebase_info(&mach_time_info);
-    f32 nano_seconds_per_tick = ((f32)mach_time_info.numer/(f32)mach_time_info.denom);
-
     char *lock_file_path = "/Volumes/meka/HB_engine/build/PUL.app/Contents/MacOS/lock.tmp";
     char *game_code_path = "/Volumes/meka/HB_engine/build/PUL.app/Contents/MacOS/pul.dylib";
     MacOSGameCode macos_game_code = {};
@@ -1149,41 +1153,40 @@ int main(void)
             macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer);
         }
 
-        u64 time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
-
-        // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
-        // we need to undersleep and spend time in a loop
-        u64 undersleep_nano_seconds = 100000000;
-        if(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
-        {
-            timespec time_spec = {};
-            time_spec.tv_nsec = target_nano_seconds_per_frame - time_passed_in_nano_seconds -  undersleep_nano_seconds;
-
-            nanosleep(&time_spec, 0);
-        }
-        else
-        {
-            // TODO : Missed Frame!
-            // TODO(gh) : Whenever we miss the frame re-sync with the display link
-        }
-
-        // For a short period of time, loop
-        time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
-        while(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
-        {
-            time_passed_in_nano_seconds = mach_time_diff_in_nano_seconds(last_time, mach_absolute_time(), nano_seconds_per_tick);
-        }
-        u32 time_passed_in_micro_sec = (u32)(time_passed_in_nano_seconds / 1000);
-        f32 time_passed_in_sec = (f32)time_passed_in_micro_sec / 1000000.0f;
-        printf("%dms elapsed, fps : %.6f\n", time_passed_in_micro_sec, 1.0f/time_passed_in_sec);
         @autoreleasepool
         {
-            static f32 e = 0.0f;
+            metal_render_and_wait_until_completion(&metal_render_context, &platform_render_push_buffer, window_width, window_height, target_seconds_per_frame);
 
-            // NOTE(gh) first, render to the g buffers
+            u64 time_passed_in_nano_seconds = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
 
-            metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height, target_seconds_per_frame);
-            e += time_passed_in_sec;
+            // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
+            // we need to undersleep and spend time in a loop
+            u64 undersleep_nano_seconds = target_nano_seconds_per_frame / 10;
+            if(time_passed_in_nano_seconds + undersleep_nano_seconds < target_nano_seconds_per_frame)
+            {
+                timespec time_spec = {};
+                time_spec.tv_nsec = target_nano_seconds_per_frame - time_passed_in_nano_seconds -  undersleep_nano_seconds;
+
+                nanosleep(&time_spec, 0);
+            }
+            else
+            {
+                // TODO : Missed Frame!
+                // TODO(gh) : Whenever we miss the frame re-sync with the display link
+                printf("missed frame!\n");
+            }
+
+            // For a short period of time, loop
+            time_passed_in_nano_seconds = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+            while(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
+            {
+                time_passed_in_nano_seconds = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+            }
+            u32 time_passed_in_micro_sec = (u32)(time_passed_in_nano_seconds / 1000);
+            f32 time_passed_in_sec = (f32)time_passed_in_micro_sec / 1000000.0f;
+            printf("%dms elapsed, fps : %.6f\n", time_passed_in_micro_sec, 1.0f/time_passed_in_sec);
+
+            metal_display(&metal_render_context);
         }
 
 #if 0
@@ -1200,7 +1203,7 @@ int main(void)
 #endif
 
         // update the time stamp
-        last_time = mach_absolute_time();
+        last_time = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
     }
 
     return 0;
