@@ -100,6 +100,8 @@ struct RenderEntryAABB
     v3 dim;
     v3 color;
 
+    b32 should_cast_shadow;
+
     // TODO(gh) Make this as a struct?
     // NOTE(gh) offset to the combined vertex & index buffer
     u32 vertex_buffer_offset;
@@ -123,6 +125,8 @@ struct RenderEntryGrass
     v3 p;
     v3 dim;
     v3 color;
+
+    b32 should_cast_shadow;
 
     // NOTE(gh) offset to the combined vertex & index buffer
     u32 vertex_buffer_offset;

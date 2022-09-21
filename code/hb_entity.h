@@ -26,6 +26,8 @@ struct Entity
     v3 dim;
     v3 color;
 
+    b32 should_cast_shadow;
+
     // NOTE(gh) bezier curve properties
     // TODO(gh) us dim for these values?
     f32 width;

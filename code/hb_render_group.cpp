@@ -639,7 +639,7 @@ push_index_data(PlatformRenderPushBuffer *render_push_buffer, u32 *indices, u32 
  
 internal void
 push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
-          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
     RenderEntryAABB *entry = (RenderEntryAABB *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
@@ -649,6 +649,8 @@ push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color,
     entry->header.type = RenderEntryType_AABB;
     entry->p = p;
     entry->dim = dim;
+
+    entry->should_cast_shadow = should_cast_shadow;
     
     entry->color = color;
 
@@ -659,7 +661,7 @@ push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color,
 
 internal void
 push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
-          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
     RenderEntryGrass *entry = (RenderEntryGrass *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
@@ -671,6 +673,8 @@ push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color,
     entry->p = p;
     entry->dim = dim;
     entry->color = color;
+
+    entry->should_cast_shadow = should_cast_shadow;
 
     entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);
     entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);

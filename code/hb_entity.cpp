@@ -89,29 +89,101 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
     result->dim = dim;
     result->color = color;
 
-    result->vertex_count = array_count(cube_vertices) / 6;
+    // TODO(gh) Also make this configurable?
+    f32 triangle_size = 1.0f;
+    u32 x_quad_count = round_r32_to_u32(dim.x / triangle_size);
+    u32 y_quad_count = round_r32_to_u32(dim.y / triangle_size);
+
+    u32 x_vertex_count = x_quad_count + 1;
+    u32 y_vertex_count = y_quad_count + 1;
+    u32 total_vertex_count = x_vertex_count * y_vertex_count;
+
+    result->vertex_count = total_vertex_count;
     result->vertices = push_array(arena, CommonVertex, result->vertex_count);
-    for(u32 i = 0;
-            i < result->vertex_count;
-            ++i)
+
+    v3 left_bottom_p = p - V3(dim.x/2, dim.y/2, 0);
+
+    RandomSeries series = start_random_series(148983); 
+
+    u32 populated_vertex_count = 0;
+    for(u32 y = 0;
+            y < y_vertex_count;
+            ++y)
     {
-        result->vertices[i].p.x = cube_vertices[6*i+0];
-        result->vertices[i].p.y = cube_vertices[6*i+1];
-        result->vertices[i].p.z = cube_vertices[6*i+2];
+        f32 py = left_bottom_p.y + y * triangle_size;
 
-        result->vertices[i].normal.x = cube_vertices[6*i+3];
-        result->vertices[i].normal.y = cube_vertices[6*i+4];
-        result->vertices[i].normal.z = cube_vertices[6*i+5];
+        for(u32 x = 0;
+                x < x_vertex_count;
+                ++x)
+        {
+            f32 px = left_bottom_p.x + x*triangle_size;
+            f32 pz = left_bottom_p.z + random_between(&series, -1.0f, 3.0f);
+
+            result->vertices[populated_vertex_count].p = V3(px, py, pz);
+            result->vertices[populated_vertex_count].normal = V3(0, 0, 0);
+
+            populated_vertex_count++;
+        }
     }
+    assert(populated_vertex_count == result->vertex_count);
 
-    result->index_count = result->vertex_count;
+    // three indices per triangle * 2 triangles per quad * total quad count
+    result->index_count = 3 * 2 * (x_quad_count * y_quad_count);
     result->indices = push_array(arena, u32, result->index_count);
 
-    for(u32 i = 0;
-            i < result->index_count;
-            ++i)
+    u32 populated_index_count = 0;
+    for(u32 y = 0;
+            y < y_quad_count;
+            ++y)
     {
-        result->indices[i] = i;
+        for(u32 x = 0;
+                x < x_quad_count;
+                ++x)
+        {
+            /*
+               NOTE/gh: Given certain cycle, we will construct the mesh like this
+               v2-----v3
+               |       |
+               |       |
+               |       |
+               v0-----v1 -> indices : 012, 132
+            */
+            u32 i0 = y*(x_quad_count + 1) + x;
+            u32 i1 = i0 + 1;
+            u32 i2 = i0 + x_quad_count + 1;
+            u32 i3 = i2 + 1;
+
+            result->indices[populated_index_count++] = i0;
+            result->indices[populated_index_count++] = i1;
+            result->indices[populated_index_count++] = i2;
+
+            result->indices[populated_index_count++] = i1;
+            result->indices[populated_index_count++] = i3;
+            result->indices[populated_index_count++] = i2;
+
+            // TODO(gh) properly calculate normals
+            v3 p0 = result->vertices[i0].p;
+            v3 p1 = result->vertices[i1].p;
+            v3 p2 = result->vertices[i2].p;
+            v3 p3 = result->vertices[i3].p;
+
+            v3 first_normal = normalize(cross(p1-p0, p2-p0));
+            v3 second_normal = normalize(cross(p2-p3, p1-p3));
+
+            result->vertices[i0].normal += first_normal;
+            result->vertices[i1].normal += first_normal + second_normal;
+            result->vertices[i2].normal += first_normal + second_normal;
+
+            result->vertices[i3].normal += second_normal;
+        }
+    }
+    assert(result->index_count == populated_index_count);
+
+    for(u32 vertex_index = 0;
+            vertex_index < result->vertex_count;
+            ++vertex_index)
+    {
+        result->vertices[vertex_index].normal = normalize(result->vertices[vertex_index].normal);
     }
 
     return result;

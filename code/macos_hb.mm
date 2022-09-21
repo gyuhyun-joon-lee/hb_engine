@@ -478,19 +478,22 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                 RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
                 consumed += sizeof(*entry);
 
-                m4x4 model = st_m4x4(entry->p, entry->dim);
-                model = transpose(model); // make the matrix column-major
+                if(entry->should_cast_shadow)
+                {
+                    m4x4 model = M4x4();
+                    model = transpose(model); // make the matrix column-major
 
-                metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
-                metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
-                metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
+                    metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
+                    metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
+                    metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
-                // NOTE(gh) Mitigates the moire pattern by biasing, 
-                // making the shadow map to place under the fragments that are being shaded.
-                // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
+                    // NOTE(gh) Mitigates the moire pattern by biasing, 
+                    // making the shadow map to place under the fragments that are being shaded.
+                    // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
-                metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
-                                  render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+                    metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
+                                      render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+                }
             }break;
 
             case RenderEntryType_Grass:
@@ -498,6 +501,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                 RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
                 consumed += sizeof(*entry);
 
+                if(entry->should_cast_shadow)
+                {
 #if 0
                 m4x4 model = M4x4();
                 model = transpose(model); // make the matrix column-major
@@ -512,6 +517,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                 metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
                                   render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
 #endif
+                }
             }break;
 
             default: 
@@ -593,8 +599,9 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
-                    m4x4 model = st_m4x4(entry->p, entry->dim);
+                    m4x4 model = M4x4();
                     model = transpose(model); // make the matrix column-major
+
                     PerObjectData per_object_data = {};
                     per_object_data.model = model;
                     per_object_data.color = entry->color;
