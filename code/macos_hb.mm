@@ -842,7 +842,7 @@ int main(void)
 
     u32 target_frames_per_second = 60;
     f32 target_seconds_per_frame = 1.0f/(f32)target_frames_per_second;
-    u32 target_nano_seconds_per_frame = (u32)(target_seconds_per_frame*sec_to_nano_sec);
+    u32 target_nano_seconds_per_frame = (u32)(target_seconds_per_frame*sec_to_nanosec);
     NSApplication *app = [NSApplication sharedApplication];
     [app setActivationPolicy :NSApplicationActivationPolicyRegular];
     app_delegate *delegate = [app_delegate new];
@@ -1182,8 +1182,8 @@ int main(void)
             {
                 time_passed_in_nano_seconds = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
             }
-            u32 time_passed_in_micro_sec = (u32)(time_passed_in_nano_seconds / 1000);
-            f32 time_passed_in_sec = (f32)time_passed_in_micro_sec / 1000000.0f;
+            u32 time_passed_in_micro_sec = (u32)(time_passed_in_nano_seconds / sec_to_millisec);
+            f32 time_passed_in_sec = (f32)time_passed_in_nano_seconds / sec_to_nanosec;
             printf("%dms elapsed, fps : %.6f\n", time_passed_in_micro_sec, 1.0f/time_passed_in_sec);
 
             metal_display(&metal_render_context);
