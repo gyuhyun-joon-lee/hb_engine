@@ -117,8 +117,9 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
     return result;
 }
 
+
 /*
-   If the grass looks like this,
+   If the grass blade looks like this,
    /\
    ||
    ||
@@ -133,14 +134,15 @@ populate_grass_vertices(v3 p0, f32 width, v2 facing_direction,
 {
     assert(compare_with_epsilon(length_square(facing_direction), 1.0f));
 
-    v3 p2 = V3(facing_direction, tilt); // TODO(gh) Am I using the tilt value correctly? 
-    v3 orthogonal_normal = V3(-facing_direction.y, facing_direction.x, 0.0f); // Direction of the width of the grass blade
+    v3 p2 = p0 + V3(facing_direction, tilt); // TODO(gh) Am I using the tilt value correctly? 
+    // TODO(gh) Already normalized, do we need to do this again?
+    v3 orthogonal_normal = normalize(V3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade
 
     v3 blade_normal = normalize(cross(p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
     
     // TODO(gh) bend value is a bit unintuitive, because this is not represented in world unit.
     // But if bend value is 0, it means the grass will be completely flat
-    v3 p1 = (3.0f/4.0f) * (p2 - p0) + bend * blade_normal;
+    v3 p1 = p0 + (3.0f/4.0f) * (p2 - p0) + bend * blade_normal;
 
     for(u32 i = 0;
             i < grass_divided_count; 
@@ -189,10 +191,9 @@ add_grass_entity(GameState *game_state, PlatformRenderPushBuffer *render_push_bu
     result->index_count = 3 * (2*(result->grass_divided_count - 1)+1);
     result->indices = push_array(arena, u32, result->index_count);
 
-    populate_grass_vertices(V3(0, 0, 0), result->width, result->tilt_direction, result->tilt, result->bend, result->grass_divided_count, 
+    populate_grass_vertices(p, result->width, result->tilt_direction, result->tilt, result->bend, result->grass_divided_count, 
                                         result->vertices, result->vertex_count);
 
-    // populate indices
     // NOTE(gh) Normals are facing the generally opposite direction of tilt direction
     /*
         ||
@@ -222,4 +223,23 @@ add_grass_entity(GameState *game_state, PlatformRenderPushBuffer *render_push_bu
     assert(populated_index_count == result->index_count);
 
     return result;
+}
+
+internal void
+plant_grasses_using_white_noise(GameState *game_state, PlatformRenderPushBuffer *platform_render_push_buffer, MemoryArena *arena, 
+                                f32 width, f32 height, f32 z, u32 desired_grass_count)
+{
+    f32 half_width = 0.5f*width;
+    f32 half_height = 0.5f*height;
+    RandomSeries random_series = start_random_series(121623);
+
+    for(u32 grass_index = 0;
+            grass_index < desired_grass_count;
+            ++grass_index)
+    {
+        add_grass_entity(game_state, platform_render_push_buffer, arena, 
+                        V3(random_between(&random_series, -half_width, half_width), random_between(&random_series, -half_height, half_height), z), 
+                        random_between(&random_series, 0.1f, 0.3f), V3(0, 1, 0.2f),
+                        V2(1.0f, 0.0f), random_between(&random_series, 0.5f, 1.0f), random_between(&random_series, 0.2f, 0.5f));
+    }
 }

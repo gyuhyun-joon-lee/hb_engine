@@ -445,8 +445,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
     metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
 
     local_persist f32 rad = 2.4f;
-    rad += 1.f*dt_per_frame;
-    v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 5); 
+    v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 50); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
     // TODO(gh) These are totally made up near, far, width values 
@@ -501,7 +500,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
                 consumed += sizeof(*entry);
 
-                m4x4 model = st_m4x4(entry->p, entry->dim);
+#if 0
+                m4x4 model = M4x4();
                 model = transpose(model); // make the matrix column-major
 
                 metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
@@ -513,6 +513,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
                 metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
                                   render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+#endif
             }break;
 
             default: 
@@ -553,6 +554,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
         // NOTE(gh) per frame data is always the 0th buffer
         metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
+        metal_set_cull_mode(render_encoder, MTLCullModeNone); 
 
         u32 voxel_instance_count = 0;
         for(u32 consumed = 0;
@@ -592,7 +594,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     per_object_data.color = entry->color;
 
                     // TODO(gh) Sort the render entry based on cull mode
-                    metal_set_cull_mode(render_encoder, MTLCullModeBack); 
+                    // metal_set_cull_mode(render_encoder, MTLCullModeBack); 
                     metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_buffer(render_encoder, 
@@ -613,14 +615,13 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
-                    m4x4 model = st_m4x4(entry->p, entry->dim);
+                    m4x4 model = M4x4();
                     model = transpose(model); // make the matrix column-major
 
                     PerObjectData per_object_data = {};
                     per_object_data.model = model;
                     per_object_data.color = entry->color;
 
-                    // metal_set_cull_mode(render_encoder, MTLCullModeNone); 
                     metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
 
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);

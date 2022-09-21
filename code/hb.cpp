@@ -33,7 +33,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
 
         // TODO(gh) entity arena?
-        game_state->max_entity_count = 1024;
+        game_state->max_entity_count = 4096;
         game_state->entities = push_array(&game_state->transient_arena, Entity, game_state->max_entity_count);
         
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
@@ -44,14 +44,18 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->random_series = start_random_series(123123);
 
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
-        game_state->circle_camera = init_circle_camera(V3(0, 0, 10), V3(0, 0, 0), 10.0f, 135, 0.01f, 10000.0f);
+        game_state->circle_camera = init_circle_camera(V3(0, 0, 40), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
 
         // add_floor_entity(game_state, V3(0, 0, 2), V3(2, 2, 2), V3(1, 1, 1));
-        add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, -1), V3(10, 10, 2), V3(1, 1, 1));
+        f32 floor_width = 50;
+        f32 floor_height = 50;
+        add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, -1), 
+                         V3(floor_width, floor_height, 2), V3(1, 1, 1));
 
-        add_grass_entity(game_state, platform_render_push_buffer, &game_state->transient_arena, 
-                         V3(0, 0, 0), 0.2f, V3(0, 1, 0.2f),
-                         V2(1, 0), 1.0f, 0.5f);
+#if 1
+        plant_grasses_using_white_noise(game_state, platform_render_push_buffer, &game_state->transient_arena, 
+                                        floor_width, floor_height, 0, 3000);
+#endif
         
         game_state->is_initialized = true;
     }
@@ -110,9 +114,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 local_persist f32 t = 0.0f;
 
                 // entity->tilt_direction = V2(cosf(t), sinf(t));
-                entity->width = 5.0f;
-                entity->tilt = 4.0f;
-                populate_grass_vertices(V3(0, 0, 0), entity->width, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
+                populate_grass_vertices(entity->p, entity->width, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
                                         entity->vertices, entity->vertex_count);
 
                 t += platform_input->dt_per_frame;
