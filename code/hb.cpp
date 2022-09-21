@@ -41,7 +41,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                                     game_state->mass_agg_arena.total_size,
                                                     megabytes(128));
 
-        game_state->random_series = start_random_series(123123);
+        // TODO(gh) get rid of rand()
+        game_state->random_series = start_random_series(rand());
 
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
         game_state->circle_camera = init_circle_camera(V3(0, 0, 40), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
@@ -52,10 +53,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), 
                          V3(floor_width, floor_height, 0), V3(1, 1, 1));
 
+        u32 desired_grass_count = 5000;
 #if 1
-        plant_grasses_using_white_noise(game_state, platform_render_push_buffer, &game_state->transient_arena, 
-                                        floor_width, floor_height, 0, 1000);
+        // NOTE(gh) grass entities would always be sequential to each other.
+        plant_grasses_using_white_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
+                                        floor_width, floor_height, 0, desired_grass_count);
+#else 
+        plant_grasses_using_brute_force_blue_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
+                                        floor_width, floor_height, 0, desired_grass_count, 0.2f);
 #endif
+
         
         game_state->is_initialized = true;
     }
@@ -114,10 +121,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 local_persist f32 t = 0.0f;
 
                 // entity->tilt_direction = V2(cosf(t), sinf(t));
+                entity->tilt = 2.5f + sinf(entity->tilt_dt);
                 populate_grass_vertices(entity->p, entity->width, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
                                         entity->vertices, entity->vertex_count);
 
-                t += platform_input->dt_per_frame;
+                entity->tilt_dt += platform_input->dt_per_frame;
             }break;
         }
     }

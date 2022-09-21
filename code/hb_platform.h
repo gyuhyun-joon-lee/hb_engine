@@ -36,6 +36,8 @@ extern "C" {
 // NOTE(gh): *(u32 *)c == "stri" does not work because of the endianess issues
 #define four_cc(string) (((string[0] & 0xff) << 0) | ((string[1] & 0xff) << 8) | ((string[2] & 0xff) << 16) | ((string[3] & 0xff) << 24))
 
+#define tau_32 6.283185307179586476925286766559005768394338798750211641949889f
+
 #define pi_32 3.14159265358979323846264338327950288419716939937510582097494459230f
 #define half_pi_32 (pi_32/2.0f)
 #define degree_to_radian(degree) ((degree / 180.0f)*pi_32)

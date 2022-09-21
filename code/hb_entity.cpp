@@ -117,7 +117,7 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
                 ++x)
         {
             f32 px = left_bottom_p.x + x*triangle_size;
-            f32 pz = left_bottom_p.z + random_between(&series, -1.0f, 3.0f);
+            f32 pz = left_bottom_p.z + random_between(&series, 0.0f, 0.0f);
 
             result->vertices[populated_vertex_count].p = V3(px, py, pz);
             result->vertices[populated_vertex_count].normal = V3(0, 0, 0);
@@ -242,7 +242,8 @@ populate_grass_vertices(v3 p0, f32 width, v2 facing_direction,
 }
 
 internal Entity *
-add_grass_entity(GameState *game_state, PlatformRenderPushBuffer *render_push_buffer, MemoryArena *arena, 
+add_grass_entity(GameState *game_state, RandomSeries *series,
+                 PlatformRenderPushBuffer *render_push_buffer, MemoryArena *arena, 
                  v3 p, f32 width, v3 color, 
                  v2 tilt_direction, f32 tilt, f32 bend, u32 grass_divided_count = 7)
 {
@@ -253,6 +254,7 @@ add_grass_entity(GameState *game_state, PlatformRenderPushBuffer *render_push_bu
     result->color = color;
 
     result->tilt = tilt;
+    result->tilt_dt = random_between(series, 0.0f, tau_32);
     result->bend = bend;
     result->tilt_direction = tilt_direction;
 
@@ -298,7 +300,7 @@ add_grass_entity(GameState *game_state, PlatformRenderPushBuffer *render_push_bu
 }
 
 internal void
-plant_grasses_using_white_noise(GameState *game_state, PlatformRenderPushBuffer *platform_render_push_buffer, MemoryArena *arena, 
+plant_grasses_using_white_noise(GameState *game_state, RandomSeries *series, PlatformRenderPushBuffer *platform_render_push_buffer, MemoryArena *arena, 
                                 f32 width, f32 height, f32 z, u32 desired_grass_count)
 {
     f32 half_width = 0.5f*width;
@@ -309,9 +311,61 @@ plant_grasses_using_white_noise(GameState *game_state, PlatformRenderPushBuffer 
             grass_index < desired_grass_count;
             ++grass_index)
     {
-        add_grass_entity(game_state, platform_render_push_buffer, arena, 
+        add_grass_entity(game_state, series, platform_render_push_buffer, arena, 
                         V3(random_between(&random_series, -half_width, half_width), random_between(&random_series, -half_height, half_height), z), 
                         random_between(&random_series, 0.1f, 0.3f), V3(0, 1, 0.2f),
                         V2(1.0f, 0.0f), random_between(&random_series, 0.5f, 1.0f), random_between(&random_series, 0.2f, 0.5f));
     }
 }
+
+internal void
+plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *series, 
+                                            PlatformRenderPushBuffer *platform_render_push_buffer, MemoryArena *arena, 
+                                           f32 width, f32 height, f32 z, u32 desired_grass_count, f32 desired_radius)
+{
+    f32 half_width = 0.5f*width;
+    f32 half_height = 0.5f*height;
+    RandomSeries random_series = start_random_series(121623);
+
+    u32 first_grass_entity_index = game_state->entity_count;
+
+    for(u32 grass_index = 0;
+            grass_index < desired_grass_count;
+            ++grass_index)
+    {
+        u32 max_try_count = 1000;
+        b32 planted = false;
+        while(!planted && 
+              (max_try_count > 0))
+        {
+            v3 p = V3(random_between(&random_series, -half_width, half_width), random_between(&random_series, -half_height, half_height), z);
+
+            b32 distance_is_ok = true;
+            // check the distance to all the grass entities that had been planted
+            for(u32 i = 0;
+                    i < grass_index;
+                    ++i)
+            {
+                Entity *grass = game_state->entities + first_grass_entity_index + i;
+                if(length_square(grass->p - p) < 2.0f * desired_radius)
+                {
+                    distance_is_ok = false;
+                    break;
+                }
+            }
+
+            if(distance_is_ok)
+            {
+                add_grass_entity(game_state, series, platform_render_push_buffer, arena, 
+                                p, 
+                                random_between(&random_series, 0.1f, 0.3f), V3(0, 1, 0.2f),
+                                V2(1.0f, 0.0f), random_between(&random_series, 0.5f, 1.0f), random_between(&random_series, 0.2f, 0.5f));
+
+                planted = true;
+            }
+
+            max_try_count--;
+        }
+    }
+}
+
