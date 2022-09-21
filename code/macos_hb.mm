@@ -1,4 +1,8 @@
-# include <Cocoa/Cocoa.h> // APPKIT
+/*
+ * Written by Gyuhyun Lee
+ */
+
+#include <Cocoa/Cocoa.h> // APPKIT
 #include <CoreGraphics/CoreGraphics.h> 
 #include <mach/mach_time.h> // mach_absolute_time
 #include <stdio.h> // printf for debugging purpose
@@ -67,7 +71,7 @@ PLATFORM_READ_FILE(debug_macos_read_file)
 
         if(fileSize > 0)
         {
-            // TODO/gh : NO MORE OS LEVEL ALLOCATION!
+            // TODO/gh : no more os level allocations!
             Result.size = fileSize;
             Result.memory = (u8 *)malloc(Result.size);
             if(read(File, Result.memory, fileSize) == -1)
@@ -91,14 +95,14 @@ PLATFORM_WRITE_ENTIRE_FILE(debug_macos_write_entire_file)
     {
         if(write(file, memory_to_write, size) == -1)
         {
-            // TODO(gh) : LOG here
+            // TODO(gh) : log
         }
 
         close(file);
     }
     else
     {
-        // TODO(gh) :LOG
+        // TODO(gh) :log
         printf("Failed to create file\n");
     }
 }
@@ -140,17 +144,12 @@ display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_t
                 CVOptionFlags ignored_0, CVOptionFlags* ignored_1, void* displayLinkContext)
 {
     local_persist u64 last_time = 0;
-    // NOTE(gh) : display link automatically adjust the framerate.
-    // TODO(gh) : Find out in what condition it adjusts the framerate?
-    u32 last_frame_diff = (u32)(output_time->hostTime - last_time);
-    u32 current_time_diff = (u32)(output_time->hostTime - current_time->hostTime);
+    u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+    u64 time_until_output = output_time->hostTime - last_time;
 
-    f32 last_frame_time_elapsed =last_frame_diff/(f32)output_time->videoTimeScale;
-    f32 current_time_elapsed = current_time_diff/(f32)output_time->videoTimeScale;
-    
-    //printf("last frame diff: %.6f, current time diff: %.6f\n",  last_frame_time_elapsed, current_time_elapsed);
+    // printf("%lldns time passed, %lldns until output\n", time_passed_in_nsec, time_until_output);
 
-    last_time = output_time->hostTime;
+    last_time = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
     return kCVReturnSuccess;
 }
 
@@ -422,10 +421,10 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
     metal_flush_managed_buffer(&render_context->combined_vertex_buffer, render_push_buffer->used_vertex_buffer);
     metal_flush_managed_buffer(&render_context->combined_index_buffer, render_push_buffer->used_index_buffer);
 
-    id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
+    id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
     // NOTE(gh) render shadow map
-    id<MTLRenderCommandEncoder> shadowmap_render_encoder = [command_buffer renderCommandEncoderWithDescriptor : render_context->directional_light_shadowmap_renderpass];
+    id<MTLRenderCommandEncoder> shadowmap_render_encoder = [shadow_command_buffer renderCommandEncoderWithDescriptor : render_context->directional_light_shadowmap_renderpass];
     metal_set_viewport(shadowmap_render_encoder, 0, 0, 
                        render_context->directional_light_shadowmap_depth_texture_width, 
                        render_context->directional_light_shadowmap_depth_texture_height, 
@@ -523,7 +522,14 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
     }
 
     metal_end_encoding(shadowmap_render_encoder);
+    // We can start working on things that don't require drawable_texture.
+    metal_commit_command_buffer(shadow_command_buffer);
 
+    id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
+    // TODO(gh) Do we need to sync here?
+
+    // TODO(gh) One downside of thie single pass method is that we cannot do anything if we don't get drawable_texture
+    // But in fact, drawing g buffers are independant to getting the drawable_texture.
     id <MTLTexture> drawable_texture =  render_context->view.currentDrawable.texture;
     if(drawable_texture)
     {
@@ -544,6 +550,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
+        // TODO(gh) Do we need to 
         PerFrameData per_frame_data = {};
 
         m4x4 proj = perspective_projection(render_push_buffer->camera_fov, render_push_buffer->camera_near, render_push_buffer->camera_far,
@@ -812,6 +819,14 @@ macos_load_game_code(MacOSGameCode *game_code, char *file_name)
 
 int main(void)
 { 
+    // TODO(gh) studio display only shows half of the pixels(both width and height)?
+    CGDirectDisplayID main_displayID = CGMainDisplayID();
+    bool is_display_built_in = CGDisplayIsBuiltin(main_displayID);
+    size_t display_width = CGDisplayPixelsWide(main_displayID);
+    size_t display_height = CGDisplayPixelsHigh(main_displayID);
+    CGSize display_dim = CGDisplayScreenSize(main_displayID);
+    u32 display_serial_number = CGDisplaySerialNumber(main_displayID);
+
     char *lock_file_path = "/Volumes/meka/HB_engine/build/PUL.app/Contents/MacOS/lock.tmp";
     char *game_code_path = "/Volumes/meka/HB_engine/build/PUL.app/Contents/MacOS/pul.dylib";
     MacOSGameCode macos_game_code = {};
@@ -989,7 +1004,6 @@ int main(void)
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
 
-
     // NOTE(gh) Create required textures
 
     // NOTE(gh) For apple silicons, we can use single pass deferred rendering,
@@ -1094,10 +1108,29 @@ int main(void)
     // TODO(gh) More robust way to manage these buffers??(i.e asset system?)
 
     CVDisplayLinkRef display_link;
-    if(CVDisplayLinkCreateWithActiveCGDisplays(&display_link)== kCVReturnSuccess)
+    if(CVDisplayLinkCreateWithActiveCGDisplays(&display_link) == kCVReturnSuccess)
     {
         CVDisplayLinkSetOutputCallback(display_link, display_link_callback, 0); 
         CVDisplayLinkStart(display_link);
+
+        if(CVDisplayLinkSetCurrentCGDisplay(display_link, main_displayID) == kCVReturnSuccess)
+        {
+            // TODO(gh) Now we set the display link with the display,
+            // the OS will call display link callback function periodically when it wants to display something.
+            // Sync this with our display function.
+        }
+        else
+        {
+            // TODO(gh) log
+            printf("Failed to set the display link with main display\n");
+            invalid_code_path;
+        }
+    }
+    else
+    {
+        // TODO(gh) log
+        printf("Failed to create compatible display link with the displays\n");
+        invalid_code_path;
     }
 
     PlatformInput platform_input = {};
@@ -1157,34 +1190,39 @@ int main(void)
         {
             metal_render_and_wait_until_completion(&metal_render_context, &platform_render_push_buffer, window_width, window_height, target_seconds_per_frame);
 
-            u64 time_passed_in_nano_seconds = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
-
-            // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
-            // we need to undersleep and spend time in a loop
-            u64 undersleep_nano_seconds = target_nano_seconds_per_frame / 10;
-            if(time_passed_in_nano_seconds + undersleep_nano_seconds < target_nano_seconds_per_frame)
+            u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+            u32 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
+            f32 time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
+            if(time_passed_in_nsec < target_nano_seconds_per_frame)
             {
-                timespec time_spec = {};
-                time_spec.tv_nsec = target_nano_seconds_per_frame - time_passed_in_nano_seconds -  undersleep_nano_seconds;
+                // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
+                // we need to undersleep and spend time in a loop
+                u64 undersleep_nano_seconds = target_nano_seconds_per_frame / 10;
+                if(time_passed_in_nsec + undersleep_nano_seconds < target_nano_seconds_per_frame)
+                {
+                    timespec time_spec = {};
+                    time_spec.tv_nsec = target_nano_seconds_per_frame - time_passed_in_nsec -  undersleep_nano_seconds;
 
-                nanosleep(&time_spec, 0);
+                    nanosleep(&time_spec, 0);
+                }
+
+                // For a short period of time, loop
+                time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+                while(time_passed_in_nsec < target_nano_seconds_per_frame)
+                {
+                    time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+                }
+                time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
+                time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
             }
             else
             {
                 // TODO : Missed Frame!
                 // TODO(gh) : Whenever we miss the frame re-sync with the display link
-                printf("missed frame!\n");
+                printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
             }
 
-            // For a short period of time, loop
-            time_passed_in_nano_seconds = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
-            while(time_passed_in_nano_seconds < target_nano_seconds_per_frame)
-            {
-                time_passed_in_nano_seconds = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
-            }
-            u32 time_passed_in_micro_sec = (u32)(time_passed_in_nano_seconds / sec_to_millisec);
-            f32 time_passed_in_sec = (f32)time_passed_in_nano_seconds / sec_to_nanosec;
-            printf("%dms elapsed, fps : %.6f\n", time_passed_in_micro_sec, 1.0f/time_passed_in_sec);
+            printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
 
             metal_display(&metal_render_context);
         }
