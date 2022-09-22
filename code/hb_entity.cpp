@@ -311,17 +311,20 @@ plant_grasses_using_white_noise(GameState *game_state, RandomSeries *series, Pla
             grass_index < desired_grass_count;
             ++grass_index)
     {
+        f32 tilt_direction_rad = random_between(series, 0.0f, tau_32);
+        v2 tilt_direction = V2(cosf(tilt_direction_rad), sinf(tilt_direction_rad));
+
         add_grass_entity(game_state, series, platform_render_push_buffer, arena, 
                         V3(random_between(&random_series, -half_width, half_width), random_between(&random_series, -half_height, half_height), z), 
                         random_between(&random_series, 0.1f, 0.3f), V3(0, 1, 0.2f),
-                        V2(1.0f, 0.0f), random_between(&random_series, 0.5f, 1.0f), random_between(&random_series, 0.2f, 0.5f));
+                        tilt_direction, random_between(&random_series, 0.5f, 1.0f), random_between(&random_series, 0.2f, 0.5f));
     }
 }
 
 internal void
 plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *series, 
                                             PlatformRenderPushBuffer *platform_render_push_buffer, MemoryArena *arena, 
-                                           f32 width, f32 height, f32 z, u32 desired_grass_count, f32 desired_radius)
+                                           f32 width, f32 height, f32 z, u32 desired_grass_count, f32 desired_distance_between)
 {
     f32 half_width = 0.5f*width;
     f32 half_height = 0.5f*height;
@@ -338,7 +341,11 @@ plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *
         while(!planted && 
               (max_try_count > 0))
         {
-            v3 p = V3(random_between(&random_series, -half_width, half_width), random_between(&random_series, -half_height, half_height), z);
+            f32 px = random_between(&random_series, -half_width, half_width);
+            f32 py = random_between(&random_series, -half_height, half_height);
+            f32 pz = z;
+            // TODO(gh) f32 pz = raycast_to_plane_z();
+            v3 p = V3(px, py, pz); 
 
             b32 distance_is_ok = true;
             // check the distance to all the grass entities that had been planted
@@ -347,7 +354,7 @@ plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *
                     ++i)
             {
                 Entity *grass = game_state->entities + first_grass_entity_index + i;
-                if(length_square(grass->p - p) < 2.0f * desired_radius)
+                if(length_square(grass->p - p) < desired_distance_between)
                 {
                     distance_is_ok = false;
                     break;
@@ -356,10 +363,13 @@ plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *
 
             if(distance_is_ok)
             {
+                f32 tilt_direction_rad = random_between(series, 0.0f, tau_32);
+                v2 tilt_direction = V2(cosf(tilt_direction_rad), sinf(tilt_direction_rad));
+            
                 add_grass_entity(game_state, series, platform_render_push_buffer, arena, 
                                 p, 
                                 random_between(&random_series, 0.1f, 0.3f), V3(0, 1, 0.2f),
-                                V2(1.0f, 0.0f), random_between(&random_series, 0.5f, 1.0f), random_between(&random_series, 0.2f, 0.5f));
+                                tilt_direction, random_between(&random_series, 0.5f, 1.0f), random_between(&random_series, 0.2f, 0.5f));
 
                 planted = true;
             }
@@ -367,5 +377,12 @@ plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *
             max_try_count--;
         }
     }
+
+    u32 one_past_last_grass_entity_index = game_state->entity_count;
+    u32 planted_grass_count = one_past_last_grass_entity_index - first_grass_entity_index;
+    // NOTE(gh) Not a required assert, just out of curiosity
+    assert(planted_grass_count == desired_grass_count);
+
+    int a = 1;
 }
 
