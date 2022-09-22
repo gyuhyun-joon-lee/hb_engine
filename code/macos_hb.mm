@@ -443,12 +443,12 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
     metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
 
     local_persist f32 rad = 2.4f;
-    v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 50); 
+    v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 100); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
     // TODO(gh) These are totally made up near, far, width values 
     // m4x4 light_proj = perspective_projection(degree_to_radian(120), 0.01f, 100.0f, (f32)render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
-    m4x4 light_proj = orthogonal_projection(0.01f, 100.0f, 10.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
+    m4x4 light_proj = orthogonal_projection(0.01f, 10000.0f, 50.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
     v3 directional_light_z_axis = -directional_light_direction;
     v3 directional_light_x_axis = normalize(cross(V3(0, 0, 1), directional_light_z_axis));
     v3 directional_light_y_axis = normalize(cross(directional_light_z_axis, directional_light_x_axis));
@@ -517,6 +517,29 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                 metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
                                   render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
 #endif
+                }
+            }break;
+
+            case RenderEntryType_Cube:
+            {
+                RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
+                consumed += sizeof(*entry);
+
+                if(entry->should_cast_shadow)
+                {
+                    m4x4 model = st_m4x4(entry->p, entry->dim);
+                    model = transpose(model); // make the matrix column-major
+
+                    metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
+                    metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
+                    metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
+
+                    // NOTE(gh) Mitigates the moire pattern by biasing, 
+                    // making the shadow map to place under the fragments that are being shaded.
+                    // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
+
+                    metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
+                                      render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
                 }
             }break;
 
@@ -638,6 +661,35 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
                     metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
 
+                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
+                    metal_set_vertex_buffer(render_encoder, 
+                                            render_context->combined_vertex_buffer.buffer, 
+                                            entry->vertex_buffer_offset, 2);
+                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
+
+                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
+
+                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+
+                    metal_draw_indexed(render_encoder, MTLPrimitiveTypeTriangle, 
+                            render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+                }break;
+
+                case RenderEntryType_Cube:
+                {
+                    RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += sizeof(*entry);
+
+                    m4x4 model = st_m4x4(entry->p, entry->dim);
+                    model = transpose(model); // make the matrix column-major
+
+                    PerObjectData per_object_data = {};
+                    per_object_data.model = model;
+                    per_object_data.color = entry->color;
+
+                    // TODO(gh) Sort the render entry based on cull mode
+                    // metal_set_cull_mode(render_encoder, MTLCullModeBack); 
+                    metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_buffer(render_encoder, 
                                             render_context->combined_vertex_buffer.buffer, 

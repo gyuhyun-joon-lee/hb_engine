@@ -45,10 +45,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->random_series = start_random_series(rand());
 
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
-        game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 30.0f, 135, 0.01f, 10000.0f);
+        game_state->circle_camera = init_circle_camera(V3(0, 0, 20), V3(0, 0, 0), 30.0f, 135, 0.01f, 10000.0f);
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
 
-        // add_floor_entity(game_state, V3(0, 0, 2), V3(2, 2, 2), V3(1, 1, 1));
+        add_cube_entity(game_state, V3(0, 0, 10), V3(7, 7, 7), V3(1, 1, 1));
+
         f32 floor_width = 40;
         f32 floor_height = 40;
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), 
@@ -60,9 +61,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         plant_grasses_using_white_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                         floor_width, floor_height, 0, desired_grass_count);
 #else 
-        u32 desired_grass_count = 2000;
+        u32 desired_grass_count = 5000;
         plant_grasses_using_brute_force_blue_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
-                                                  floor_width, floor_height, 0, desired_grass_count, 0.2f);
+                                                  floor_width, floor_height, 0, desired_grass_count, 0.1f);
 #endif
         
         game_state->is_initialized = true;
@@ -145,6 +146,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_AABB:
             {
                 push_aabb(platform_render_push_buffer, 
+                          entity->p, entity->dim, entity->color, 
+                          entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
+            }break;
+
+            case EntityType_Cube:
+            {
+                push_cube(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count, true);
             }break;

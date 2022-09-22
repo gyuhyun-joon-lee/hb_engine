@@ -6,6 +6,7 @@ enum EntityType
     EntityType_Null,
     EntityType_AABB,
     EntityType_Floor,
+    EntityType_Cube,
     EntityType_Grass,
 };
 

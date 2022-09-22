@@ -80,6 +80,44 @@ f32 cube_vertices[] =
     0.5f,-0.5f, 0.5f,   0, 0, 1,
 };
 
+internal Entity *
+add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
+{
+    Entity *result = add_entity(game_state, EntityType_Cube, Entity_Flag_Collides);
+    result->aabb = init_aabb(p, 0.5f * dim, 0.0f);
+
+    result->p = p;
+    result->dim = dim;
+    result->color = color;
+
+    result->vertex_count = array_count(cube_vertices) / 6;
+    result->vertices = (CommonVertex *)malloc(sizeof(CommonVertex) * result->vertex_count);
+    for(u32 i = 0;
+            i < result->vertex_count;
+            ++i)
+    {
+        result->vertices[i].p.x = cube_vertices[6*i+0];
+        result->vertices[i].p.y = cube_vertices[6*i+1];
+        result->vertices[i].p.z = cube_vertices[6*i+2];
+
+        result->vertices[i].normal.x = cube_vertices[6*i+3];
+        result->vertices[i].normal.y = cube_vertices[6*i+4];
+        result->vertices[i].normal.z = cube_vertices[6*i+5];
+    }
+
+    result->index_count = result->vertex_count;
+    result->indices = (u32 *)malloc(sizeof(u32) * result->index_count);
+
+    for(u32 i = 0;
+            i < result->index_count;
+            ++i)
+    {
+        result->indices[i] = i;
+    }
+
+    return result;
+}
+
 // NOTE(gh) floor is non_movable entity with infinite mass
 internal Entity *
 add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 color)
@@ -368,7 +406,7 @@ plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *
             
                 add_grass_entity(game_state, series, platform_render_push_buffer, arena, 
                                 p, 
-                                random_between(&random_series, 0.1f, 0.3f), V3(0, 1, 0.2f),
+                                random_between(&random_series, 0.2f, 0.4f), V3(0, 1, 0.2f),
                                 tilt_direction, random_between(&random_series, 0.5f, 1.0f), random_between(&random_series, 0.2f, 0.5f));
 
                 planted = true;
@@ -381,7 +419,7 @@ plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *
     u32 one_past_last_grass_entity_index = game_state->entity_count;
     u32 planted_grass_count = one_past_last_grass_entity_index - first_grass_entity_index;
     // NOTE(gh) Not a required assert, just out of curiosity
-    assert(planted_grass_count == desired_grass_count);
+    // assert(planted_grass_count == desired_grass_count);
 
     int a = 1;
 }

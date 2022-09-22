@@ -643,10 +643,32 @@ push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color,
 {
     RenderEntryAABB *entry = (RenderEntryAABB *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
+    entry->header.type = RenderEntryType_AABB;
+
+    entry->p = p;
+    entry->dim = dim;
+
+    entry->should_cast_shadow = should_cast_shadow;
+    
+    entry->color = color;
+
+    entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);
+    entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);
+    entry->index_count = index_count;
+
+    assert(render_push_buffer->used <= render_push_buffer->total_size);
+}
+
+internal void
+push_cube(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
+          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
+{
+    RenderEntryCube *entry = (RenderEntryCube *)(render_push_buffer->base + render_push_buffer->used);
+    render_push_buffer->used += sizeof(*entry);
+    entry->header.type = RenderEntryType_Cube;
 
     assert(render_push_buffer->used <= render_push_buffer->total_size);
 
-    entry->header.type = RenderEntryType_AABB;
     entry->p = p;
     entry->dim = dim;
 
