@@ -1061,7 +1061,7 @@ int main(void)
                             screen_space_triangle_pipeline_color_attachment_write_masks, array_count(screen_space_triangle_pipeline_color_attachment_write_masks),
                             view.depthStencilPixelFormat);
 
-    metal_render_context.add_compute_pipeline = metal_make_compute_pipeline(device, shader_library, "add_arrays");
+    metal_render_context.add_compute_pipeline = metal_make_compute_pipeline(device, shader_library, "get_random_numbers");
     // make the number of threads in the threadgroup a multiple of threadExecutionWidth
     u32 max_threads_per_group = metal_render_context.add_compute_pipeline.maxTotalThreadsPerThreadgroup;
     u32 thread_execution_width = metal_render_context.add_compute_pipeline.threadExecutionWidth;
@@ -1069,20 +1069,17 @@ int main(void)
     // have, and how should we decide the dimension of the grid(of threadgroups )
     assert(metal_render_context.add_compute_pipeline.threadExecutionWidth == 32);
 
-    u32 float_count = 256;
-    MetalSharedBuffer buffer_a = metal_make_shared_buffer(device, sizeof(f32) * float_count);
-    MetalSharedBuffer buffer_b = metal_make_shared_buffer(device, sizeof(f32) * float_count);
-    MetalSharedBuffer buffer_result = metal_make_shared_buffer(device, sizeof(f32) * float_count);
+    u32 float_x_count = 64;
+    u32 float_y_count = 64;
+    u32 total_float_count = float_x_count * float_y_count;
+    MetalSharedBuffer random_float_buffer = metal_make_shared_buffer(device, sizeof(f32) * total_float_count);
 
     for(u32 i = 0;
-            i < float_count;
+            i < total_float_count;
             ++i)
     {
-        float *a = (float *)buffer_a.memory + i;
-        float *b = (float *)buffer_b.memory + i;
-
-        *a = random_f32(&series);
-        *b = random_f32(&series);
+        f32 *c = (f32 *)random_float_buffer.memory + i;
+        *c = 0;
     }
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
@@ -1269,25 +1266,20 @@ int main(void)
             id<MTLCommandBuffer> compute_command_buffer = [metal_render_context.command_queue commandBuffer];
             id<MTLComputeCommandEncoder> compute_encoder = [compute_command_buffer computeCommandEncoder];
             metal_set_compute_pipeline(compute_encoder, metal_render_context.add_compute_pipeline);
-            metal_set_compute_buffer(compute_encoder, buffer_a.buffer, 0, 0);
-            metal_set_compute_buffer(compute_encoder, buffer_b.buffer, 0, 1);
-            metal_set_compute_buffer(compute_encoder, buffer_result.buffer, 0, 2);
+            metal_set_compute_buffer(compute_encoder, random_float_buffer.buffer, 0, 0);
 
-            metal_dispatch_threads(compute_encoder, V3u(float_count, 1, 1), V3u(float_count, 1, 1));
+            metal_dispatch_threads(compute_encoder, V3u(float_x_count, float_y_count, 1), V3u(float_x_count / 2, float_y_count / 2, 1));
             metal_end_encoding(compute_encoder);
             metal_commit_command_buffer(compute_command_buffer);
             metal_wait_until_command_buffer_completed(compute_command_buffer);
 
             for(u32 i = 0;
-                    i < float_count;
+                    i < total_float_count;
                     ++i)
             {
-                f32 *a = (f32 *)buffer_a.memory + i;
-                f32 *b = (f32 *)buffer_b.memory + i;
-                f32 *c = (f32 *)buffer_result.memory + i;
+                f32 *c = (f32 *)random_float_buffer.memory + i;
 
-                f32 result = *a + *b;
-                printf("CPU : %.6f, GPU : %.6f\n", result, *c);
+                printf("%dth : %.6f\n", i, *c);
             }
 
             u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
