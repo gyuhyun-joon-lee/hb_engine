@@ -421,6 +421,18 @@ gather_max_elements(v3 a, v3 b)
     return result;
 }
 
+inline v3u
+V3u(u32 x, u32 y, u32 z)
+{
+    v3u result = {};
+
+    result.x = x;
+    result.y = y;
+    result.z = z;
+
+    return result;
+}
+
 inline v4
 V4(void)
 {

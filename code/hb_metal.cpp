@@ -143,7 +143,7 @@ metal_flush_managed_buffer(MetalManagedBuffer *buffer, u32 size_to_flush)
 // NOTE(joon) wrapping functions
 // TODO(joon) might do some interesting things by inserting something here...(i.e renderdoc?)
 internal void
-metal_set_pipeline(id<MTLRenderCommandEncoder> render_encoder, id<MTLRenderPipelineState> pipeline)
+metal_set_render_pipeline(id<MTLRenderCommandEncoder> render_encoder, id<MTLRenderPipelineState> pipeline)
 {
     [render_encoder setRenderPipelineState : pipeline];
 }
@@ -181,7 +181,7 @@ metal_set_vertex_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u
 }
 
 internal void
-metal_set_vertex_buffer(id<MTLRenderCommandEncoder> render_encoder, id<MTLBuffer> buffer, u32 offset, u32 index)
+metal_set_vertex_buffer(id<MTLRenderCommandEncoder> render_encoder, id<MTLBuffer> buffer, u64 offset, u32 index)
 {
     [render_encoder setVertexBuffer:buffer
                     offset:offset
@@ -237,7 +237,7 @@ metal_draw_non_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTL
 }
 
 internal void
-metal_draw_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, id<MTLBuffer> index_buffer, u32 index_offset, u32 index_count)
+metal_draw_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, id<MTLBuffer> index_buffer, u64 index_offset, u64 index_count)
 {
     [render_encoder drawIndexedPrimitives : primitive_type
                    indexCount : index_count 
@@ -248,7 +248,7 @@ metal_draw_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType 
 
 internal void
 metal_draw_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type,
-                            id<MTLBuffer> index_buffer, u32 index_count, u32 instance_count)
+                            id<MTLBuffer> index_buffer, u64 index_count, u64 instance_count)
 {
     [render_encoder drawIndexedPrimitives:primitive_type
                     indexCount:index_count
@@ -344,19 +344,6 @@ metal_make_pipeline(id<MTLDevice> device,
     return result;
 }
 
-internal id<MTLComputePipelineState>
-metal_make_compute_pipeline(id<MTLDevice> device, id<MTLLibrary> shader_library, const char *compute_function_name)
-{
-    id<MTLFunction> compute_function = 0;
-    compute_function = [shader_library newFunctionWithName:[NSString stringWithUTF8String:compute_function_name]];
-
-    NSError *error = 0;
-    id<MTLComputePipelineState> result = [device newComputePipelineStateWithFunction: compute_function 
-                                                             error:&error];
-    check_ns_error(error);
-
-    return result;
-}
 
 internal id<MTLTexture>
 metal_make_texture_2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, 
@@ -461,6 +448,66 @@ metal_make_sampler(id<MTLDevice> device, b32 normalized_coordinates, MTLSamplerA
     return result;
 }
        
+/////////////// NOTE(gh) compute
+internal id<MTLComputePipelineState>
+metal_make_compute_pipeline(id<MTLDevice> device, id<MTLLibrary> shader_library, const char *compute_function_name)
+{
+    id<MTLFunction> compute_function = 0;
+    compute_function = [shader_library newFunctionWithName:[NSString stringWithUTF8String:compute_function_name]];
+
+    NSError *error = 0;
+    id<MTLComputePipelineState> result = [device newComputePipelineStateWithFunction: compute_function 
+                                                             error:&error];
+    check_ns_error(error);
+
+    return result;
+}
+
+internal void
+metal_set_compute_pipeline(id<MTLComputeCommandEncoder> encoder, id<MTLComputePipelineState> pipeline)
+{
+    [encoder setComputePipelineState : pipeline];
+}
+
+internal void
+metal_set_compute_buffer(id<MTLComputeCommandEncoder> encoder, id<MTLBuffer> buffer, u64 offset, u64 index)
+{
+    [encoder setBuffer : buffer
+            offset : offset
+            atIndex : index];
+}
+
+internal void
+metal_dispatch_threads(id<MTLComputeCommandEncoder> encoder, v3u threads_per_grid, v3u threads_per_group)
+{
+    // NOTE(gh)
+    /*
+       NOTE(gh)
+       threads_per_grid is how many 'threads' should be inside the grid, possibly in x, y, z directions.
+       threads_per_group is how many thread should be inside the threadgroup.(maximum value = maxTotalThreadsPerThreadgroup)
+
+        Later, when the GPU actually fires up the threads and starts executing, it will try to group the threads into 
+        SIMD group, which is very similar to CPU level SIMD - meaning, all threads inside the simd group will perform
+        the same instructions(possibly on different memory). This is what others call the wavefront or warp.
+        The size of the lane can be retrieved from threadExecutionWidth, again from the compute pipeline state.
+
+        This is also why it is recommended to not branch inside the kernel, as the thread will do both branchs 
+        and mask out as necessary. 
+
+        If the thread group has less threads than the lane size, the GPU will do the same thing as if there were enough threads,
+        but just throw away the rest. So in theory, you would want the thread count of the thread group to be multiple of 
+        lane size.
+    */
+
+    [encoder dispatchThreads : MTLSizeMake(threads_per_grid.x, threads_per_grid.y, threads_per_grid.z)
+                            threadsPerThreadgroup : MTLSizeMake(threads_per_group.x, threads_per_group.y, threads_per_group.z)];
+}
+
+internal void
+metal_end_encoding(id<MTLComputeCommandEncoder> encoder)
+{
+    [encoder endEncoding];
+}
 
 
 

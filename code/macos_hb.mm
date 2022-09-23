@@ -440,7 +440,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
     metal_set_cull_mode(shadowmap_render_encoder, MTLCullModeFront); 
     metal_set_detph_stencil_state(shadowmap_render_encoder, render_context->depth_state);
 
-    metal_set_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
+    metal_set_render_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
 
     local_persist f32 rad = 2.4f;
     v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 100); 
@@ -607,7 +607,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 #if 0
-                    metal_set_pipeline(render_encoder, render_context->line_pipeline);
+                    metal_set_render_pipeline(render_encoder, render_context->line_pipeline);
                     f32 start_and_end[6] = {entry->start.x, entry->start.y, entry->start.z, entry->end.x, entry->end.y, entry->end.z};
 
                     metal_set_vertex_bytes(render_encoder, start_and_end, sizeof(f32) * array_count(start_and_end), 1);
@@ -631,7 +631,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
                     // TODO(gh) Sort the render entry based on cull mode
                     // metal_set_cull_mode(render_encoder, MTLCullModeBack); 
-                    metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
+                    metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_buffer(render_encoder, 
                                             render_context->combined_vertex_buffer.buffer, 
@@ -659,7 +659,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     per_object_data.model = model;
                     per_object_data.color = entry->color;
 
-                    metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
+                    metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
 
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_buffer(render_encoder, 
@@ -689,7 +689,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
                     // TODO(gh) Sort the render entry based on cull mode
                     // metal_set_cull_mode(render_encoder, MTLCullModeBack); 
-                    metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
+                    metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_buffer(render_encoder, 
                                             render_context->combined_vertex_buffer.buffer, 
@@ -714,7 +714,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 //////// NOTE(gh) Forward rendering start
         // NOTE(gh) draw axis lines
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
-        metal_set_pipeline(render_encoder, render_context->singlepass_line_pipeline);
+        metal_set_render_pipeline(render_encoder, render_context->singlepass_line_pipeline);
 
         metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
 
@@ -747,7 +747,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         per_object_data.model = model;
         per_object_data.color = V3(1, 0, 0);
 
-        metal_set_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
+        metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
         metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
         metal_set_vertex_bytes(render_encoder, cube_vertices, array_size(cube_vertices), 2);
         metal_set_vertex_bytes(render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
@@ -766,7 +766,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
             {0.0f, 0.7f, 1.0f},
         };
 
-        metal_set_pipeline(present_render_encoder, render_context->screen_space_triangle_pipeline);
+        metal_set_render_pipeline(present_render_encoder, render_context->screen_space_triangle_pipeline);
         metal_set_vertex_bytes(present_render_encoder, screen_space_triangle_vertices, array_size(screen_space_triangle_vertices), 0);
         metal_draw_non_indexed(present_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(screen_space_triangle_vertices));
 #endif
@@ -778,7 +778,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         // NOTE(gh) disable depth testing & writing for deferred lighting
         metal_set_detph_stencil_state(render_encoder, render_context->disabled_depth_state);
 
-        metal_set_pipeline(render_encoder, render_context->singlepass_deferred_lighting_pipeline);
+        metal_set_render_pipeline(render_encoder, render_context->singlepass_deferred_lighting_pipeline);
 
         metal_set_vertex_bytes(render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
         metal_set_vertex_bytes(render_encoder, &render_push_buffer->enable_shadow, sizeof(render_push_buffer->enable_shadow), 1);
@@ -1061,7 +1061,29 @@ int main(void)
                             screen_space_triangle_pipeline_color_attachment_write_masks, array_count(screen_space_triangle_pipeline_color_attachment_write_masks),
                             view.depthStencilPixelFormat);
 
-    id<MTLComputePipelineState> add_compute_pipeline = metal_make_compute_pipeline(device, shader_library, "add_arrays");
+    metal_render_context.add_compute_pipeline = metal_make_compute_pipeline(device, shader_library, "add_arrays");
+    // make the number of threads in the threadgroup a multiple of threadExecutionWidth
+    u32 max_threads_per_group = metal_render_context.add_compute_pipeline.maxTotalThreadsPerThreadgroup;
+    u32 thread_execution_width = metal_render_context.add_compute_pipeline.threadExecutionWidth;
+    // TODO(gh) This is assumed to be 32, but this should be the deciding factor of how many threads should one threadgroup
+    // have, and how should we decide the dimension of the grid(of threadgroups )
+    assert(metal_render_context.add_compute_pipeline.threadExecutionWidth == 32);
+
+    u32 float_count = 256;
+    MetalSharedBuffer buffer_a = metal_make_shared_buffer(device, sizeof(f32) * float_count);
+    MetalSharedBuffer buffer_b = metal_make_shared_buffer(device, sizeof(f32) * float_count);
+    MetalSharedBuffer buffer_result = metal_make_shared_buffer(device, sizeof(f32) * float_count);
+
+    for(u32 i = 0;
+            i < float_count;
+            ++i)
+    {
+        float *a = (float *)buffer_a.memory + i;
+        float *b = (float *)buffer_b.memory + i;
+
+        *a = random_f32(&series);
+        *b = random_f32(&series);
+    }
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
 
@@ -1242,6 +1264,31 @@ int main(void)
         @autoreleasepool
         {
             metal_render_and_wait_until_completion(&metal_render_context, &platform_render_push_buffer, window_width, window_height, target_seconds_per_frame);
+
+            // NOTE(gh) Testing compute pipeline
+            id<MTLCommandBuffer> compute_command_buffer = [metal_render_context.command_queue commandBuffer];
+            id<MTLComputeCommandEncoder> compute_encoder = [compute_command_buffer computeCommandEncoder];
+            metal_set_compute_pipeline(compute_encoder, metal_render_context.add_compute_pipeline);
+            metal_set_compute_buffer(compute_encoder, buffer_a.buffer, 0, 0);
+            metal_set_compute_buffer(compute_encoder, buffer_b.buffer, 0, 1);
+            metal_set_compute_buffer(compute_encoder, buffer_result.buffer, 0, 2);
+
+            metal_dispatch_threads(compute_encoder, V3u(float_count, 1, 1), V3u(float_count, 1, 1));
+            metal_end_encoding(compute_encoder);
+            metal_commit_command_buffer(compute_command_buffer);
+            metal_wait_until_command_buffer_completed(compute_command_buffer);
+
+            for(u32 i = 0;
+                    i < float_count;
+                    ++i)
+            {
+                f32 *a = (f32 *)buffer_a.memory + i;
+                f32 *b = (f32 *)buffer_b.memory + i;
+                f32 *c = (f32 *)buffer_result.memory + i;
+
+                f32 result = *a + *b;
+                printf("CPU : %.6f, GPU : %.6f\n", result, *c);
+            }
 
             u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
             u32 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
