@@ -56,7 +56,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                          V3(floor_width, floor_height, 0), V3(1, 1, 1));
 
 #if 0
-        u32 desired_grass_count = 2000;
+        u32 desired_grass_count = 5000;
         // NOTE(gh) grass entities would always be sequential to each other.
         plant_grasses_using_white_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                         floor_width, floor_height, 0, desired_grass_count);
@@ -120,9 +120,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case EntityType_Grass:
             {
-                local_persist f32 t = 0.0f;
-
-                // entity->tilt_direction = V2(cosf(t), sinf(t));
                 entity->tilt = 2.5f + sinf(entity->tilt_dt);
                 populate_grass_vertices(entity->p, entity->width, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
                                         entity->vertices, entity->vertex_count);
@@ -159,7 +156,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case EntityType_Grass:
             {
-                push_grass(platform_render_push_buffer, entity->p, entity->dim, entity->color, 
+                push_grass(platform_render_push_buffer, entity->p, entity->dim, V3(1, 0, 0), 
                             entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
             }break;
         }

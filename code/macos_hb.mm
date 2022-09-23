@@ -1061,6 +1061,8 @@ int main(void)
                             screen_space_triangle_pipeline_color_attachment_write_masks, array_count(screen_space_triangle_pipeline_color_attachment_write_masks),
                             view.depthStencilPixelFormat);
 
+    id<MTLComputePipelineState> add_compute_pipeline = metal_make_compute_pipeline(device, shader_library, "add_arrays");
+
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
 
     // NOTE(gh) Create required textures
@@ -1217,14 +1219,6 @@ int main(void)
 
         // TODO(gh): check if the focued window is working properly
         b32 is_window_focused = [app keyWindow] && [app mainWindow];
-
-        /*
-            TODO(gh) : For more precisely timed rendering, the operations should be done in this order
-            1. Update the game based on the input
-            2. Check the mach absolute time
-            3. With the return value from the displayLinkOutputCallback function, get the absolute time to present
-            4. Use presentDrawable:atTime to present at the specific time
-        */
 
         // TODO(gh) : last permission bit should not matter, but double_check?
         int lock_file = open(lock_file_path, O_RDONLY); 

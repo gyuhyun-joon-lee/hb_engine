@@ -41,7 +41,7 @@ struct MetalRenderContext
     // which is why we are passing these samplers that are made exeternally.
     id<MTLSamplerState> shadowmap_sampler;
 
-    // Pipelines
+    // Render Pipelines
     id<MTLRenderPipelineState> directional_light_shadowmap_pipeline;
     // NOTE(gh) Those that are marked as 'singlepass' will be sharing 
     // single renderpass & color attachments will be sharing single renderpass & color attachments
@@ -49,6 +49,9 @@ struct MetalRenderContext
     id<MTLRenderPipelineState> singlepass_line_pipeline;
     id<MTLRenderPipelineState> singlepass_deferred_lighting_pipeline;
     id<MTLRenderPipelineState> screen_space_triangle_pipeline;
+
+    // Compute Pipelines
+    id<MTLComputePipelineState> add_compute_pipeline;
     
     // Renderpasses
     MTLRenderPassDescriptor *directional_light_shadowmap_renderpass;

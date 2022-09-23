@@ -8,9 +8,10 @@
 # create .air
 xcrun -sdk macosx metal -c -gline-tables-only -frecord-sources shader.metal
 xcrun -sdk macosx metal -c -gline-tables-only -frecord-sources singlepass_shader.metal
+xcrun -sdk macosx metal -c -gline-tables-only -frecord-sources compute.metal
 
 # create .metallib 
-xcrun -sdk macosx metal -gline-tables-only -frecord-sources -o shader.metallib shader.air singlepass_shader.metal
+xcrun -sdk macosx metal -gline-tables-only -frecord-sources -o shader.metallib shader.air singlepass_shader.air compute.air
 
 # create .metallibsym
 xcrun -sdk macosx metal-dsymutil -flat -remove-source shader.metallib

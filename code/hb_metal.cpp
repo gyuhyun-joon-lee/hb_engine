@@ -344,6 +344,20 @@ metal_make_pipeline(id<MTLDevice> device,
     return result;
 }
 
+internal id<MTLComputePipelineState>
+metal_make_compute_pipeline(id<MTLDevice> device, id<MTLLibrary> shader_library, const char *compute_function_name)
+{
+    id<MTLFunction> compute_function = 0;
+    compute_function = [shader_library newFunctionWithName:[NSString stringWithUTF8String:compute_function_name]];
+
+    NSError *error = 0;
+    id<MTLComputePipelineState> result = [device newComputePipelineStateWithFunction: compute_function 
+                                                             error:&error];
+    check_ns_error(error);
+
+    return result;
+}
+
 internal id<MTLTexture>
 metal_make_texture_2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, 
                   MTLTextureType type, MTLTextureUsage usage, MTLStorageMode storage_mode)
