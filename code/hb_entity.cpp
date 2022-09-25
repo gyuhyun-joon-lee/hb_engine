@@ -240,11 +240,11 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
 internal void
 populate_grass_vertices(v3 p0, f32 width, v2 facing_direction, 
                         f32 tilt, f32 bend, f32 grass_divided_count, 
-                        CommonVertex *vertices, u32 vertex_count)
+                        CommonVertex *vertices, u32 vertex_count, f32 dt)
 {
     assert(compare_with_epsilon(length_square(facing_direction), 1.0f));
 
-    v3 p2 = p0 + V3(facing_direction, tilt); // TODO(gh) Am I using the tilt value correctly? 
+    v3 p2 = p0 + V3(6.0f * facing_direction, tilt); // TODO(gh) Am I using the tilt value correctly? 
     // TODO(gh) Already normalized, do we need to do this again?
     v3 orthogonal_normal = normalize(V3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade
 
@@ -259,8 +259,20 @@ populate_grass_vertices(v3 p0, f32 width, v2 facing_direction,
             ++i)
     {
         f32 t = (f32)i/(f32)grass_divided_count;
+        f32 wiggliness = 1.1f;
+        f32 wind_factor = t * wiggliness + dt;
+
+#if 1
+        p1 += V3(0, 0, 0.05f * sinf(wind_factor));
+        p2 += V3(0, 0, 0.1f * sinf(wind_factor));
 
         v3 point_on_bezier_curve = quadratic_bezier(p0, p1, p2, t);
+#else 
+        v3 p1_mod = V3(0, 0, 0.05f * sinf(wind_factor));
+        v3 p2_mod = V3(0, 0, 0.1f * sinf(wind_factor));
+
+        v3 point_on_bezier_curve = quadratic_bezier(p0, p1 + p1_mod, p2 + p2_mod, t);
+#endif
 
         // The first vertex is the point on the bezier curve,
         // and the next vertex is along the line that starts from the first vertex
@@ -275,7 +287,7 @@ populate_grass_vertices(v3 p0, f32 width, v2 facing_direction,
     }
 
     // Manually add the tip
-    vertices[vertex_count - 1].p = p2;
+    vertices[vertex_count - 1].p = p2 + 0.5f*width*orthogonal_normal;
     vertices[vertex_count - 1].normal = normalize(cross(quadratic_bezier_first_derivative(p0, p1, p2, 1.0f), orthogonal_normal));
 }
 
@@ -292,7 +304,7 @@ add_grass_entity(GameState *game_state, RandomSeries *series,
     result->color = color;
 
     result->tilt = tilt;
-    result->tilt_dt = random_between(series, 0.0f, tau_32);
+    result->dt = random_between(series, 0.0f, tau_32);
     result->bend = bend;
     result->tilt_direction = tilt_direction;
 
@@ -303,8 +315,11 @@ add_grass_entity(GameState *game_state, RandomSeries *series,
     result->index_count = 3 * (2*(result->grass_divided_count - 1)+1);
     result->indices = push_array(arena, u32, result->index_count);
 
+    // This will be done in entity update loop anyway
+#if 0
     populate_grass_vertices(p, result->width, result->tilt_direction, result->tilt, result->bend, result->grass_divided_count, 
-                                        result->vertices, result->vertex_count);
+                                        result->vertices, result->vertex_count, );
+#endif
 
     // NOTE(gh) Normals are facing the generally opposite direction of tilt direction
     /*
@@ -407,7 +422,7 @@ plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *
                 add_grass_entity(game_state, series, platform_render_push_buffer, arena, 
                                 p, 
                                 random_between(&random_series, 0.2f, 0.4f), V3(0, 1, 0.2f),
-                                tilt_direction, random_between(&random_series, 0.5f, 1.0f), random_between(&random_series, 0.2f, 0.5f));
+                                tilt_direction, random_between(&random_series, 4.0f, 5.0f), random_between(&random_series, 0.9f, 1.0f));
 
                 planted = true;
             }

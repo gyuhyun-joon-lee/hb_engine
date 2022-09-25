@@ -45,7 +45,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->random_series = start_random_series(rand());
 
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
-        game_state->circle_camera = init_circle_camera(V3(0, 0, 20), V3(0, 0, 0), 30.0f, 135, 0.01f, 10000.0f);
+        game_state->circle_camera = init_circle_camera(V3(0, 0, 10), V3(0, 0, 0), 10.0f, 135, 0.01f, 10000.0f);
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
 
         add_cube_entity(game_state, V3(0, 0, 10), V3(7, 7, 7), V3(1, 1, 1));
@@ -61,7 +61,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         plant_grasses_using_white_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                         floor_width, floor_height, 0, desired_grass_count);
 #else 
-        u32 desired_grass_count = 5000;
+        u32 desired_grass_count = 100;
         plant_grasses_using_brute_force_blue_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                                   floor_width, floor_height, 0, desired_grass_count, 0.1f);
 #endif
@@ -120,11 +120,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case EntityType_Grass:
             {
+#if 0
+                wind_phase = u * wiggliness + hash * two_pi + time
+                control_point_1.z += 0.1 * sin(wind_phase);
+                control_point_2.z += 0.2 * sin(wind_phase);
                 entity->tilt = 2.5f + sinf(entity->tilt_dt);
+#endif
                 populate_grass_vertices(entity->p, entity->width, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
-                                        entity->vertices, entity->vertex_count);
+                                        entity->vertices, entity->vertex_count, entity->dt);
 
-                entity->tilt_dt += platform_input->dt_per_frame;
+                entity->dt += 1.0f * platform_input->dt_per_frame;
             }break;
         }
     }
@@ -156,7 +161,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case EntityType_Grass:
             {
-                push_grass(platform_render_push_buffer, entity->p, entity->dim, V3(1, 0, 0), 
+                push_grass(platform_render_push_buffer, entity->p, entity->dim, entity->color, 
                             entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
             }break;
         }

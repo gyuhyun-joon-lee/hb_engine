@@ -34,9 +34,9 @@ struct Entity
     f32 width;
     u32 grass_divided_count;
     f32 tilt; // == p2.z
-    f32 tilt_dt;
     f32 bend; // controls p1
     v2 tilt_direction; // only x and y values, z == 0
+    f32 dt;
 
     CommonVertex *vertices;
     u32 vertex_count;

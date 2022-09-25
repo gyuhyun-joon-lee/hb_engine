@@ -1069,9 +1069,10 @@ int main(void)
     // have, and how should we decide the dimension of the grid(of threadgroups )
     assert(metal_render_context.add_compute_pipeline.threadExecutionWidth == 32);
 
+    // Effectively a 2D grid, but generates v3 floats per thread
     u32 float_x_count = 64;
     u32 float_y_count = 64;
-    u32 total_float_count = float_x_count * float_y_count;
+    u32 total_float_count = 3 * float_x_count * float_y_count;
     MetalSharedBuffer random_float_buffer = metal_make_shared_buffer(device, sizeof(f32) * total_float_count);
 
     for(u32 i = 0;
@@ -1262,6 +1263,7 @@ int main(void)
         {
             metal_render_and_wait_until_completion(&metal_render_context, &platform_render_push_buffer, window_width, window_height, target_seconds_per_frame);
 
+#if 0
             // NOTE(gh) Testing compute pipeline
             id<MTLCommandBuffer> compute_command_buffer = [metal_render_context.command_queue commandBuffer];
             id<MTLComputeCommandEncoder> compute_encoder = [compute_command_buffer computeCommandEncoder];
@@ -1275,12 +1277,13 @@ int main(void)
 
             for(u32 i = 0;
                     i < total_float_count;
-                    ++i)
+                    i += 3)
             {
                 f32 *c = (f32 *)random_float_buffer.memory + i;
 
-                printf("%dth : %.6f\n", i, *c);
+                printf("%dth : x:%.6f, y:%.6f, z:%.6f\n", i/3, *c, *(c+1), *(c+2));
             }
+#endif
 
             u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
             u32 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
