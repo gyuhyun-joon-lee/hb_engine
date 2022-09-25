@@ -48,6 +48,13 @@ lerp(f32 min, f32 t, f32 max)
     return min + t*(max-min);
 }
 
+inline f32
+power(f32 base, f32 exponent)
+{
+    // TODO(gh) intrinsic?
+    return powf(base, exponent);
+}
+
 inline v2
 V2(void)
 {

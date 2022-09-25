@@ -31,12 +31,15 @@ struct Entity
 
     // NOTE(gh) bezier curve properties
     // TODO(gh) us dim for these values?
-    f32 width;
+    f32 blade_width;
+    f32 stride;
+    f32 height;
+
     u32 grass_divided_count;
     f32 tilt; // == p2.z
     f32 bend; // controls p1
     v2 tilt_direction; // only x and y values, z == 0
-    f32 dt;
+    u32 hash;
 
     CommonVertex *vertices;
     u32 vertex_count;

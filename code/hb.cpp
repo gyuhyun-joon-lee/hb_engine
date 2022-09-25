@@ -18,6 +18,9 @@
 #include "hb_render_group.cpp"
 #include "hb_image_loader.cpp"
 
+// TODO(gh) not a great idea
+#include <time.h>
+
 /*
     TODO(gh)
     - Render Font using one of the graphics API
@@ -42,6 +45,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                                     megabytes(128));
 
         // TODO(gh) get rid of rand()
+        srand(time(0));
         game_state->random_series = start_random_series(rand());
 
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
@@ -61,7 +65,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         plant_grasses_using_white_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                         floor_width, floor_height, 0, desired_grass_count);
 #else 
-        u32 desired_grass_count = 100;
+        u32 desired_grass_count = 1000;
         plant_grasses_using_brute_force_blue_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                                   floor_width, floor_height, 0, desired_grass_count, 0.1f);
 #endif
@@ -126,10 +130,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 control_point_2.z += 0.2 * sin(wind_phase);
                 entity->tilt = 2.5f + sinf(entity->tilt_dt);
 #endif
-                populate_grass_vertices(entity->p, entity->width, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
-                                        entity->vertices, entity->vertex_count, entity->dt);
-
-                entity->dt += 1.0f * platform_input->dt_per_frame;
+                populate_grass_vertices(entity->p, entity->blade_width, entity->stride, entity->height, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
+                                        entity->vertices, entity->vertex_count, entity->hash, game_state->accumulated_dt);
             }break;
         }
     }
@@ -166,5 +168,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
+
+    game_state->accumulated_dt += 2.0f*platform_input->dt_per_frame;
 }
 
