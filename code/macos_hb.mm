@@ -997,7 +997,7 @@ int main(void)
                                                                       MTLColorWriteMaskAll,
                                                                       MTLColorWriteMaskAll};
     metal_render_context.singlepass_cube_pipeline = 
-        metal_make_pipeline(device, "Cube Pipeline", 
+        metal_make_render_pipeline(device, "Cube Pipeline", 
                             "singlepass_cube_vertex", "singlepass_cube_frag", 
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
@@ -1016,7 +1016,7 @@ int main(void)
          MTLColorWriteMaskNone,
          MTLColorWriteMaskNone};
     metal_render_context.singlepass_deferred_lighting_pipeline = 
-        metal_make_pipeline(device, "Deferred Lighting Pipeline", 
+        metal_make_render_pipeline(device, "Deferred Lighting Pipeline", 
                             "singlepass_deferred_lighting_vertex", "singlepass_deferred_lighting_frag", 
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
@@ -1025,7 +1025,7 @@ int main(void)
                             MTLPixelFormatDepth32Float);
 
     metal_render_context.directional_light_shadowmap_pipeline = 
-        metal_make_pipeline(device, "Directional Light Shadowmap Pipeline", 
+        metal_make_render_pipeline(device, "Directional Light Shadowmap Pipeline", 
                             "directional_light_shadowmap_vert", 0, 
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
@@ -1043,7 +1043,7 @@ int main(void)
                                                                       MTLColorWriteMaskNone,
                                                                       MTLColorWriteMaskNone};
     metal_render_context.singlepass_line_pipeline = 
-        metal_make_pipeline(device, "Line Pipeline", 
+        metal_make_render_pipeline(device, "Line Pipeline", 
                             "singlepass_line_vertex", "singlepass_line_frag",
                             shader_library,
                             MTLPrimitiveTopologyClassLine,
@@ -1054,7 +1054,7 @@ int main(void)
     MTLPixelFormat screen_space_triangle_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm}; // This is the default pixel format for displaying
     MTLColorWriteMask screen_space_triangle_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll};
     metal_render_context.screen_space_triangle_pipeline = 
-        metal_make_pipeline(device, "Sreen Space Triangle Pipeline", "screen_space_triangle_vert", "screen_space_triangle_frag",
+        metal_make_render_pipeline(device, "Sreen Space Triangle Pipeline", "screen_space_triangle_vert", "screen_space_triangle_frag",
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
                             screen_space_triangle_pipeline_color_attachment_pixel_formats, array_count(screen_space_triangle_pipeline_color_attachment_pixel_formats),

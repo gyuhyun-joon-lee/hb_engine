@@ -291,7 +291,7 @@ metal_wait_until_command_buffer_completed(id<MTLCommandBuffer> command_buffer)
 }
 
 internal id<MTLRenderPipelineState>
-metal_make_pipeline(id<MTLDevice> device,
+metal_make_render_pipeline(id<MTLDevice> device,
                     const char *pipeline_name, const char *vertex_shader_name, const char *fragment_shader_name,
                     id<MTLLibrary> shader_library,
                     MTLPrimitiveTopologyClass topology, 
@@ -507,6 +507,12 @@ internal void
 metal_end_encoding(id<MTLComputeCommandEncoder> encoder)
 {
     [encoder endEncoding];
+}
+
+internal void
+metal_make_mesh_pipeline()
+{
+    MTLMeshRenderPipelineDescriptor *descriptor = 0;
 }
 
 
