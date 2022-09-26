@@ -509,10 +509,57 @@ metal_end_encoding(id<MTLComputeCommandEncoder> encoder)
     [encoder endEncoding];
 }
 
-internal void
-metal_make_mesh_pipeline()
+// TODO(gh) Set things properly that were not been documented yet
+// i.e meshThreadgroupSizeIsMultipleOfThreadExecutionWidth, payloadMemoryLength
+internal id<MTLRenderPipelineState>
+metal_make_mesh_pipeline(id<MTLDevice> device,
+                    const char *pipeline_name, 
+                    const char *object_function_name, 
+                    const char *mesh_function_name, 
+                    const char *fragment_function_name,
+                    id<MTLLibrary> shader_library,
+                    MTLPrimitiveTopologyClass topology, 
+                    MTLPixelFormat *pixel_formats, u32 pixel_format_count, 
+                    MTLColorWriteMask *masks, u32 mask_count,
+                    MTLPixelFormat depth_pixel_format, 
+                    u32 max_thread_count_per_object_threadgroup,
+                    u32 max_threadgroup_count_per_mesh_grid,
+                    u32 max_thread_count_per_mesh_threadgroup)
 {
     MTLMeshRenderPipelineDescriptor *descriptor = 0;
+    descriptor.label = [NSString stringWithUTF8String : pipeline_name];
+    descriptor.objectFunction = [shader_library newFunctionWithName : [NSString stringWithUTF8String : object_function_name]];
+    descriptor.meshFunction = [shader_library newFunctionWithName : [NSString stringWithUTF8String : mesh_function_name]];
+    descriptor.fragmentFunction = [shader_library newFunctionWithName : [NSString stringWithUTF8String : fragment_function_name]];
+    descriptor.rasterSampleCount = 1;
+    descriptor.rasterizationEnabled = true;
+    // descriptor.payloadMemoryLength = ;
+    // descriptor.meshThreadgroupSizeIsMultipleOfThreadExecutionWidth = ;
+
+    descriptor.maxTotalThreadsPerObjectThreadgroup = max_thread_count_per_object_threadgroup;
+    descriptor.maxTotalThreadgroupsPerMeshGrid = max_threadgroup_count_per_mesh_grid;
+    descriptor.maxTotalThreadsPerMeshThreadgroup = max_thread_count_per_mesh_threadgroup;
+   
+    for(u32 color_attachment_index = 0;
+            color_attachment_index < pixel_format_count;
+            ++color_attachment_index)
+    {
+        descriptor.colorAttachments[color_attachment_index].pixelFormat = pixel_formats[color_attachment_index];
+        descriptor.colorAttachments[color_attachment_index].writeMask = masks[color_attachment_index];
+    }
+
+    NSError *error;
+    // TODO(gh) This is also not documented.. check options and reflection parameter 
+    id<MTLRenderPipelineState> result = [device newRenderPipelineStateWithMeshDescriptor: descriptor
+                                                                        options : 0
+                                                                        reflection : 0
+                                                                        error : &error];
+
+    check_ns_error(error);
+
+    [descriptor release];
+
+    return result;
 }
 
 
