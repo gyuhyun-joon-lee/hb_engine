@@ -1,4 +1,5 @@
 #include "shader_common.h"
+#
 
 struct LineVertexOutput
 {
@@ -7,6 +8,7 @@ struct LineVertexOutput
 };
 
 // NOTE(gh) : line vertex function gets a world position input
+// NOTE(gh) line should be rendered in forward pass
 vertex LineVertexOutput
 singlepass_line_vertex(uint vertex_ID [[vertex_id]],
             constant PerFrameData *per_frame_data [[buffer(0)]],
@@ -44,17 +46,6 @@ struct GBuffers
     float4 color [[color(3)]];
 };
 
-struct CubeVertexOutput
-{
-    float4 clip_p [[position]];
-    float3 color;
-
-    float3 p;
-    float3 N;
-    float depth;
-
-    float3 p_in_light_coordinate;
-};
 
 // TODO(gh) I don't like this...
 struct VertexPN
@@ -64,7 +55,7 @@ struct VertexPN
 };
 
 // NOTE(gh) : vertex is a prefix for vertex shader
-vertex CubeVertexOutput
+vertex GBufferVertexOutput
 singlepass_cube_vertex(uint vertexID [[vertex_id]],
             uint instanceID [[instance_id]],
             constant PerFrameData *per_frame_data [[buffer(0)]],
@@ -76,7 +67,7 @@ singlepass_cube_vertex(uint vertexID [[vertex_id]],
             // TODO(gh) Make a light buffer so that we can just pass that
             constant float4x4 *light_proj_view[[buffer(3)]])
 {
-    CubeVertexOutput result = {};
+    GBufferVertexOutput result = {};
 
     float4 world_p = per_object_data->model * 
                         float4(vertices[6*vertexID+0], 
@@ -112,7 +103,7 @@ singlepass_cube_vertex(uint vertexID [[vertex_id]],
 }
 
 fragment GBuffers 
-singlepass_cube_frag(CubeVertexOutput vertex_output [[stage_in]],
+singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
           depth2d<float> shadowmap [[texture(0)]],
           sampler shadowmap_sampler[[sampler(0)]])
 {

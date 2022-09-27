@@ -2,7 +2,7 @@
  * Written by Gyuhyun Lee
  */
 
-#include <Cocoa/Cocoa.h> // APPKIT
+#include <Cocoa/Cocoa.h> 
 #include <CoreGraphics/CoreGraphics.h> 
 #include <mach/mach_time.h> // mach_absolute_time
 #include <stdio.h> // printf for debugging purpose
@@ -878,6 +878,12 @@ macos_load_game_code(MacOSGameCode *game_code, char *file_name)
 
 int main(void)
 { 
+#if 0
+    // Testing font in macos...
+    UIFont * arial_font = [fontWithName : [NSString stringWithUTF8String:vertex_shader_name]
+                                    size : 40];
+#endif
+
     // TODO(gh) studio display only shows half of the pixels(both width and height)?
     CGDirectDisplayID main_displayID = CGMainDisplayID();
     bool is_display_built_in = CGDisplayIsBuiltin(main_displayID);
@@ -959,8 +965,9 @@ int main(void)
     NSString *name = device.name;
     bool has_unified_memory = device.hasUnifiedMemory;
 
-    // TODO(gh) MTLGPUFamilyApple8 not defined?
     assert(metal_does_support_gpu_family(device, MTLGPUFamilyApple7));
+    // TODO(gh) MTLGPUFamilyApple8 not defined?
+    // assert(metal_does_support_gpu_family(device, MTLGPUFamilyApple8));
 
     MTKView *view = [[MTKView alloc] initWithFrame : window_rect
                                         device:device];
@@ -1067,7 +1074,26 @@ int main(void)
     u32 thread_execution_width = metal_render_context.add_compute_pipeline.threadExecutionWidth;
     // TODO(gh) This is assumed to be 32, but this should be the deciding factor of how many threads should one threadgroup
     // have, and how should we decide the dimension of the grid(of threadgroups )
+    // TODO(gh) also double check if this needs to be a 'width'(32 x 8 for example), or does it need to be in total 
     assert(metal_render_context.add_compute_pipeline.threadExecutionWidth == 32);
+
+    // TODO(gh) These are just temporary numbers, there should be more robust way to get these information
+    u32 max_thread_count_per_object_threadgroup = 8*8; // Each object thread is one grass blade
+    u32 max_threadgroup_count_per_mesh_grid = 8*8; // Each mesh thread group is one grass blade
+    u32 max_thread_count_per_mesh_threadgroup = 39; // mesh thread count == one grass blade index count(39 for now)
+    id<MTLRenderPipelineState> grass_mesh_render_pipeline = 
+        metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
+                                        "grass_object_function", 
+                                        "single_grass_mesh_function",
+                                        "singlepass_cube_frag",
+                                        shader_library,
+                                        MTLPrimitiveTopologyClassTriangle,
+                                        cube_pipeline_color_attachment_pixel_formats, array_count(cube_pipeline_color_attachment_pixel_formats),
+                                        cube_pipeline_color_attachment_write_masks, array_count(cube_pipeline_color_attachment_write_masks),
+                                        view.depthStencilPixelFormat,
+                                        max_thread_count_per_object_threadgroup,
+                                        max_threadgroup_count_per_mesh_grid,
+                                        max_thread_count_per_mesh_threadgroup); 
 
     // Effectively a 2D grid, but generates v3 floats per thread
     u32 float_x_count = 64;

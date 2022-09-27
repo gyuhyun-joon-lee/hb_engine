@@ -1,11 +1,11 @@
 #ifndef HB_MATH_H
 #define HB_MATH_H
 
-// NOTE(joon) : This file contains functions that requires math.h
-// TODO(joon) : Someday we will get remove of math.h, too :)
+// NOTE(gh) : This file contains functions that requires math.h
+// TODO(gh) : Someday we will get remove of math.h, too :)
 #include <math.h>
 
-// TODO(joon) This function is not actually 'safe'...
+// TODO(gh) This function is not actually 'safe'...
 // need better name here
 inline b32
 compare_with_epsilon(f32 a, f32 b, f32 epsilon = 0.00005f)
@@ -306,7 +306,7 @@ operator*(f32 value, v3 a)
 }
 
 // RHS!!!!
-// NOTE(joon) : This assumes the vectors ordered counter clockwisely
+// NOTE(gh) : This assumes the vectors ordered counter clockwisely
 inline v3
 cross(v3 a, v3 b)
 {
@@ -576,7 +576,7 @@ M3x3(f32 e00, f32 e01, f32 e02,
     return result;
 }
 
-// NOTE(joon) returns identity matrix
+// NOTE(gh) returns identity matrix
 inline m3x3
 M3x3(void)
 {
@@ -732,7 +732,7 @@ inverse(m3x3 m)
 
 
 
-// NOTE(joon) rotate along x axis
+// NOTE(gh) rotate along x axis
 inline m3x3
 x_rotate(f32 rad)
 {
@@ -752,7 +752,7 @@ x_rotate(f32 rad)
     return result;
 }
 
-// NOTE(joon) rotate along y axis
+// NOTE(gh) rotate along y axis
 inline m3x3
 y_rotate(f32 rad)
 {
@@ -774,7 +774,7 @@ y_rotate(f32 rad)
     return result;
 }
 
-// NOTE(joon) rotate along z axis
+// NOTE(gh) rotate along z axis
 inline m3x3 
 z_rotate(f32 rad)
 {
@@ -988,7 +988,7 @@ clamp(i32 min, i32 value, i32 max)
     return result;
 }
 
-// NOTE(joon) How "ABCD" will lay out in memory based on the endianess
+// NOTE(gh) How "ABCD" will lay out in memory based on the endianess
 // 0x00 0x01 0x02 0x03 
 //    D    C    B    A - little endian (last thing comes first in memory)
 //    A    B    C    D - big endian (same as how we see)
@@ -1000,7 +1000,7 @@ big_to_little_endian(u32 big)
     u32 c = ((u8 *)&big)[2];
     u32 d = ((u8 *)&big)[3];
 
-    // TODO(joon): should be a way to optimize this...
+    // TODO(gh): should be a way to optimize this...
     u32 result = (((u8 *)&big)[0] << 24) | (((u8 *)&big)[1] << 16) | (((u8 *)&big)[2] << 8) | (((u8 *)&big)[3] << 0);
 
     return result;
@@ -1053,7 +1053,7 @@ Quat(f32 s, f32 v0, f32 v1, f32 v2)
     return Quat(s, V3(v0, v1, v2));
 }
 
-// NOTE(joon) returns rotation quaternion
+// NOTE(gh) returns rotation quaternion
 inline quat
 Quat(v3 axis, f32 rad)
 {
@@ -1133,7 +1133,7 @@ operator /=(quat &q, f32 value)
     return q;
 }
 
-// TODO(joon) make quaternion based on the orientation
+// TODO(gh) make quaternion based on the orientation
 
 inline f32
 length_square(quat q)
@@ -1197,11 +1197,11 @@ does_quat_represent_orientation(quat q)
     return result;
 }
 
-// NOTE(joon) This matrix is an orthogonal matrix, so inverse == transpose
+// NOTE(gh) This matrix is an orthogonal matrix, so inverse == transpose
 inline m3x3
 rotation_quat_to_m3x3(quat q)
 {
-    // NOTE(joon) q is a unit-norm quaterion, whether pure or non-pure
+    // NOTE(gh) q is a unit-norm quaterion, whether pure or non-pure
     m3x3 result = {};
     result.e[0][0] = 1 - 2.0f*(q.y*q.y + q.z*q.z);
     result.e[0][1] = 2.0f*(q.x*q.y + q.z*q.s);
@@ -1218,25 +1218,27 @@ rotation_quat_to_m3x3(quat q)
     return result;
 }
 
-// NOTE(joon) 
-// You can see that q before and after the rotation should be pure, as it is the only way
+// NOTE(gh) 
+// q before and after the rotation should be pure, as it is the only way
 // they can exist in ijk coordinate.
 // If the rotation axis is not perpendicular to 
 // pure quaternion that we are trying to rotate,
 // multiplying those two quaternions will make the q unpure.
-// so we basically need to multiply it by inverse rot_q, 
+// so we basically need to multiply it by inverse q, 
 // which makes q pure again. This is also why we are only using half_rad instead of rad
-inline quat
-rotate(quat q, v3 axis, f32 rad)
+// TODO(gh) This function has not been tested!
+inline v3
+rotate(v3 p, v3 axis, f32 rad)
 {
     assert(compare_with_epsilon(length_square(axis), 1.0f));
-    assert(compare_with_epsilon(q.s, 0.0f));
 
-    quat half_rot = Quat(axis, rad/2.0f);
+    f32 half_rad = rad/2.0f;
 
-    // Simplifed version of q * p * inverse(q)
-    quat result = Quat(0, 2*dot(half_rot.v, q.v)*half_rot.v + (2*square(half_rot.s) - 1)*q.v +
-                          2*half_rot.s*cross(half_rot.v, q.v));
+    quat rotation_q = Quat(cosf(half_rad), sinf(half_rad) * axis);
+    // TODO(gh) Theres should be a way to simplify this!
+    quat result_q = rotation_q * Quat(0, p), inverse(rotation_q);
+
+    v3 result = result_q.v;
 
     return result;
 }

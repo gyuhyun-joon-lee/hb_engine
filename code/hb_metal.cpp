@@ -512,7 +512,7 @@ metal_end_encoding(id<MTLComputeCommandEncoder> encoder)
 // TODO(gh) Set things properly that were not been documented yet
 // i.e meshThreadgroupSizeIsMultipleOfThreadExecutionWidth, payloadMemoryLength
 internal id<MTLRenderPipelineState>
-metal_make_mesh_pipeline(id<MTLDevice> device,
+metal_make_mesh_render_pipeline(id<MTLDevice> device,
                     const char *pipeline_name, 
                     const char *object_function_name, 
                     const char *mesh_function_name, 
@@ -526,7 +526,8 @@ metal_make_mesh_pipeline(id<MTLDevice> device,
                     u32 max_threadgroup_count_per_mesh_grid,
                     u32 max_thread_count_per_mesh_threadgroup)
 {
-    MTLMeshRenderPipelineDescriptor *descriptor = 0;
+    MTLMeshRenderPipelineDescriptor *descriptor = [MTLMeshRenderPipelineDescriptor new];
+
     descriptor.label = [NSString stringWithUTF8String : pipeline_name];
     descriptor.objectFunction = [shader_library newFunctionWithName : [NSString stringWithUTF8String : object_function_name]];
     descriptor.meshFunction = [shader_library newFunctionWithName : [NSString stringWithUTF8String : mesh_function_name]];

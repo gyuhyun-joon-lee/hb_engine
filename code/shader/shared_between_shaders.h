@@ -1,0 +1,4 @@
+#ifndef SHARED_BETWEEN_SHADERS_H
+#define SHARED_BETWEEN_SHADERS_H
+
+#endif

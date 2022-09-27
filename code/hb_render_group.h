@@ -33,6 +33,13 @@ struct RawMesh
    TODO(gh) we would want these functionalities for the camera
    - Initialize camera with the 'position' and the 'look at' position.
    - fully functioning quaternion to avoid gimbal lock
+
+   As you mention the gimbal lock issue arises anytime you do three consecutive rotations (such as Euler Angles) 
+   to get from an inertial coordinate frame to a body frame. 
+   This includes combining three successive quaternion rotations (through a operation called composition).
+
+    The reason why quaternions can overcome gimbal lock is that they can represent the transformation from the inertial coordinate frame to the body fixed frame in a single rotation. 
+    This is however imho the big disadvantage of quaternions - it is not physically intuitive to come up with a desired quaternion.
 */
 
 /*
@@ -47,14 +54,41 @@ struct RawMesh
       However, in the projection matrix, n > f (i.e -1 > -5) because both values will be negated.
 */
 
+#if 0
+quat lookAt(v3 source, v3 dest, v3 front, v3 up)
+{
+    v3 toVector = normalize(dest - source);
+
+    //compute rotation axis
+    Vector3f rotAxis = front.cross(toVector).normalized();
+    if (rotAxis.squaredNorm() == 0)
+        rotAxis = up;
+
+    //find the angle around rotation axis
+    float dot = VectorMath::front().dot(toVector);
+    float ang = std::acosf(dot);
+
+    //convert axis angle to quaternion
+    return Eigen::AngleAxisf(rotAxis, ang);
+}
+
+//Angle-Axis to Quaternion
+Quaternionr angleAxisf(const Vector3r& axis, float angle) {
+    auto s = std::sinf(angle / 2);
+    auto u = axis.normalized();
+    return Quaternionr(std::cosf(angle / 2), u.x() * s, u.y() * s, u.z() * s);
+}
+
+#endif
+
 struct Camera
 {
     f32 pitch; // x
     f32 yaw; // y
     f32 roll; // z
 
-    // TODO(gh) someday, tricky part is not the rotation itself, but 
-    // initializing but the camera so that it can look at some position
+    // TODO(gh) Someday! Tricky part is not the rotation itself, but 
+    // initializing the camera so that it can look at some position
     quat orientation;
 
     v3 p;
