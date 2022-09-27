@@ -74,13 +74,25 @@ get_random_numbers(device float* result,
 
 struct Payload
 {
-    float3 center;
+    float3 center[64];
+
+    // TODO(gh) I would assume that I can also add per instance data here?
+#if 0
+    float blade_width = 0.2f;
+    float stride = 2.0f;
+    float height = 1.8f;
+    float2 facing_direction = float2(1, 0);
+    float bend = 0.5f;
+    float wiggliness = 2.1f;
+    float3 color = float3(0.2f, 0.8f, 0.2f);
+#endif
 };
 
 [[object]]
 void grass_object_function(object_data Payload *payloadOutput [[payload]],
                           const device GrassObjectFunctionInput *object_function_input[[buffer (0)]],
                           uint thread_index [[thread_index_in_threadgroup]], // thread index in object threadgroup 
+                          uint2 thread_count_per_threadgroup [[threads_per_threadgroup]],
                           uint2 thread_position [[thread_position_in_threadgroup]], 
                           mesh_grid_properties mgp)
 {
@@ -88,7 +100,7 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
     float center_y = object_function_input->one_thread_worth_dim.y * (float)thread_position.y;
 
     // TODO(gh) also feed z value
-    payloadOutput[thread_index].center = float3(center_x, center_y, 0.0f);
+    payloadOutput->center[thread_position.y * thread_count_per_threadgroup.x + thread_position.x] = float3(center_x, center_y, 0.0f);
 
     if(thread_index == 0)
     {
@@ -143,7 +155,7 @@ calculate_grass_vertex(float3 center,
     // But if bend value is 0, it means the grass will be completely flat
     float3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
 
-    float t = (float)(thread_index / 2) / grass_divide_count;
+    float t = (float)(thread_index / 2) / (float)grass_divide_count;
     uint hash = 1123;
     float hash_value = hash*pi_32;
     // TODO(gh) how do we get time since engine startup?
@@ -207,7 +219,7 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     // these if statements are needed, as we are firing more threads than the grass vertex count.
     if (thread_index < grass_vertex_count)
     {
-        float3 center = payload[threadgroup_position.y * threadgroup_count_per_grid.x + threadgroup_position.x].center;
+        float3 center = payload->center[threadgroup_position.y * threadgroup_count_per_grid.x + threadgroup_position.x];
         output_mesh.set_vertex(thread_index, calculate_grass_vertex(center, thread_index, proj_view, light_proj_view));
     }
     if (thread_index < grass_index_count)
