@@ -4,21 +4,11 @@
 #include <metal_stdlib>
 using namespace metal;
 
+#define INSIDE_METAL_SHADER 1
+#include "../hb_shared_with_shader.h"
+
 constant float pi_32 = 3.1415926535897932384626433832795;
 
-// NOTE(gh) this is a consequence of not having a shared file
-// between metal and the platform code.. which is a rabbit hole
-// that I do not want to go inside :(
-struct PerFrameData
-{
-    float4x4 proj_view;
-};
-
-struct PerObjectData
-{
-    float4x4 model;
-    float3 color;
-};
 
 // Populating g buffer
 struct GBufferVertexOutput

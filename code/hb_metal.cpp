@@ -98,7 +98,7 @@ metal_set_scissor_rect(id<MTLRenderCommandEncoder> render_encoder, u32 x, u32 y,
 // NOTE(joon) creates a shared memory between CPU and GPU
 // TODO(joon) Do we want the buffer to be more than 4GB?
 internal MetalSharedBuffer
-metal_make_shared_buffer(id<MTLDevice> device, u32 max_size)
+metal_make_shared_buffer(id<MTLDevice> device, u64 max_size)
 {
     MetalSharedBuffer result = {};
     result.buffer = [device 
@@ -112,14 +112,14 @@ metal_make_shared_buffer(id<MTLDevice> device, u32 max_size)
 }
 
 internal void
-metal_write_shared_buffer(MetalSharedBuffer *buffer, void *source, u32 source_size)
+metal_write_shared_buffer(MetalSharedBuffer *buffer, void *source, u64 source_size)
 {
     assert(source_size <= buffer->max_size);
     memcpy(buffer->memory, source, source_size);
 }
 
 internal MetalManagedBuffer
-metal_make_managed_buffer(id<MTLDevice> device, u32 size)
+metal_make_managed_buffer(id<MTLDevice> device, u64 size)
 {
     MetalManagedBuffer result = {};
     result.buffer = [device 
@@ -133,7 +133,7 @@ metal_make_managed_buffer(id<MTLDevice> device, u32 size)
 }
 
 internal void
-metal_flush_managed_buffer(MetalManagedBuffer *buffer, u32 size_to_flush)
+metal_flush_managed_buffer(MetalManagedBuffer *buffer, u64 size_to_flush)
 {
     assert(size_to_flush <= buffer->size);
     NSRange range = NSMakeRange(0, size_to_flush);
@@ -173,7 +173,7 @@ metal_set_detph_stencil_state(id<MTLRenderCommandEncoder> render_encoder, id<MTL
 }
 
 internal void
-metal_set_vertex_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u32 size, u32 index)
+metal_set_vertex_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u64 size, u64 index)
 {
     [render_encoder setVertexBytes: data 
                     length: size 
@@ -181,7 +181,7 @@ metal_set_vertex_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u
 }
 
 internal void
-metal_set_vertex_buffer(id<MTLRenderCommandEncoder> render_encoder, id<MTLBuffer> buffer, u64 offset, u32 index)
+metal_set_vertex_buffer(id<MTLRenderCommandEncoder> render_encoder, id<MTLBuffer> buffer, u64 offset, u64 index)
 {
     [render_encoder setVertexBuffer:buffer
                     offset:offset
@@ -189,21 +189,21 @@ metal_set_vertex_buffer(id<MTLRenderCommandEncoder> render_encoder, id<MTLBuffer
 }
 
 internal void
-metal_set_vertex_texture(id<MTLRenderCommandEncoder> render_encoder, id<MTLTexture> texture, u32 index)
+metal_set_vertex_texture(id<MTLRenderCommandEncoder> render_encoder, id<MTLTexture> texture, u64 index)
 {
     [render_encoder setVertexTexture : texture
                     atIndex : index];
 }
 
 internal void
-metal_set_fragment_texture(id<MTLRenderCommandEncoder> render_encoder, id<MTLTexture> texture, u32 index)
+metal_set_fragment_texture(id<MTLRenderCommandEncoder> render_encoder, id<MTLTexture> texture, u64 index)
 {
     [render_encoder setFragmentTexture : texture
                              atIndex:index];
 }
 
 internal void
-metal_set_fragment_sampler(id<MTLRenderCommandEncoder> render_encoder, id<MTLSamplerState> sampler, u32 index)
+metal_set_fragment_sampler(id<MTLRenderCommandEncoder> render_encoder, id<MTLSamplerState> sampler, u64 index)
 {
     [render_encoder setFragmentSamplerState : sampler
                                 atIndex : index];
@@ -217,7 +217,7 @@ metal_set_depth_bias(id<MTLRenderCommandEncoder> render_encoder, f32 depth_bias,
 
 internal void
 metal_draw_non_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, 
-                        u32 vertex_start, u32 vertex_count)
+                        u64 vertex_start, u64 vertex_count)
 {
     // NOTE(gh) vertex_id will start from vertex_start to vertex_start + vertex_count - 1
     [render_encoder drawPrimitives:primitive_type 
@@ -227,7 +227,7 @@ metal_draw_non_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveT
 
 internal void
 metal_draw_non_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type,
-                                u32 vertex_start, u32 vertex_count, u32 instance_start, u32 instance_count)
+                                u64 vertex_start, u64 vertex_count, u64 instance_start, u64 instance_count)
 {
     [render_encoder drawPrimitives: primitive_type
                     vertexStart: vertex_start
@@ -561,6 +561,22 @@ metal_make_mesh_render_pipeline(id<MTLDevice> device,
     [descriptor release];
 
     return result;
+}
+
+internal void
+metal_set_object_buffer(id<MTLRenderCommandEncoder> encoder, id<MTLBuffer> buffer, u64 offset, u64 index)
+{
+    [encoder setObjectBuffer : buffer 
+                offset : offset 
+                atIndex : index];
+}
+
+internal void
+metal_set_object_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u64 size, u64 index)
+{
+    [render_encoder setObjectBytes: data 
+                    length: size 
+                    atIndex: index]; 
 }
 
 

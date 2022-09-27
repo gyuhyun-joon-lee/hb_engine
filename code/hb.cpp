@@ -65,9 +65,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         plant_grasses_using_white_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                         floor_width, floor_height, 0, desired_grass_count);
 #else 
+#if 0
         u32 desired_grass_count = 6000;
         plant_grasses_using_brute_force_blue_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                                   floor_width, floor_height, 0, desired_grass_count, 0.1f);
+#endif
 #endif
         
         game_state->is_initialized = true;

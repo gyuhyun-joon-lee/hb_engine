@@ -27,6 +27,7 @@
 #include "hb_random.h"
 #include "hb_simd.h"
 #include "hb_render_group.h"
+#include "hb_shared_with_shader.h"
 
 #include "hb_metal.cpp"
 #include "hb_render_group.cpp"
@@ -554,8 +555,9 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
     // We can start working on things that don't require drawable_texture.
     metal_commit_command_buffer(shadow_command_buffer);
 
+    // TODO(gh) Do we need to check whether the shadowmap was fully rendered?
+
     id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
-    // TODO(gh) Do we need to sync here?
 
     // TODO(gh) One downside of thie single pass method is that we cannot do anything if we don't get drawable_texture
     // But in fact, drawing g buffers are independant to getting the drawable_texture.
@@ -573,22 +575,26 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         // NOTE(gh) When we create a render_encoder, we cannot create another render encoder until we call endEncoding on the current one.
         id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->single_lighting_renderpass];
 
+        PerFrameData per_frame_data = {};
+        m4x4 proj = perspective_projection(render_push_buffer->camera_fov, render_push_buffer->camera_near, render_push_buffer->camera_far,
+                                           render_push_buffer->width_over_height);
+        per_frame_data.proj_view = transpose(proj * render_push_buffer->view);
+#if 0
+
+        // NOTE(gh) first, render all the grasses with mesh render pipeline
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
         metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
+#endif
 
-        // TODO(gh) Do we need to 
-        PerFrameData per_frame_data = {};
 
-        m4x4 proj = perspective_projection(render_push_buffer->camera_fov, render_push_buffer->camera_near, render_push_buffer->camera_far,
-                                           render_push_buffer->width_over_height);
-
-        per_frame_data.proj_view = transpose(proj * render_push_buffer->view);
-
-        // NOTE(gh) per frame data is always the 0th buffer
-        metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
+        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
+        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
+        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
+        metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
         metal_set_cull_mode(render_encoder, MTLCullModeNone); 
 
         u32 voxel_instance_count = 0;
@@ -632,6 +638,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     // TODO(gh) Sort the render entry based on cull mode
                     // metal_set_cull_mode(render_encoder, MTLCullModeBack); 
                     metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
+                    metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_buffer(render_encoder, 
                                             render_context->combined_vertex_buffer.buffer, 
@@ -661,6 +668,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
                     metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
 
+                    metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_buffer(render_encoder, 
                                             render_context->combined_vertex_buffer.buffer, 
@@ -689,7 +697,9 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
                     // TODO(gh) Sort the render entry based on cull mode
                     // metal_set_cull_mode(render_encoder, MTLCullModeBack); 
+
                     metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
+                    metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
                     metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
                     metal_set_vertex_buffer(render_encoder, 
                                             render_context->combined_vertex_buffer.buffer, 
@@ -1081,7 +1091,7 @@ int main(void)
     u32 max_thread_count_per_object_threadgroup = 8*8; // Each object thread is one grass blade
     u32 max_threadgroup_count_per_mesh_grid = 8*8; // Each mesh thread group is one grass blade
     u32 max_thread_count_per_mesh_threadgroup = 39; // mesh thread count == one grass blade index count(39 for now)
-    id<MTLRenderPipelineState> grass_mesh_render_pipeline = 
+    metal_render_context.grass_mesh_render_pipeline = 
         metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
                                         "grass_object_function", 
                                         "single_grass_mesh_function",

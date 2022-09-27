@@ -52,6 +52,9 @@ struct MetalRenderContext
 
     // Compute Pipelines
     id<MTLComputePipelineState> add_compute_pipeline;
+
+    // Mesh Pipelines(although the type is same as render pipeline)
+    id<MTLRenderPipelineState> grass_mesh_render_pipeline;
     
     // Renderpasses
     MTLRenderPassDescriptor *directional_light_shadowmap_renderpass;

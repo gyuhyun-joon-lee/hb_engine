@@ -186,16 +186,5 @@ struct RenderEntryGrass
     u32 index_count;
 };
 
-// TODO(gh) move the shader related structs(i.e uniform) into seperate file? (hb_shader.h)
-struct PerFrameData
-{
-    alignas(16) m4x4 proj_view;
-};
-
-struct PerObjectData
-{
-    alignas(16) m4x4 model;
-    alignas(16) v3 color;
-};
 
 #endif
