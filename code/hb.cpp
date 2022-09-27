@@ -52,12 +52,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->circle_camera = init_circle_camera(V3(0, 0, 10), V3(0, 0, 0), 10.0f, 135, 0.01f, 10000.0f);
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
 
-        add_cube_entity(game_state, V3(0, 0, 10), V3(7, 7, 7), V3(1, 1, 1));
+        add_cube_entity(game_state, V3(0, 0, 15), V3(7, 7, 7), V3(1, 1, 1));
 
-        f32 floor_width = 40;
-        f32 floor_height = 40;
+        v3 floor_dim = V3(40, 40, 0); // Floor is just flat
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), 
-                         V3(floor_width, floor_height, 0), V3(1, 1, 1));
+                         floor_dim, V3(1, 1, 1));
 
 #if 0
         u32 desired_grass_count = 5000;

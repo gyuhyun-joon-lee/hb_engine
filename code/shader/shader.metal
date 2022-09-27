@@ -95,7 +95,7 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
 
     // TODO(gh) How does GPU know when it should fire up the mesh grid? 
     // Does it do it when all threads in object threadgroup finishes?
-    mgp.set_threadgroups_per_grid(uint3(object_function_input->mesh_threadgroup_count_x, object_function_input->mesh_threadgroup_count_y, 0));
+    mgp.set_threadgroups_per_grid(uint3(object_function_input->mesh_threadgroup_count_x, object_function_input->mesh_threadgroup_count_y, 1));
 }
 
 // NOTE(gh) simplifed form of (1-t)*{(1-t)*p0+t*p1} + t*{(1-t)*p1+t*p2}
@@ -117,8 +117,8 @@ quadratic_bezier_first_derivative(float3 p0, float3 p1, float3 p2, float t)
 }
 
 GBufferVertexOutput
-calculate_grass_vertex(const object_data Payload *payload, 
-                        uint thread_index, 
+calculate_grass_vertex(const object_data Payload *payload, // L-data 
+                        u32 thread_index, 
                         constant float4x4 *proj_view,
                         constant float4x4 *light_proj_view)
 {
@@ -130,6 +130,7 @@ calculate_grass_vertex(const object_data Payload *payload,
     float bend = 0.5f;
     float wiggliness = 2.1f;
     float3 color = float3(0.2f, 0.8f, 0.2f);
+    u32 grass_divide_count = 7;
 
     float3 p0 = payload->center;
 
@@ -142,8 +143,8 @@ calculate_grass_vertex(const object_data Payload *payload,
     // But if bend value is 0, it means the grass will be completely flat
     float3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
 
-    float t = (float)(thread_index / 2);
-    uint hash = 1123;
+    float t = (float)(thread_index / 2) / grass_divide_count;
+    u32 hash = 1123;
     float hash_value = hash*pi_32;
     // TODO(gh) how do we get time since engine startup?
     float time = 0.0f;
@@ -174,9 +175,9 @@ calculate_grass_vertex(const object_data Payload *payload,
 }
 
 // TODO(gh) Can we change this dynamically? I would suspect no...
-constant uint grass_vertex_count = 15;
-constant uint grass_triangle_count = 13;
-constant uint grass_index_count = 39;
+constant u32 grass_vertex_count = 15;
+constant u32 grass_triangle_count = 13;
+constant u32 grass_index_count = 39;
 
 struct StubPrimitive
 {
@@ -197,8 +198,8 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
                                 const object_data Payload *payload [[payload]],
                                 constant float4x4 *proj_view[[buffer(0)]],
                                 constant float4x4 *light_proj_view[[buffer(1)]],
-                                constant uint *indices[[buffer(2)]],
-                                uint thread_index [[thread_index_in_threadgroup]])
+                                constant u32 *indices[[buffer(2)]],
+                                u32 thread_index [[thread_index_in_threadgroup]])
 {
     // these if statements are needed, as we are firing more threads than the grass vertex count.
     if (thread_index < grass_vertex_count)

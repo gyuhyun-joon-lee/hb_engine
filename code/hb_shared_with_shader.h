@@ -28,11 +28,11 @@ struct GrassObjectFunctionInput
 {
 #if INSIDE_METAL_SHADER
     packed_float2 one_thread_worth_dim; // In world unit
-    uint mesh_threadgroup_count_x; // object thread count
-    uint mesh_threadgroup_count_y; // 
+    uint32_t mesh_threadgroup_count_x; // object thread count
+    uint32_t mesh_threadgroup_count_y; // 
 #elif INSIDE_VULKAN_SHADER
 #else
-    alignas(8) v2 one_thread_worth_dim;
+    alignas(4) v2 one_thread_worth_dim;
     alignas(4) u32 mesh_threadgroup_count_x;
     alignas(4) u32 mesh_threadgroup_count_y;
 #endif

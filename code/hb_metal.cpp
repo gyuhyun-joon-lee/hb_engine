@@ -17,6 +17,13 @@ metal_does_support_gpu_family(id<MTLDevice> device, MTLGPUFamily gpu_family)
     return result;
 }
 
+internal MTLSize
+metal_make_mtl_size(v3u value)
+{
+    MTLSize result = MTLSizeMake(value.x, value.y, value.z);
+    return result;
+}
+
 // NOTE(gh) orthogonal projection matrix for (-1, -1, 0) to (1, 1, 1) NDC like Metal
 inline m4x4
 orthogonal_projection(f32 n, f32 f, f32 width, f32 width_over_height)
@@ -499,8 +506,9 @@ metal_dispatch_threads(id<MTLComputeCommandEncoder> encoder, v3u threads_per_gri
         lane size.
     */
 
-    [encoder dispatchThreads : MTLSizeMake(threads_per_grid.x, threads_per_grid.y, threads_per_grid.z)
-                            threadsPerThreadgroup : MTLSizeMake(threads_per_group.x, threads_per_group.y, threads_per_group.z)];
+    [encoder dispatchThreads : 
+        metal_make_mtl_size(threads_per_grid)
+        threadsPerThreadgroup : metal_make_mtl_size(threads_per_group)];
 }
 
 internal void
@@ -590,7 +598,8 @@ metal_set_mesh_buffer(id<MTLRenderCommandEncoder> encoder, id<MTLBuffer> buffer,
 internal void
 metal_set_mesh_bytes(id<MTLRenderCommandEncoder> encoder, void *data, u64 size, u64 index)
 {
-    [encoder setMeshBytes: data 
+    [encoder setMeshBytes: 
+                    data 
                     length: size 
                     atIndex: index]; 
 }
@@ -598,9 +607,10 @@ metal_set_mesh_bytes(id<MTLRenderCommandEncoder> encoder, void *data, u64 size, 
 internal void
 metal_draw_mesh_thread_groups(id<MTLRenderCommandEncoder> encoder, v3u object_threadgroups_per_grid, v3u thread_per_object_threadgroup, v3u thread_per_mesh_threadgroup)
 {
-    [encoder drawMeshThreadgroups : MTLSizeMake(object_threadgroups_per_grid.x, object_threadgroups_per_grid.y, object_threadgroups_per_grid.z)
-            threadsPerObjectThreadgroup : MTLSizeMake(thread_per_object_threadgroup.x, thread_per_object_threadgroup.y, thread_per_object_threadgroup.z) 
-            threadsPerMeshThreadgroup : MTLSizeMake(thread_per_mesh_threadgroup.x, thread_per_mesh_threadgroup.y, thread_per_mesh_threadgroup.z)];
+    [encoder drawMeshThreadgroups : 
+            metal_make_mtl_size(object_threadgroups_per_grid)
+            threadsPerObjectThreadgroup : metal_make_mtl_size(thread_per_object_threadgroup)
+            threadsPerMeshThreadgroup : metal_make_mtl_size(thread_per_mesh_threadgroup)];
 }
 
 

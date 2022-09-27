@@ -118,7 +118,6 @@ add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
     return result;
 }
 
-// NOTE(gh) floor is non_movable entity with infinite mass
 internal Entity *
 add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 color)
 {
@@ -159,6 +158,8 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
 
             result->vertices[populated_vertex_count].p = V3(px, py, pz);
             result->vertices[populated_vertex_count].normal = V3(0, 0, 0);
+
+            assert(result->vertices[populated_vertex_count].p.z <= 0.0f);
 
             populated_vertex_count++;
         }

@@ -7,6 +7,19 @@ using namespace metal;
 #define INSIDE_METAL_SHADER 1
 #include "../hb_shared_with_shader.h"
 
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef int32_t b32;
+
+typedef uint8_t u8; 
+typedef uint16_t u16; 
+typedef uint32_t u32;
+typedef uint64_t u64;
+
+typedef float f32;
+
 constant float pi_32 = 3.1415926535897932384626433832795;
 
 

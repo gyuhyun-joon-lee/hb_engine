@@ -610,6 +610,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
         metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
+        metal_set_cull_mode(render_encoder, MTLCullModeNone); 
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
         GrassObjectFunctionInput grass_object_input = {};
@@ -625,6 +626,9 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
         metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
         // TODO(gh) This is also just makeshift numbers
+        v3u object_threadgroup_count = V3u(1, 1, 1);
+        v3u object_thread_per_threadgroup_count = V3u(8, 8, 1);
+        v3u mesh_thread_per_threadgroup_count = V3u(1, 1, 1);
         metal_draw_mesh_thread_groups(render_encoder, V3u(1, 1, 1), V3u(8, 8, 1), V3u(39, 1, 1));
 #endif
 
