@@ -74,28 +74,28 @@ get_random_numbers(device float* result,
 
 struct Payload
 {
-    // TODO(gh) I would guess that one object thread produces one payload,
-    // but if not, this needs to be an array with size of mesh thread group count
     float3 center;
 };
-
 
 [[object]]
 void grass_object_function(object_data Payload *payloadOutput [[payload]],
                           const device GrassObjectFunctionInput *object_function_input[[buffer (0)]],
                           uint thread_index [[thread_index_in_threadgroup]], // thread index in object threadgroup 
-                          uint2 thread_position [[thread_position_in_grid]], 
+                          uint2 thread_position [[thread_position_in_threadgroup]], 
                           mesh_grid_properties mgp)
 {
-    float center_x = object_function_input->one_thread_worth_dim.x * (thread_position.x + 0.5f);
-    float center_y = object_function_input->one_thread_worth_dim.y * (thread_position.y + 0.5f);
+    float center_x = object_function_input->one_thread_worth_dim.x * (float)thread_position.x;
+    float center_y = object_function_input->one_thread_worth_dim.y * (float)thread_position.y;
 
     // TODO(gh) also feed z value
     payloadOutput[thread_index].center = float3(center_x, center_y, 0.0f);
 
-    // TODO(gh) How does GPU know when it should fire up the mesh grid? 
-    // Does it do it when all threads in object threadgroup finishes?
-    mgp.set_threadgroups_per_grid(uint3(object_function_input->mesh_threadgroup_count_x, object_function_input->mesh_threadgroup_count_y, 1));
+    if(thread_index == 0)
+    {
+        // TODO(gh) How does GPU know when it should fire up the mesh grid? 
+        // Does it do it when all threads in object threadgroup finishes?
+        mgp.set_threadgroups_per_grid(uint3(object_function_input->mesh_threadgroup_count_x, object_function_input->mesh_threadgroup_count_y, 1));
+    }
 }
 
 // NOTE(gh) simplifed form of (1-t)*{(1-t)*p0+t*p1} + t*{(1-t)*p1+t*p2}
@@ -117,8 +117,8 @@ quadratic_bezier_first_derivative(float3 p0, float3 p1, float3 p2, float t)
 }
 
 GBufferVertexOutput
-calculate_grass_vertex(const object_data Payload *payload, // L-data 
-                        u32 thread_index, 
+calculate_grass_vertex(float3 center, 
+                        uint thread_index, 
                         constant float4x4 *proj_view,
                         constant float4x4 *light_proj_view)
 {
@@ -130,9 +130,9 @@ calculate_grass_vertex(const object_data Payload *payload, // L-data
     float bend = 0.5f;
     float wiggliness = 2.1f;
     float3 color = float3(0.2f, 0.8f, 0.2f);
-    u32 grass_divide_count = 7;
+    uint grass_divide_count = 7;
 
-    float3 p0 = payload->center;
+    float3 p0 = center;
 
     float3 p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, height);  
     float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade
@@ -144,7 +144,7 @@ calculate_grass_vertex(const object_data Payload *payload, // L-data
     float3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
 
     float t = (float)(thread_index / 2) / grass_divide_count;
-    u32 hash = 1123;
+    uint hash = 1123;
     float hash_value = hash*pi_32;
     // TODO(gh) how do we get time since engine startup?
     float time = 0.0f;
@@ -175,16 +175,17 @@ calculate_grass_vertex(const object_data Payload *payload, // L-data
 }
 
 // TODO(gh) Can we change this dynamically? I would suspect no...
-constant u32 grass_vertex_count = 15;
-constant u32 grass_triangle_count = 13;
-constant u32 grass_index_count = 39;
+constant uint grass_vertex_count = 15;
+constant uint grass_triangle_count = 13;
+constant uint grass_index_count = 39;
 
-struct StubPrimitive
+// NOTE(gh) not being used, but mesh shader requires us to provide a struct for per-primitive data
+struct StubPerPrimitiveData
 {
 };
 
 using SingleGrassTriangleMesh = metal::mesh<GBufferVertexOutput, // per vertex 
-                                            StubPrimitive, // per primitive
+                                            StubPerPrimitiveData, // per primitive
                                             grass_vertex_count, // max vertex count 
                                             grass_triangle_count, // max primitive count
                                             metal::topology::triangle>;
@@ -198,13 +199,16 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
                                 const object_data Payload *payload [[payload]],
                                 constant float4x4 *proj_view[[buffer(0)]],
                                 constant float4x4 *light_proj_view[[buffer(1)]],
-                                constant u32 *indices[[buffer(2)]],
-                                u32 thread_index [[thread_index_in_threadgroup]])
+                                constant uint *indices[[buffer(2)]],
+                                uint thread_index [[thread_index_in_threadgroup]],
+                                uint2 threadgroup_position [[threadgroup_position_in_grid]],
+                                uint2 threadgroup_count_per_grid [[threadgroups_per_grid]])
 {
     // these if statements are needed, as we are firing more threads than the grass vertex count.
     if (thread_index < grass_vertex_count)
     {
-        output_mesh.set_vertex(thread_index, calculate_grass_vertex(payload, thread_index, proj_view, light_proj_view));
+        float3 center = payload[threadgroup_position.y * threadgroup_count_per_grid.x + threadgroup_position.x].center;
+        output_mesh.set_vertex(thread_index, calculate_grass_vertex(center, thread_index, proj_view, light_proj_view));
     }
     if (thread_index < grass_index_count)
     {

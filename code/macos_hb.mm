@@ -628,8 +628,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         // TODO(gh) This is also just makeshift numbers
         v3u object_threadgroup_count = V3u(1, 1, 1);
         v3u object_thread_per_threadgroup_count = V3u(8, 8, 1);
-        v3u mesh_thread_per_threadgroup_count = V3u(1, 1, 1);
-        metal_draw_mesh_thread_groups(render_encoder, V3u(1, 1, 1), V3u(8, 8, 1), V3u(39, 1, 1));
+        v3u mesh_thread_per_threadgroup_count = V3u(39, 1, 1);
+        metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_count, object_thread_per_threadgroup_count, mesh_thread_per_threadgroup_count);
 #endif
 
 
