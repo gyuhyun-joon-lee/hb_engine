@@ -579,6 +579,30 @@ metal_set_object_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u
                     atIndex: index]; 
 }
 
+internal void
+metal_set_mesh_buffer(id<MTLRenderCommandEncoder> encoder, id<MTLBuffer> buffer, u64 offset, u64 index)
+{
+    [encoder setMeshBuffer : buffer 
+                offset : offset 
+                atIndex : index];
+}
+
+internal void
+metal_set_mesh_bytes(id<MTLRenderCommandEncoder> encoder, void *data, u64 size, u64 index)
+{
+    [encoder setMeshBytes: data 
+                    length: size 
+                    atIndex: index]; 
+}
+
+internal void
+metal_draw_mesh_thread_groups(id<MTLRenderCommandEncoder> encoder, v3u object_threadgroups_per_grid, v3u thread_per_object_threadgroup, v3u thread_per_mesh_threadgroup)
+{
+    [encoder drawMeshThreadgroups : MTLSizeMake(object_threadgroups_per_grid.x, object_threadgroups_per_grid.y, object_threadgroups_per_grid.z)
+            threadsPerObjectThreadgroup : MTLSizeMake(thread_per_object_threadgroup.x, thread_per_object_threadgroup.y, thread_per_object_threadgroup.z) 
+            threadsPerMeshThreadgroup : MTLSizeMake(thread_per_mesh_threadgroup.x, thread_per_mesh_threadgroup.y, thread_per_mesh_threadgroup.z)];
+}
+
 
 
 

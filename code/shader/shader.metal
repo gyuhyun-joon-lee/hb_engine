@@ -79,13 +79,6 @@ struct Payload
     float3 center;
 };
 
-// TODO(gh) I'm so bad at naming things...
-struct GrassObjectFunctionInput
-{
-    packed_float2 one_thread_worth_dim; // In world unit
-    uint thread_count_x;
-    uint thread_count_y;
-};
 
 [[object]]
 void grass_object_function(object_data Payload *payloadOutput [[payload]],
@@ -102,9 +95,8 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
 
     // TODO(gh) How does GPU know when it should fire up the mesh grid? 
     // Does it do it when all threads in object threadgroup finishes?
-    mgp.set_threadgroups_per_grid(uint3(object_function_input->thread_count_x, object_function_input->thread_count_y, 0));
+    mgp.set_threadgroups_per_grid(uint3(object_function_input->mesh_threadgroup_count_x, object_function_input->mesh_threadgroup_count_y, 0));
 }
-
 
 // NOTE(gh) simplifed form of (1-t)*{(1-t)*p0+t*p1} + t*{(1-t)*p1+t*p2}
 float3
@@ -181,6 +173,7 @@ calculate_grass_vertex(const object_data Payload *payload,
     return result;
 }
 
+// TODO(gh) Can we change this dynamically? I would suspect no...
 constant uint grass_vertex_count = 15;
 constant uint grass_triangle_count = 13;
 constant uint grass_index_count = 39;

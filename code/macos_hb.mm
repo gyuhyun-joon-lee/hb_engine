@@ -412,6 +412,29 @@ thread_proc(void *data)
     return 0;
 }
 
+u32 grass_blade_indices[] = 
+{
+    0, 3, 1,
+    0, 2, 3,
+
+    2, 5, 3,
+    2, 4, 5,
+
+    4, 7, 5,
+    4, 6, 7,
+
+    6, 9 ,7,
+    6, 8, 9,
+
+    8, 11, 9,
+    8, 10, 11,
+
+    10, 13, 11,
+    10, 12, 13,
+
+    12, 14, 13,
+};
+
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
 // and put them inside the render mesh so that the graphics API can render them.
 internal void
@@ -579,14 +602,30 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         m4x4 proj = perspective_projection(render_push_buffer->camera_fov, render_push_buffer->camera_near, render_push_buffer->camera_far,
                                            render_push_buffer->width_over_height);
         per_frame_data.proj_view = transpose(proj * render_push_buffer->view);
-#if 0
 
+#if 1
         // NOTE(gh) first, render all the grasses with mesh render pipeline
+        metal_set_render_pipeline(render_encoder, render_context->grass_mesh_render_pipeline);
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
         metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
+
+        GrassObjectFunctionInput grass_object_input = {};
+        // TODO(gh) These are also just makeshift numbers
+        grass_object_input.one_thread_worth_dim = V2(1.0f, 1.0f);
+        grass_object_input.mesh_threadgroup_count_x = 8;
+        grass_object_input.mesh_threadgroup_count_y = 8;
+        metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
+        metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
+        metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
+        metal_set_mesh_bytes(render_encoder, grass_blade_indices, array_size(grass_blade_indices), 2);
+
+        metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
+        metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+        // TODO(gh) This is also just makeshift numbers
+        metal_draw_mesh_thread_groups(render_encoder, V3u(1, 1, 1), V3u(8, 8, 1), V3u(39, 1, 1));
 #endif
 
 
@@ -646,7 +685,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
 
                     metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
-
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
 
                     metal_draw_indexed(render_encoder, MTLPrimitiveTypeTriangle, 
