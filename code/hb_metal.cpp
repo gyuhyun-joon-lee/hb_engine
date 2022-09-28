@@ -530,9 +530,9 @@ metal_make_mesh_render_pipeline(id<MTLDevice> device,
                     MTLPixelFormat *pixel_formats, u32 pixel_format_count, 
                     MTLColorWriteMask *masks, u32 mask_count,
                     MTLPixelFormat depth_pixel_format, 
-                    u32 max_thread_count_per_object_threadgroup,
-                    u32 max_threadgroup_count_per_mesh_grid,
-                    u32 max_thread_count_per_mesh_threadgroup)
+                    u32 max_object_thread_count_per_object_threadgroup,
+                    u32 max_mesh_threadgroup_count_per_mesh_grid,
+                    u32 max_mesh_thread_count_per_mesh_threadgroup)
 {
     MTLMeshRenderPipelineDescriptor *descriptor = [MTLMeshRenderPipelineDescriptor new];
 
@@ -545,9 +545,9 @@ metal_make_mesh_render_pipeline(id<MTLDevice> device,
     // descriptor.payloadMemoryLength = ;
     // descriptor.meshThreadgroupSizeIsMultipleOfThreadExecutionWidth = ;
 
-    descriptor.maxTotalThreadsPerObjectThreadgroup = max_thread_count_per_object_threadgroup;
-    descriptor.maxTotalThreadgroupsPerMeshGrid = max_threadgroup_count_per_mesh_grid;
-    descriptor.maxTotalThreadsPerMeshThreadgroup = max_thread_count_per_mesh_threadgroup;
+    descriptor.maxTotalThreadsPerObjectThreadgroup = max_object_thread_count_per_object_threadgroup;
+    descriptor.maxTotalThreadgroupsPerMeshGrid = max_mesh_threadgroup_count_per_mesh_grid;
+    descriptor.maxTotalThreadsPerMeshThreadgroup = max_mesh_thread_count_per_mesh_threadgroup;
    
     for(u32 color_attachment_index = 0;
             color_attachment_index < pixel_format_count;

@@ -613,11 +613,24 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_cull_mode(render_encoder, MTLCullModeNone); 
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
+        // TODO(gh) This was part of game code, and I want to make it stay that way. 
+        // Is there any way to do so?
+
+        assert(grass_per_grid_count_x % object_thread_per_threadgroup_count_x == 0);
+        assert(grass_per_grid_count_y % object_thread_per_threadgroup_count_y == 0);
+
+        v3 floor_center = V3(0, 0, 0);
+        v3 floor_dim = V3(200, 200, 0);
+        v3 floor_left_bottom_p = floor_center - 0.5f * floor_dim;
+        v2 one_object_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
+                                            floor_dim.y / (f32)grass_per_grid_count_y);
+
         GrassObjectFunctionInput grass_object_input = {};
         // TODO(gh) These are also just makeshift numbers
-        grass_object_input.one_thread_worth_dim = V2(1.0f, 1.0f);
-        grass_object_input.mesh_threadgroup_count_x = 8;
-        grass_object_input.mesh_threadgroup_count_y = 8;
+        grass_object_input.floor_left_bottom_p = floor_left_bottom_p.xy;
+        grass_object_input.one_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
+                                                    floor_dim.y / (f32)grass_per_grid_count_y);
+
         metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
         metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
         metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
@@ -625,11 +638,16 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
         metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-        // TODO(gh) This is also just makeshift numbers
-        v3u object_threadgroup_count = V3u(1, 1, 1);
-        v3u object_thread_per_threadgroup_count = V3u(8, 8, 1);
+        v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
+                                                    object_threadgroup_per_grid_count_y, 
+                                                    1);
+        v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
+                                                      object_thread_per_threadgroup_count_y, 
+                                                      1);
         v3u mesh_thread_per_threadgroup_count = V3u(39, 1, 1); // same as index count for the grass blade
-        metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_count, object_thread_per_threadgroup_count, mesh_thread_per_threadgroup_count);
+        metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
+                                      object_thread_per_threadgroup_count, 
+                                      mesh_thread_per_threadgroup_count);
 #endif
 
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
@@ -1129,9 +1147,11 @@ int main(void)
     assert(metal_render_context.add_compute_pipeline.threadExecutionWidth == 32);
 
     // TODO(gh) These are just temporary numbers, there should be more robust way to get these information
-    u32 max_thread_count_per_object_threadgroup = 8*8; // Each object thread is one grass blade
-    u32 max_threadgroup_count_per_mesh_grid = 8*8; // Each mesh thread group is one grass blade
-    u32 max_thread_count_per_mesh_threadgroup = 39; // mesh thread count == one grass blade index count(39 for now)
+    u32 max_object_thread_count_per_object_threadgroup = 
+        object_thread_per_threadgroup_count_x*object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
+    u32 max_mesh_threadgroup_count_per_mesh_grid = 
+        mesh_threadgroup_count_x*mesh_threadgroup_count_y; // Each mesh thread group is one grass blade
+    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_index_count; 
     metal_render_context.grass_mesh_render_pipeline = 
         metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
                                         "grass_object_function", 
@@ -1142,9 +1162,9 @@ int main(void)
                                         cube_pipeline_color_attachment_pixel_formats, array_count(cube_pipeline_color_attachment_pixel_formats),
                                         cube_pipeline_color_attachment_write_masks, array_count(cube_pipeline_color_attachment_write_masks),
                                         view.depthStencilPixelFormat,
-                                        max_thread_count_per_object_threadgroup,
-                                        max_threadgroup_count_per_mesh_grid,
-                                        max_thread_count_per_mesh_threadgroup); 
+                                        max_object_thread_count_per_object_threadgroup,
+                                        max_mesh_threadgroup_count_per_mesh_grid,
+                                        max_mesh_thread_count_per_mesh_threadgroup); 
 
     // Effectively a 2D grid, but generates v3 floats per thread
     u32 float_x_count = 64;

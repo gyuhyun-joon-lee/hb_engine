@@ -24,19 +24,44 @@ struct PerObjectData
 #endif
 };
 
+// TODO(gh) any way to handle these better?
+/*
+   NOTE(gh) Math here is :
+   each floor is 10m by 10m wide, we want to plant the grass per 0.02m(2cm) 
+   10m / 0.02m = 500, round it up to 512
+   512 * 512 = 262144 grasses
+
+   As we cannot make the payload that huge, we will divide the grid into multiple object threadgroups,
+   so that each object threadgroup is responsible for 32x16 grasses(thread count per threadgroup should be the same).
+
+   When it comes down to mesh threadgroup, each object threadgroup will fire up 
+   object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y amount of mesh threadgroups, 
+   so each mesh threadgroup can handle one grass blade. As we have triangle_count_for_one_grass_blade * 3 amount of indices
+   per grass, each mesh threadgroup should have that amount of threads.
+*/
+#define grass_per_grid_count_x 512
+#define grass_per_grid_count_y 512
+#define grass_vertex_count 15
+#define grass_triangle_count 13
+#define grass_index_count (grass_triangle_count*3)
+
+#define object_thread_per_threadgroup_count_x 32
+#define object_thread_per_threadgroup_count_y 16
+#define object_threadgroup_per_grid_count_x (grass_per_grid_count_x / object_thread_per_threadgroup_count_x)
+#define object_threadgroup_per_grid_count_y (grass_per_grid_count_y / object_thread_per_threadgroup_count_y)
+
+#define mesh_threadgroup_count_x object_thread_per_threadgroup_count_x
+#define mesh_threadgroup_count_y object_thread_per_threadgroup_count_y
+
 struct GrassObjectFunctionInput
 {
 #if INSIDE_METAL_SHADER
-    // packed_float2 v2 grid_dim; // in world unit
+    packed_float2 floor_left_bottom_p; // in world unit
     packed_float2 one_thread_worth_dim; // In world unit
-    uint32_t mesh_threadgroup_count_x; // object thread count
-    uint32_t mesh_threadgroup_count_y; // 
 #elif INSIDE_VULKAN_SHADER
 #else
-    // alignas(4) v2 grid_dim; // in world unit
-    alignas(4) v2 one_thread_worth_dim; // in world unit
-    alignas(4) u32 mesh_threadgroup_count_x;
-    alignas(4) u32 mesh_threadgroup_count_y;
+    alignas(8) v2 floor_left_bottom_p; // in world unit
+    alignas(8) v2 one_thread_worth_dim; // in world unit
 #endif
 };
 

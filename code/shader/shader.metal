@@ -74,7 +74,9 @@ get_random_numbers(device float* result,
 
 struct Payload
 {
-    float3 center[64];
+    // TODO(gh) This works, but only if we make the x and y values as constant 
+    // and define them somewhere, which is unfortunate.
+    float3 center[object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y];
 
     // TODO(gh) I would assume that I can also add per instance data here?
 #if 0
@@ -93,20 +95,21 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
                           const device GrassObjectFunctionInput *object_function_input[[buffer (0)]],
                           uint thread_index [[thread_index_in_threadgroup]], // thread index in object threadgroup 
                           uint2 thread_count_per_threadgroup [[threads_per_threadgroup]],
-                          uint2 thread_position [[thread_position_in_threadgroup]], 
+                          uint2 thread_position_in_grid [[thread_position_in_grid]], 
                           mesh_grid_properties mgp)
 {
-    float center_x = object_function_input->one_thread_worth_dim.x * (float)thread_position.x;
-    float center_y = object_function_input->one_thread_worth_dim.y * (float)thread_position.y;
+    // TODO(gh) Calculate this correctly, also minding the 0.5f offset per square
+    float center_x = object_function_input->floor_left_bottom_p.x + object_function_input->one_thread_worth_dim.x * (float)thread_position_in_grid.x;
+    float center_y = object_function_input->floor_left_bottom_p.y + object_function_input->one_thread_worth_dim.y * (float)thread_position_in_grid.y;
 
     // TODO(gh) also feed z value
-    payloadOutput->center[thread_position.y * thread_count_per_threadgroup.x + thread_position.x] = float3(center_x, center_y, 0.0f);
+    payloadOutput->center[thread_index] = float3(center_x, center_y, 0.0f);
 
     if(thread_index == 0)
     {
         // TODO(gh) How does GPU know when it should fire up the mesh grid? 
         // Does it do it when all threads in object threadgroup finishes?
-        mgp.set_threadgroups_per_grid(uint3(object_function_input->mesh_threadgroup_count_x, object_function_input->mesh_threadgroup_count_y, 1));
+        mgp.set_threadgroups_per_grid(uint3(mesh_threadgroup_count_x, mesh_threadgroup_count_y, 1));
     }
 }
 
@@ -185,11 +188,6 @@ calculate_grass_vertex(float3 center,
 
     return result;
 }
-
-// TODO(gh) Can we change this dynamically? I would suspect no...
-constant uint grass_vertex_count = 15;
-constant uint grass_triangle_count = 13;
-constant uint grass_index_count = 39;
 
 // NOTE(gh) not being used, but mesh shader requires us to provide a struct for per-primitive data
 struct StubPerPrimitiveData

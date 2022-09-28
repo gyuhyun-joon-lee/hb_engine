@@ -8,6 +8,7 @@ using namespace metal;
 #include "../hb_shared_with_shader.h"
 
 constant float pi_32 = 3.1415926535897932384626433832795;
+constant float tau_32 = 6.283185307179586476925286766559005768394338798750211641949889f;
 
 // Populating g buffer
 struct GBufferVertexOutput
