@@ -10,7 +10,7 @@ using namespace metal;
 constant float pi_32 = 3.1415926535897932384626433832795;
 constant float tau_32 = 6.283185307179586476925286766559005768394338798750211641949889f;
 
-// Populating g buffer
+// Vertex shader for populating g buffer
 struct GBufferVertexOutput
 {
     float4 clip_p [[position]];

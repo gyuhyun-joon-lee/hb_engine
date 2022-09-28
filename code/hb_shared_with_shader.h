@@ -39,14 +39,18 @@ struct PerObjectData
    so each mesh threadgroup can handle one grass blade. As we have triangle_count_for_one_grass_blade * 3 amount of indices
    per grass, each mesh threadgroup should have that amount of threads.
 */
+
 #define grass_per_grid_count_x 512
 #define grass_per_grid_count_y 512
 #define grass_vertex_count 15
 #define grass_triangle_count 13
 #define grass_index_count (grass_triangle_count*3)
+#define grass_divide_count 7
 
+// NOTE(gh) The way we setup how many threads there should be in one object threadgroup
+// is based on the payload size limit(16kb) and the simd group width(32)
 #define object_thread_per_threadgroup_count_x 32
-#define object_thread_per_threadgroup_count_y 16
+#define object_thread_per_threadgroup_count_y 8
 #define object_threadgroup_per_grid_count_x (grass_per_grid_count_x / object_thread_per_threadgroup_count_x)
 #define object_threadgroup_per_grid_count_y (grass_per_grid_count_y / object_thread_per_threadgroup_count_y)
 

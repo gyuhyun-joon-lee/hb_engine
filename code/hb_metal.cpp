@@ -139,12 +139,38 @@ metal_make_managed_buffer(id<MTLDevice> device, u64 size)
     return result;
 }
 
+
 internal void
 metal_flush_managed_buffer(MetalManagedBuffer *buffer, u64 size_to_flush)
 {
     assert(size_to_flush <= buffer->size);
     NSRange range = NSMakeRange(0, size_to_flush);
     [buffer->buffer didModifyRange:range];
+}
+
+internal MetalManagedBuffer
+metal_make_managed_buffer(id<MTLDevice> device, void *source, u64 size)
+{
+    MetalManagedBuffer result = metal_make_managed_buffer(device, size);
+    memcpy(result.memory, source, size);
+    metal_flush_managed_buffer(&result, size);
+
+    return result;
+}
+
+// NOTE(gh) no bound checking here
+internal MetalPrivateBuffer
+metal_make_private_buffer(id<MTLDevice> device, void *source, u64 size)
+{
+    MetalPrivateBuffer result = {};
+
+    result.buffer = [device newBufferWithBytes:
+                            source
+                            length : size 
+                            options : MTLResourceStorageModePrivate];
+    result.size = size;
+
+    return result;
 }
 
 // NOTE(joon) wrapping functions

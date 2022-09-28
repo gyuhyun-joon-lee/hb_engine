@@ -44,17 +44,19 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                                     game_state->mass_agg_arena.total_size,
                                                     megabytes(128));
 
-        // TODO(gh) get rid of rand()
+        // TODO(gh) get rid of rand(), or get the time and rand information from platform layer?
         srand(time(0));
         game_state->random_series = start_random_series(rand());
 
         game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
-        game_state->circle_camera = init_circle_camera(V3(0, 0, 40), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
-        // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
+        // Close camera
+        game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 135, 0.01f, 10000.0f);
+        // Far away camera
+        //  game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
         add_cube_entity(game_state, V3(0, 0, 15), V3(7, 7, 7), V3(1, 1, 1));
 
-        v3 floor_dim = V3(200, 200, 0); // Floor is just flat
+        v3 floor_dim = V3(200, 200, 0); // Floor is only consisted of the flat triangles
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), 
                          floor_dim, V3(1, 1, 1));
 

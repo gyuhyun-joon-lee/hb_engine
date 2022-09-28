@@ -71,30 +71,40 @@ get_random_numbers(device float* result,
     result[start + 2] =  1; // will be populated by the CPU
 }
 
-
-struct Payload
+// 16 floats = 64 bytes
+struct PerGrassData
 {
     // TODO(gh) This works, but only if we make the x and y values as constant 
     // and define them somewhere, which is unfortunate.
-    float3 center[object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y];
+    packed_float3 center;
 
-    // TODO(gh) I would assume that I can also add per instance data here?
-#if 0
-    float blade_width = 0.2f;
-    float stride = 2.0f;
-    float height = 1.8f;
-    float2 facing_direction = float2(1, 0);
-    float bend = 0.5f;
-    float wiggliness = 2.1f;
-    float3 color = float3(0.2f, 0.8f, 0.2f);
-#endif
+    // TODO(gh) I would assume that I can also add per instance data here,
+    // but there might be a more efficient way to do this.
+    uint hash;
+    float blade_width;
+    float stride;
+    float height;
+    packed_float2 facing_direction;
+    float bend;
+    float wiggliness;
+    packed_float3 color;
+    float time_elasped_from_start; // TODO(gh) Do we even need to pass this?
+    float pad; // TODO(gh) Replace this with the 'clumping' values
+};
+
+struct Payload
+{
+    PerGrassData per_grass_data[object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y];
 };
 
 [[object]]
 void grass_object_function(object_data Payload *payloadOutput [[payload]],
                           const device GrassObjectFunctionInput *object_function_input[[buffer (0)]],
+                          const device uint *hashes[[buffer (1)]],
+                          const device float *time_elasped_from_start[[buffer (2)]],
                           uint thread_index [[thread_index_in_threadgroup]], // thread index in object threadgroup 
                           uint2 thread_count_per_threadgroup [[threads_per_threadgroup]],
+                          uint2 thread_count_per_grid [[threads_per_grid]],
                           uint2 thread_position_in_grid [[thread_position_in_grid]], 
                           mesh_grid_properties mgp)
 {
@@ -102,8 +112,19 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
     float center_x = object_function_input->floor_left_bottom_p.x + object_function_input->one_thread_worth_dim.x * (float)thread_position_in_grid.x;
     float center_y = object_function_input->floor_left_bottom_p.y + object_function_input->one_thread_worth_dim.y * (float)thread_position_in_grid.y;
 
+    uint hash = hashes[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
     // TODO(gh) also feed z value
-    payloadOutput->center[thread_index] = float3(center_x, center_y, 0.0f);
+    payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, 0.0f);
+    payloadOutput->per_grass_data[thread_index].blade_width = 0.2f;
+    payloadOutput->per_grass_data[thread_index].stride = 2.0f;
+    payloadOutput->per_grass_data[thread_index].height = 1.8f;
+    payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
+    payloadOutput->per_grass_data[thread_index].bend = 0.5f;
+    payloadOutput->per_grass_data[thread_index].wiggliness = 2.1f;
+    payloadOutput->per_grass_data[thread_index].time_elasped_from_start = *time_elasped_from_start;
+    payloadOutput->per_grass_data[thread_index].color = packed_float3(1.0f, 0.8f, 0.2f);
+    // Hashes got all the values for the grid
+    payloadOutput->per_grass_data[thread_index].hash = hash;
 
     if(thread_index == 0)
     {
@@ -132,20 +153,21 @@ quadratic_bezier_first_derivative(float3 p0, float3 p1, float3 p2, float t)
 }
 
 GBufferVertexOutput
-calculate_grass_vertex(float3 center, 
+calculate_grass_vertex(const object_data PerGrassData *per_grass_data, 
                         uint thread_index, 
                         constant float4x4 *proj_view,
                         constant float4x4 *light_proj_view)
 {
-    // TODO(gh) make grass parameters configurable
-    float blade_width = 0.2f;
-    float stride = 2.0f;
-    float height = 1.8f;
-    float2 facing_direction = float2(1, 0);
-    float bend = 0.5f;
-    float wiggliness = 2.1f;
-    float3 color = float3(0.2f, 0.8f, 0.2f);
-    uint grass_divide_count = 7;
+    packed_float3 center = per_grass_data->center;
+    float blade_width = per_grass_data->blade_width;
+    float stride = per_grass_data->stride;
+    float height = per_grass_data->height;
+    packed_float2 facing_direction = normalize(per_grass_data->facing_direction);
+    float bend = per_grass_data->bend;
+    float wiggliness = per_grass_data->wiggliness;
+    packed_float3 color = per_grass_data->color;
+    uint hash = per_grass_data->hash;
+    float time_elasped_from_start = per_grass_data->time_elasped_from_start;
 
     float3 p0 = center;
 
@@ -159,13 +181,11 @@ calculate_grass_vertex(float3 center,
     float3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
 
     float t = (float)(thread_index / 2) / (float)grass_divide_count;
-    uint hash = 1123;
     float hash_value = hash*pi_32;
     // TODO(gh) how do we get time since engine startup?
-    float time = 0.0f;
     // float exponent = 4.0f*(t-1.0f);
-    // float wind_factor = 0.5f*power(euler_contant, exponent) * t * wiggliness + hash*tau_32 + time;
-    float wind_factor = t * wiggliness + hash_value + time;
+    // float wind_factor = 0.5f*power(euler_contant, exponent) * t * wiggliness + hash*tau_32 + time_elasped_from_start;
+    float wind_factor = t * wiggliness + hash_value + time_elasped_from_start;
 
     float3 modified_p1 = p1 + float3(0, 0, 0.1f * sin(wind_factor));
     float3 modified_p2 = p2 + float3(0, 0, 0.15f * sin(wind_factor));
@@ -207,9 +227,9 @@ using SingleGrassTriangleMesh = metal::mesh<GBufferVertexOutput, // per vertex
 [[mesh]] 
 void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
                                 const object_data Payload *payload [[payload]],
-                                constant float4x4 *proj_view[[buffer(0)]],
-                                constant float4x4 *light_proj_view[[buffer(1)]],
-                                constant uint *indices[[buffer(2)]],
+                                constant float4x4 *proj_view [[buffer(0)]],
+                                constant float4x4 *light_proj_view [[buffer(1)]],
+                                constant uint *indices [[buffer(2)]],
                                 uint thread_index [[thread_index_in_threadgroup]],
                                 uint2 threadgroup_position [[threadgroup_position_in_grid]],
                                 uint2 threadgroup_count_per_grid [[threadgroups_per_grid]])
@@ -217,8 +237,8 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     // these if statements are needed, as we are firing more threads than the grass vertex count.
     if (thread_index < grass_vertex_count)
     {
-        float3 center = payload->center[threadgroup_position.y * threadgroup_count_per_grid.x + threadgroup_position.x];
-        output_mesh.set_vertex(thread_index, calculate_grass_vertex(center, thread_index, proj_view, light_proj_view));
+        const object_data PerGrassData *per_grass_data = &(payload->per_grass_data[threadgroup_position.y * threadgroup_count_per_grid.x + threadgroup_position.x]);
+        output_mesh.set_vertex(thread_index, calculate_grass_vertex(per_grass_data, thread_index, proj_view, light_proj_view));
     }
     if (thread_index < grass_index_count)
     {

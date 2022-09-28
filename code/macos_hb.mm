@@ -438,7 +438,7 @@ u32 grass_blade_indices[] =
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
 // and put them inside the render mesh so that the graphics API can render them.
 internal void
-metal_render_and_wait_until_completion(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 dt_per_frame)
+metal_render_and_wait_until_completion(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 time_elapsed_from_start)
 {
     // Update gpu side of combined vertex and index buffer
     // TODO(gh) Do we need to sync before we render??
@@ -520,30 +520,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                 }
             }break;
 
-            case RenderEntryType_Grass:
-            {
-                RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
-                consumed += sizeof(*entry);
-
-                if(entry->should_cast_shadow)
-                {
-#if 0
-                m4x4 model = M4x4();
-                model = transpose(model); // make the matrix column-major
-
-                metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
-                metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
-                metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
-
-                // NOTE(gh) Mitigates the moire pattern by biasing, 
-                // making the shadow map to place under the fragments that are being shaded.
-                // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
-                metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
-                                  render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
-#endif
-                }
-            }break;
-
             case RenderEntryType_Cube:
             {
                 RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
@@ -613,12 +589,11 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_cull_mode(render_encoder, MTLCullModeNone); 
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
-        // TODO(gh) This was part of game code, and I want to make it stay that way. 
-        // Is there any way to do so?
-
         assert(grass_per_grid_count_x % object_thread_per_threadgroup_count_x == 0);
         assert(grass_per_grid_count_y % object_thread_per_threadgroup_count_y == 0);
 
+        // TODO(gh) This was part of game code, and I want to make it stay that way. 
+        // Is there any way to do so?
         v3 floor_center = V3(0, 0, 0);
         v3 floor_dim = V3(200, 200, 0);
         v3 floor_left_bottom_p = floor_center - 0.5f * floor_dim;
@@ -626,12 +601,14 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                                             floor_dim.y / (f32)grass_per_grid_count_y);
 
         GrassObjectFunctionInput grass_object_input = {};
-        // TODO(gh) These are also just makeshift numbers
         grass_object_input.floor_left_bottom_p = floor_left_bottom_p.xy;
         grass_object_input.one_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
                                                     floor_dim.y / (f32)grass_per_grid_count_y);
 
         metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
+        metal_set_object_buffer(render_encoder, render_context->random_grass_hash_buffer.buffer, 0, 1);
+        metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 2);
+
         metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
         metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
         metal_set_mesh_bytes(render_encoder, grass_blade_indices, array_size(grass_blade_indices), 2);
@@ -712,36 +689,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                             render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
                 }break;
 
-                // TODO(gh) Use instancing stride to render all the grasses, use seperate pipeline for that without model matrix multiplication)
-                case RenderEntryType_Grass:
-                {
-                    RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += sizeof(*entry);
-
-                    m4x4 model = M4x4();
-                    model = transpose(model); // make the matrix column-major
-
-                    PerObjectData per_object_data = {};
-                    per_object_data.model = model;
-                    per_object_data.color = entry->color;
-
-                    metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
-
-                    metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
-                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                    metal_set_vertex_buffer(render_encoder, 
-                                            render_context->combined_vertex_buffer.buffer, 
-                                            entry->vertex_buffer_offset, 2);
-                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
-
-                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
-
-                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-
-                    metal_draw_indexed(render_encoder, MTLPrimitiveTypeTriangle, 
-                            render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
-                }break;
-
                 case RenderEntryType_Cube:
                 {
                     RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
@@ -799,6 +746,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_vertex_bytes(render_encoder, &x_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
 
+        // y axis
         metal_set_vertex_bytes(render_encoder, y_axis, sizeof(f32) * array_count(y_axis), 1);
         metal_set_vertex_bytes(render_encoder, &y_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
@@ -966,8 +914,17 @@ int main(void)
     MacOSGameCode macos_game_code = {};
     macos_load_game_code(&macos_game_code, game_code_path);
  
-    u32 random_seed = time(NULL);
-    RandomSeries series = start_random_series(random_seed); 
+    srand(time(NULL));
+    RandomSeries random_series = start_random_series(rand()); 
+    // TODO(gh) Terrible way to handle this...
+    u32 random_grass_hash_count = grass_per_grid_count_x * grass_per_grid_count_y;
+    u32 *random_grass_hashes = (u32 *)malloc(sizeof(u32) * random_grass_hash_count);
+    for(u32 i = 0;
+            i < random_grass_hash_count;
+            ++i)
+    {
+        random_grass_hashes[i] = random_between_i32(&random_series, -100000, 100000);
+    }
 
     //TODO : writefile?
     PlatformAPI platform_api = {};
@@ -1166,20 +1123,6 @@ int main(void)
                                         max_mesh_threadgroup_count_per_mesh_grid,
                                         max_mesh_thread_count_per_mesh_threadgroup); 
 
-    // Effectively a 2D grid, but generates v3 floats per thread
-    u32 float_x_count = 64;
-    u32 float_y_count = 64;
-    u32 total_float_count = 3 * float_x_count * float_y_count;
-    MetalSharedBuffer random_float_buffer = metal_make_shared_buffer(device, sizeof(f32) * total_float_count);
-
-    for(u32 i = 0;
-            i < total_float_count;
-            ++i)
-    {
-        f32 *c = (f32 *)random_float_buffer.memory + i;
-        *c = 0;
-    }
-
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
 
     // NOTE(gh) Create required textures
@@ -1279,6 +1222,8 @@ int main(void)
     metal_render_context.combined_vertex_buffer = metal_make_managed_buffer(device, gigabytes(1));
     metal_render_context.combined_index_buffer = metal_make_managed_buffer(device, megabytes(256));
 
+    metal_render_context.random_grass_hash_buffer = metal_make_managed_buffer(device, random_grass_hashes, sizeof(u32) * random_grass_hash_count);
+
     metal_render_context.device = device;
     metal_render_context.view = view;
     metal_render_context.command_queue = command_queue;
@@ -1329,6 +1274,8 @@ int main(void)
 
     u64 last_time = mach_absolute_time();
     is_game_running = true;
+    // TODO(gh) use f64? but metal does not allow double?
+    f32 time_elapsed_from_start = 0.0f;
     while(is_game_running)
     {
         platform_input.dt_per_frame = target_seconds_per_frame;
@@ -1358,7 +1305,7 @@ int main(void)
 
         @autoreleasepool
         {
-            metal_render_and_wait_until_completion(&metal_render_context, &platform_render_push_buffer, window_width, window_height, target_seconds_per_frame);
+            metal_render_and_wait_until_completion(&metal_render_context, &platform_render_push_buffer, window_width, window_height, time_elapsed_from_start);
 
 #if 0
             // NOTE(gh) Testing compute pipeline
@@ -1406,6 +1353,7 @@ int main(void)
                 }
                 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
                 time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
+                time_elapsed_from_start += time_passed_in_sec;
             }
             else
             {

@@ -1,6 +1,8 @@
 #ifndef HB_METAL_H
 #define HB_METAL_H
 
+// TODO(gh) newBufferWithBytesNoCopy looks very interesting, is it only possible in unified memory architectures?
+
 // NOTE(joon) shared buffer between CPU and GPU, in a coherent way
 struct MetalSharedBuffer
 {
@@ -17,6 +19,14 @@ struct MetalManagedBuffer
 
     u32 size;
     void *memory; // host memory
+};
+
+struct MetalPrivateBuffer
+{
+    id<MTLBuffer> buffer;
+    u32 size;
+
+    // CPU does not have access to Private buffer, so no pointer to system memory
 };
 
 // TODO(gh) maybe this is a good idea?
@@ -86,6 +96,8 @@ struct MetalRenderContext
 
     MetalManagedBuffer cube_inward_facing_index_buffer;
     MetalManagedBuffer cube_outward_facing_index_buffer;
+
+    MetalManagedBuffer random_grass_hash_buffer;
 };
 
 #endif
