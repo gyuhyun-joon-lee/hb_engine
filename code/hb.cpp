@@ -48,11 +48,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         srand(time(0));
         game_state->random_series = start_random_series(rand());
 
-        game_state->camera = init_camera(V3(0, 0, 30), V3(0, 0, 0), 1.0f);
+        game_state->camera = init_fps_camera(V3(0, 0, 5), 1.0f, 135, 0.01f, 10000.0f);
         // Close camera
-        game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 135, 0.01f, 10000.0f);
+        // game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 135, 0.01f, 10000.0f);
         // Far away camera
-        //  game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
+        game_state->circle_camera = init_circle_camera(V3(0, 0, 20), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
+        // Really far away camera
+        // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
         add_cube_entity(game_state, V3(0, 0, 15), V3(7, 7, 7), V3(1, 1, 1));
 
@@ -81,18 +83,20 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     if(platform_input->action_up)
     {
-        // camera->pitch += camera_rotation_speed;
+        camera->pitch += camera_rotation_speed;
     }
     if(platform_input->action_down)
     {
-        // camera->pitch -= camera_rotation_speed;
+        camera->pitch -= camera_rotation_speed;
     }
     if(platform_input->action_left)
     {
+        camera->roll += camera_rotation_speed;
         game_state->circle_camera.rad -= 0.6f * platform_input->dt_per_frame;
     }
     if(platform_input->action_right)
     {
+        camera->roll -= camera_rotation_speed;
         game_state->circle_camera.rad += 0.6f * platform_input->dt_per_frame;
     }
 
@@ -100,11 +104,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     f32 camera_speed = 10.0f * platform_input->dt_per_frame;
     if(platform_input->move_up)
     {
-        // camera->p += camera_speed*camera_dir;
+        camera->p += camera_speed*camera_dir;
     }
     if(platform_input->move_down)
     {
-        // camera->p -= camera_speed*camera_dir;
+        camera->p -= camera_speed*camera_dir;
     }
 
     game_state->circle_camera.p.x = game_state->circle_camera.distance_from_axis * 
@@ -140,7 +144,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     // NOTE(gh) render entity start
-    init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
+    // init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
+    init_render_push_buffer(platform_render_push_buffer, &game_state->camera, V3(0, 0, 0), true);
 
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;

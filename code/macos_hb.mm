@@ -923,8 +923,11 @@ int main(void)
             i < random_grass_hash_count;
             ++i)
     {
-        random_grass_hashes[i] = random_between_i32(&random_series, -100000, 100000);
+        random_grass_hashes[i] = random_between_u32(&random_series, 0, 10000);
     }
+
+    f32 temp = Flt_Max;
+    temp += 1.0f;
 
     //TODO : writefile?
     PlatformAPI platform_api = {};
@@ -1016,7 +1019,7 @@ int main(void)
     unsafe_string_append(metallib_path, base_path);
     unsafe_string_append(metallib_path, "code/shader/shader.metallib");
 
-    // TODO(gh) : maybe just use newDefaultLibrary? If so, figure out where should we put the .metal files
+    // TODO(gh) : maybe just use newDefaultLibrary?
     id<MTLLibrary> shader_library = [device newLibraryWithFile:[NSString stringWithUTF8String:metallib_path] 
                                                                 error: &error];
     check_ns_error(error);
@@ -1065,7 +1068,6 @@ int main(void)
                             0, 0,
                             0, 0,
                             MTLPixelFormatDepth32Float);
-
 
     MTLPixelFormat line_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm, // This is the default pixel format for displaying
                                                                     MTLPixelFormatRGBA32Float,
@@ -1353,7 +1355,6 @@ int main(void)
                 }
                 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
                 time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
-                time_elapsed_from_start += time_passed_in_sec;
             }
             else
             {
@@ -1362,6 +1363,8 @@ int main(void)
                 printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
             }
 
+
+            time_elapsed_from_start += target_seconds_per_frame;
             printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
 
             metal_display(&metal_render_context);

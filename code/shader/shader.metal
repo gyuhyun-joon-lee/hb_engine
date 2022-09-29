@@ -92,6 +92,7 @@ struct PerGrassData
     float pad; // TODO(gh) Replace this with the 'clumping' values
 };
 
+// NOTE(gh) each payload should be less than 16kb
 struct Payload
 {
     PerGrassData per_grass_data[object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y];
@@ -108,16 +109,19 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
                           uint2 thread_position_in_grid [[thread_position_in_grid]], 
                           mesh_grid_properties mgp)
 {
-    // TODO(gh) Calculate this correctly, also minding the 0.5f offset per square
-    float center_x = object_function_input->floor_left_bottom_p.x + object_function_input->one_thread_worth_dim.x * (float)thread_position_in_grid.x;
-    float center_y = object_function_input->floor_left_bottom_p.y + object_function_input->one_thread_worth_dim.y * (float)thread_position_in_grid.y;
-
     uint hash = hashes[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
+
+    // TODO(gh) Calculate this correctly, also minding the 0.5f offset per square
+    // float center_x = object_function_input->floor_left_bottom_p.x + object_function_input->one_thread_worth_dim.x * (thread_position_in_grid.x + random_between_0_1(thread_position_in_grid.x, thread_position_in_grid.y, hash));
+    // float center_y = object_function_input->floor_left_bottom_p.y + object_function_input->one_thread_worth_dim.y * (thread_position_in_grid.y + random_between_0_1(thread_position_in_grid.x, thread_position_in_grid.y, hash));
+    float center_x = object_function_input->floor_left_bottom_p.x + object_function_input->one_thread_worth_dim.x * ((float)thread_position_in_grid.x + 0.5f);
+    float center_y = object_function_input->floor_left_bottom_p.y + object_function_input->one_thread_worth_dim.y * ((float)thread_position_in_grid.y + 0.5f);
+
     // TODO(gh) also feed z value
     payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, 0.0f);
-    payloadOutput->per_grass_data[thread_index].blade_width = 0.2f;
-    payloadOutput->per_grass_data[thread_index].stride = 2.0f;
-    payloadOutput->per_grass_data[thread_index].height = 1.8f;
+    payloadOutput->per_grass_data[thread_index].blade_width = 0.15f;
+    payloadOutput->per_grass_data[thread_index].stride = 2.2f;
+    payloadOutput->per_grass_data[thread_index].height = 2.5f;
     payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
     payloadOutput->per_grass_data[thread_index].bend = 0.5f;
     payloadOutput->per_grass_data[thread_index].wiggliness = 2.1f;
@@ -125,6 +129,8 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
     payloadOutput->per_grass_data[thread_index].color = packed_float3(1.0f, 0.8f, 0.2f);
     // Hashes got all the values for the grid
     payloadOutput->per_grass_data[thread_index].hash = hash;
+
+    // TODO(gh) Do a very basic frustum culling here, so that it doesn't always fire up the mesh threadgroup
 
     if(thread_index == 0)
     {
@@ -184,7 +190,7 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     float hash_value = hash*pi_32;
     // TODO(gh) how do we get time since engine startup?
     // float exponent = 4.0f*(t-1.0f);
-    // float wind_factor = 0.5f*power(euler_contant, exponent) * t * wiggliness + hash*tau_32 + time_elasped_from_start;
+    // float wind_factor = 0.5f*powr(euler_contant, exponent) * t * wiggliness + hash_value + time_elasped_from_start;
     float wind_factor = t * wiggliness + hash_value + time_elasped_from_start;
 
     float3 modified_p1 = p1 + float3(0, 0, 0.1f * sin(wind_factor));

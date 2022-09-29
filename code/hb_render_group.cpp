@@ -400,12 +400,16 @@ internal void
 }
 
 internal Camera
-init_camera(v3 p, v3 lookat_p, f32 focal_length)
+init_fps_camera(v3 p, f32 focal_length, f32 fov_in_degree, f32 near, f32 far)
 {
     Camera result = {};
 
     result.p = p;
     result.focal_length = focal_length;
+
+    result.fov = degree_to_radian(fov_in_degree);
+    result.near = near;
+    result.far = far;
 
     result.pitch = 0.0f;
     result.yaw = 0.0f;
@@ -427,7 +431,6 @@ init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 fov_in_degree,
     result.rad = 0;
 
     result.fov = degree_to_radian(fov_in_degree);
-
     result.near = near;
     result.far = far;
 
@@ -489,7 +492,8 @@ camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_ax
 internal m4x4
 camera_transform(Camera *camera)
 {
-    m3x3 camera_local_rotation = z_rotate(camera->roll) * y_rotate(camera->yaw) * x_rotate(camera->pitch);
+    // NOTE(gh) FPS camear removes one axis to avoid gimbal lock. 
+    m3x3 camera_local_rotation = z_rotate(camera->roll) * x_rotate(camera->pitch);
     
     // NOTE(gh) camera aligns with the world coordinate in default.
     v3 camera_x_axis = normalize(camera_local_rotation * V3(1, 0, 0));
@@ -517,7 +521,7 @@ camera_transform(CircleCamera *camera)
 internal v3
 get_camera_lookat(Camera *camera)
 {
-    m3x3 camera_local_rotation = z_rotate(camera->roll) * y_rotate(camera->yaw) * x_rotate(camera->pitch);
+    m3x3 camera_local_rotation = z_rotate(camera->roll) * x_rotate(camera->pitch);
     v3 result = camera_local_rotation * V3(0, 0, -1); 
 
     return result;
@@ -570,6 +574,26 @@ perspective_projection(f32 near, f32 far, f32 width, f32 width_over_height)
 
 internal void
 init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCamera *camera, v3 clear_color, 
+                        b32 enable_shadow)
+{
+    assert(render_push_buffer->base);
+
+    render_push_buffer->view = camera_transform(camera);
+    render_push_buffer->camera_near = camera->near;
+    render_push_buffer->camera_far = camera->far;
+    render_push_buffer->camera_fov = camera->fov;
+    render_push_buffer->clear_color = clear_color;
+
+    render_push_buffer->enable_shadow = enable_shadow;
+    
+    render_push_buffer->used_vertex_buffer = 0;
+    render_push_buffer->used_index_buffer = 0;
+
+    render_push_buffer->used = 0;
+}
+
+internal void
+init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *camera, v3 clear_color, 
                         b32 enable_shadow)
 {
     assert(render_push_buffer->base);

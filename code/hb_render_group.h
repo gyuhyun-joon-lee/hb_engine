@@ -83,6 +83,8 @@ Quaternionr angleAxisf(const Vector3r& axis, float angle) {
 
 struct Camera
 {
+    // TODO(gh) This should work fine for now, as long as we don't use all three axes for rotation
+    // which causes gimbal lock in euler rotation.
     f32 pitch; // x
     f32 yaw; // y
     f32 roll; // z
@@ -90,6 +92,10 @@ struct Camera
     // TODO(gh) Someday! Tricky part is not the rotation itself, but 
     // initializing the camera so that it can look at some position
     quat orientation;
+
+    f32 near;
+    f32 far;
+    f32 fov;
 
     v3 p;
     f32 focal_length;
