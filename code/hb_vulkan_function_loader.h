@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_VULKAN_FUNCTION_POINTERS
 #define HB_VULKAN_FUNCTION_POINTERS
 

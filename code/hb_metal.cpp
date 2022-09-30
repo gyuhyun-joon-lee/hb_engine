@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #include "hb_metal.h"
 
 #define check_ns_error(error)\

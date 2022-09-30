@@ -1,5 +1,5 @@
 /*
- * Written by Gyuhyun 'Joon' Lee
+ * Written by Gyuhyun Lee
  */
 
 #define Invalid_R32 10000.0f

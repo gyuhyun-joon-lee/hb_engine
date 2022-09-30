@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_RENDER_GROUP_H
 #define HB_RENDER_GROUP_H
 

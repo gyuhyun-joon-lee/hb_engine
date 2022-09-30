@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_ASSET_H
 #define HB_ASSET_H
 

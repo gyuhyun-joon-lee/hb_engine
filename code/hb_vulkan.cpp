@@ -1,6 +1,7 @@
 /*
- * Written by Gyuhyun 'Joon' Lee
+ * Written by Gyuhyun Lee
  */
+
 #include "hb_vulkan.h"
 
 #include <stdio.h>

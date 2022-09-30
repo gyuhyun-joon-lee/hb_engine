@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_SIMULATION_H
 #define HB_SIMULATION_H
 

@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #include "hb_render_group.h"
 inline m3x3
 scale_m3x3(f32 x, f32 y, f32 z)

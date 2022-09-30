@@ -926,9 +926,6 @@ int main(void)
         random_grass_hashes[i] = random_between_u32(&random_series, 0, 10000);
     }
 
-    f32 temp = Flt_Max;
-    temp += 1.0f;
-
     //TODO : writefile?
     PlatformAPI platform_api = {};
     platform_api.read_file = debug_macos_read_file;

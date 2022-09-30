@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #include "hb_simulation.h"
 
 // TODO(joon) local space aabb testing?

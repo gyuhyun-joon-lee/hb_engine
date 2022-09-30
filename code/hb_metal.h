@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_METAL_H
 #define HB_METAL_H
 

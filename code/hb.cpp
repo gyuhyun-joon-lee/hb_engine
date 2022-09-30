@@ -1,3 +1,6 @@
+/*
+ * Written by Gyuhyun Lee
+ */
 #include "hb_types.h"
 #include "hb_simd.h"
 #include "hb_intrinsic.h"
@@ -14,7 +17,6 @@
 #include "hb_ray.cpp"
 #include "hb_simulation.cpp"
 #include "hb_entity.cpp"
-#include "hb_terrain.cpp"
 #include "hb_render_group.cpp"
 #include "hb_image_loader.cpp"
 

@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_VOXEL_H
 #define HB_VOXEL_H
 

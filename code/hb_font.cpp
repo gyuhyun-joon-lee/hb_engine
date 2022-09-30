@@ -1,3 +1,6 @@
+/*
+ * Written by Gyuhyun Lee
+ */
 #include "hb_font.h"
 
 #if 0

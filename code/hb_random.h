@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_RANDOM_H
 #define HB_RANDOM_H
 // NOTE(joon): xorshift promises a huge speed boost comparing to rand(with the fact that it is really easy to use simd),

@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_SIMD_H
 #define HB_SIMD_H
 // NOTE(joon): This usage of SIMD is a very simple & easy to use to make use of SIMD in a particular peace of code that you want to speed up.

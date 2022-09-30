@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #if HB_ARM
 
 #include <arm_neon.h>

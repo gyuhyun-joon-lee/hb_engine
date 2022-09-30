@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_SHARED_WITH_SHADER_H
 #define HB_SHARED_WITH_SHADER_H
 

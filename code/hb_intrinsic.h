@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef HB_INTRINSIC_H
 #define HB_INTRINSIC_H
 

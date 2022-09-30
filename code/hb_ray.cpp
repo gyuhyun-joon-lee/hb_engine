@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #if 0
 #include <limits.h>
 #include <stdint.h>

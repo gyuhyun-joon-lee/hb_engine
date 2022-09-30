@@ -1,3 +1,7 @@
+/*
+ * Written by Gyuhyun Lee
+ */
+
 #ifndef MEKA_VULKAN_H
 #define MEKA_VULKAN_H
 
