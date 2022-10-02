@@ -4,17 +4,146 @@
 
 #include "shader_common.h"
 
+
+float
+get_gradient_value(uint hash, float x, float y, float z)
+{
+    float result = 0.0f;
+
+    /*
+       NOTE(gh) This essentially picks a random vector from
+        {1,1,0}, {-1,1,0}, {1,-1,0}, {-1,-1,0},
+        {1,0,1}, {-1,0,1}, {1,0,-1}, {-1,0,-1},
+        {0,1,1}, {0,-1,1}, {0,1,-1}, {0,-1,-1}
+
+        and then dot product with the distance vector
+    */
+    switch(hash & 0xF)
+    {
+        // TODO(gh) Can we do something with the diverging?
+        case 0x0: result = x + y; break;
+        case 0x1: result = -x + y; break;
+        case 0x2: result =  x - y; break;
+        case 0x3: result = -x - y; break;
+        case 0x4: result =  x + z; break;
+        case 0x5: result = -x + z; break;
+        case 0x6: result =  x - z; break;
+        case 0x7: result = -x - z; break;
+        case 0x8: result =  y + z; break;
+        case 0x9: result = -y + z; break;
+        case 0xA: result = y - z; break;
+        case 0xB: result = -y - z; break;
+        case 0xC: result =  y + x; break;
+        case 0xD: result = -y + z; break;
+        case 0xE: result =  y - x; break;
+        case 0xF: result = -y - z; break;
+    }
+
+    return result;
+}
+
+float
+fade(float t) 
+{
+    return t*t*t*(t*(t*6 - 15)+10);
+}
+
+float 
+perlin_noise01(float x, float y, float z)
+{
+    uint xi = floor(x);
+    uint yi = floor(y);
+    uint zi = floor(z);
+    uint x255 = xi % 255; // used for hashing from the random numbers
+    uint y255 = yi % 255; // used for hashing from the random numbers
+    uint z255 = zi % 255;
+
+    float xf = x - (float)xi; // fraction part of x, should be in 0 to 1 range
+    float yf = y - (float)yi; // fraction part of y, should be in 0 to 1 range
+    float zf = z - (float)zi;
+
+    float u = fade(xf);
+    float v = fade(yf);
+    float w = fade(zf);
+
+    /*
+       NOTE(gh) naming scheme
+       2      3
+       --------
+       |      |
+       |      |
+       |      |
+       --------
+       0      1
+
+       // +z
+       6      7
+       --------
+       |      |
+       |      |
+       |      |
+       --------
+       4      5
+
+       So for example, gradient vector 0 is a gradient vector used for the point 0, 
+       and gradient 0 is the the graident value for point 0.
+       The positions themselves do not matter that much, but the relative positions to each other
+       are important as we need to interpolate in x, y, (and possibly z or w) directions.
+    */
+
+    uint random_value0 = permutations255[permutations255[permutations255[x255]+y255]+z255];
+    uint random_value1 = permutations255[permutations255[permutations255[x255+1]+y255]+z255];
+    uint random_value2 = permutations255[permutations255[permutations255[x255]+y255+1]+z255];
+    uint random_value3 = permutations255[permutations255[permutations255[x255+1]+y255+1]+z255];
+
+    uint random_value4 = permutations255[permutations255[permutations255[x255]+y255]+z255+1];
+    uint random_value5 = permutations255[permutations255[permutations255[x255+1]+y255]+z255+1];
+    uint random_value6 = permutations255[permutations255[permutations255[x255]+y255+1]+z255+1];
+    uint random_value7 = permutations255[permutations255[permutations255[x255+1]+y255+1]+z255+1];
+
+    // NOTE(gh) -1 are for getting the distance vector
+    float gradient0 = get_gradient_value(random_value0, xf, yf, zf);
+    float gradient1 = get_gradient_value(random_value1, xf-1, yf, zf);
+    float gradient2 = get_gradient_value(random_value2, xf, yf-1, zf);
+    float gradient3 = get_gradient_value(random_value3, xf-1, yf-1, zf);
+
+    float gradient4 = get_gradient_value(random_value4, xf, yf, zf-1);
+    float gradient5 = get_gradient_value(random_value5, xf-1, yf, zf-1);
+    float gradient6 = get_gradient_value(random_value6, xf, yf-1, zf-1);
+    float gradient7 = get_gradient_value(random_value7, xf-1, yf-1, zf-1);
+
+    // NOTE(gh) mix == lerp
+    float lerp01 = mix(gradient0, gradient1, u); // lerp between 0 and 1
+    float lerp23 = mix(gradient2, gradient3, u); // lerp between 2 and 3 
+    float lerp0123 = mix(lerp01, lerp23, v); // lerp between '0-1' and '2-3', in y direction
+
+    float lerp45 = mix(gradient4, gradient5, u); // lerp between 4 and 5
+    float lerp67 = mix(gradient6, gradient7, u); // lerp between 6 and 7 
+    float lerp4567 = mix(lerp45, lerp67, v); // lerp between '4-5' and '6-7', in y direction
+
+    float lerp01234567 = mix(lerp0123, lerp4567, w);
+
+    float result = (lerp01234567 + 1.0f) * 0.5f; // put into 0 to 1 range
+
+    return result;
+}
+
 struct ScreenSpaceTriangleVertexOutput
 {
     float4 clip_p[[position]];
+    float2 p0to1;
+    float time_elasped;
 };
 
 vertex ScreenSpaceTriangleVertexOutput
 screen_space_triangle_vert(uint vertex_ID [[vertex_id]],
-                             constant float *vertices[[buffer(0)]])
+                             constant float *vertices [[buffer(0)]],
+                             constant float *time_elasped [[buffer(1)]])
 {
     ScreenSpaceTriangleVertexOutput result = {};
     result.clip_p = float4(vertices[3*vertex_ID + 0], vertices[3*vertex_ID + 1], vertices[3*vertex_ID + 2], 1.0f);
+    result.p0to1 = 0.5f*(result.clip_p.xy/result.clip_p.w) + float2(1, 1);
+    result.time_elasped = *time_elasped;
     
     return result;
 }
@@ -22,7 +151,12 @@ screen_space_triangle_vert(uint vertex_ID [[vertex_id]],
 fragment float4
 screen_space_triangle_frag(ScreenSpaceTriangleVertexOutput vertex_output [[stage_in]])
 {
-    float4 result = float4(1, 0, 0, 1);
+    float factor = 16.0f;
+    float x = factor * vertex_output.p0to1.x; 
+    float y = factor * vertex_output.p0to1.y; 
+    float perlin_noise_value = perlin_noise01(x, y, vertex_output.time_elasped);
+
+    float4 result = float4(perlin_noise_value, perlin_noise_value, perlin_noise_value, 1.0f);
 
     return result;
 }

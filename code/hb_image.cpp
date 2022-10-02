@@ -2,32 +2,35 @@
  * Written by Gyuhyun Lee
  */
 
-// TODO(joon): Move this into seperate header?
+// TODO(gh): Move this into seperate header?
+// NOTE(gh) Newer bmp header has more things to it, but this older version works just fine
 #pragma pack(push, 1)
 struct BMPFileHeader
 {
+    // BMP Header
     u16 file_header;
-    u32 file_size;
+    u32 file_size; // total size, including this header
     u16 reserved_1;
     u16 reserved_2;
     u32 pixel_offset;
 
-    u32 header_size;
+    // DIB Header
+    u32 header_size; // sizeof(BMPFileHeader) - 14(the upper header part)
     u32 width;
     u32 height;
-    u16 color_plane_count;
-    u16 bits_per_pixel;
-    u32 compression;
+    u16 color_plane_count; // 1
+    u16 bits_per_pixel; // 32
+    u32 compression; // TODO(gh) Don't know why, but should be 3?
 
-    u32 image_size;
-    u32 pixels_in_meter_x;
+    u32 image_size; // bits_per_pixel * width * height
+    u32 pixels_in_meter_x; // doesn't matter, I think it's for the printer
     u32 pixels_in_meter_y;
-    u32 colors;
-    u32 important_color_count;
-    u32 red_mask;
-    u32 green_mask;
-    u32 blue_mask;
-    u32 alpha_mask;
+    u32 colors; // ignore
+    u32 important_color_count; // ignore
+    u32 red_mask; // 0x00ff0000
+    u32 green_mask; // 0x0000ff00
+    u32 blue_mask; // 0x000000ff
+    u32 alpha_mask; // 0xff000000
 };
 #pragma pack(pop)
 
@@ -35,6 +38,11 @@ internal void
 load_bmp(char *file_name)
 {
 
+}
+
+internal void
+export_bmp()
+{
 }
 
 /*
@@ -68,7 +76,7 @@ and interlace method (1 byte, values 0 "no interlace" or 1 "Adam7 interlace") (1
 
 char png_signature[8] = {(char)137, 80, 78, 71, 13, 10, 26, 10};
 
-// TODO(joon): png is big endian??
+// TODO(gh): png is big endian??
 #pragma pack(push, 1)
 struct png_header
 {
@@ -82,7 +90,7 @@ struct png_header
 };
 #pragma pack(pop)
 
-// TODO(joon): Fill this up!
+// TODO(gh): Fill this up!
 struct png_header_signature
 {
     char c[8];
@@ -96,7 +104,7 @@ struct png_chunk_footer
 {
 };
 
-// NOTE(joon): typical png chunk looks like : length / chunk name / chunk data / crc
+// NOTE(gh): typical png chunk looks like : length / chunk name / chunk data / crc
 // length is only for the 
 
 internal void
@@ -116,7 +124,7 @@ load_png(PlatformReadFileResult file)
 {
     u8 *c = (u8 *)file.memory;
 
-    // NOTE(joon) : loop until we find IHDR file chunk, which is the start of png_header
+    // NOTE(gh) : loop until we find IHDR file chunk, which is the start of png_header
     while(0)
     {
 
@@ -133,7 +141,7 @@ export_png()
 {
 }
 
-// TODO(joon) hdr support?
+// TODO(gh) hdr support?
 
 
 

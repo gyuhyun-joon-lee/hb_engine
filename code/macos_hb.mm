@@ -30,7 +30,12 @@
 #include "hb_shared_with_shader.h"
 
 #include "hb_metal.cpp"
+// TODO(gh) I don't like including normal files into platform code, because that means we cannot do
+// live code editing on those including files(the change will not be applied to the platform code)
 #include "hb_render_group.cpp"
+// TODO(gh) This is just temporary, get rid of this when I'm done with outputting the perlin noise in BMP
+#include "hb_image.cpp"
+#include "hb_noise.cpp"
 
 // TODO(gh): Get rid of global variables?
 global v2 last_mouse_p;
@@ -775,18 +780,9 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
 #endif
 
-#if 0
-        v3 screen_space_triangle_vertices[] = 
-        {
-            {-0.7f, -0.7f, 1.0f},
-            {0.7f, -0.7f, 1.0f},
-            {0.0f, 0.7f, 1.0f},
-        };
 
-        metal_set_render_pipeline(present_render_encoder, render_context->screen_space_triangle_pipeline);
-        metal_set_vertex_bytes(present_render_encoder, screen_space_triangle_vertices, array_size(screen_space_triangle_vertices), 0);
-        metal_draw_non_indexed(present_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(screen_space_triangle_vertices));
-#endif
+
+
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
@@ -803,6 +799,29 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
 
         metal_end_encoding(render_encoder);
+
+#if 0
+        id<MTLRenderCommandEncoder> screen_space_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->view.currentRenderPassDescriptor];
+
+        v3 screen_space_triangle_vertices[] = 
+        {
+            {-0.7f, -0.7f, 1.0f},
+            {0.7f, -0.7f, 1.0f},
+            {-0.7f, 0.7f, 1.0f},
+
+            {0.7f, -0.7f, 1.0f},
+            {0.7f, 0.7f, 1.0f},
+            {-0.7f, 0.7f, 1.0f},
+        };
+        v2 output_dim = V2((f32)window_width, (f32)window_height);
+
+        metal_set_render_pipeline(screen_space_render_encoder, render_context->screen_space_triangle_pipeline);
+        metal_set_vertex_bytes(screen_space_render_encoder, screen_space_triangle_vertices, array_size(screen_space_triangle_vertices), 0);
+        metal_set_vertex_bytes(screen_space_render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 1);
+        metal_draw_non_indexed(screen_space_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(screen_space_triangle_vertices));
+
+        metal_end_encoding(screen_space_render_encoder);
+#endif
 
         metal_commit_command_buffer(command_buffer);
         // TODO(gh) Double check whether this is syncing correctly...
@@ -895,6 +914,75 @@ macos_load_game_code(MacOSGameCode *game_code, char *file_name)
 
 int main(void)
 { 
+    srand(time(NULL));
+    RandomSeries random_series = start_random_series(rand()); 
+
+    u32 output_width = 256;
+    u32 output_height = 256;
+
+    u32 output_size = sizeof(u32)*output_width*output_height + sizeof(BMPFileHeader);
+    u8 *output = (u8 *)malloc(output_size);
+    zero_memory(output, output_size);
+    
+    BMPFileHeader *bmp_header = (BMPFileHeader *)output;  
+    bmp_header->file_header = 19778; 
+    bmp_header->file_size = output_size;
+    bmp_header->pixel_offset = sizeof(BMPFileHeader);
+
+    bmp_header->header_size = sizeof(BMPFileHeader) - 14;
+    bmp_header->width = output_width;
+    bmp_header->height = output_height;
+    bmp_header->color_plane_count = 1;
+    bmp_header->bits_per_pixel = 32;
+    bmp_header->compression = 3;
+
+    bmp_header->image_size = sizeof(u32)*output_width*output_height;
+    bmp_header->pixels_in_meter_x = 11811;
+    bmp_header->pixels_in_meter_y = 11811;
+    bmp_header->red_mask = 0x00ff0000;
+    bmp_header->green_mask = 0x0000ff00;
+    bmp_header->blue_mask = 0x000000ff;
+    bmp_header->alpha_mask = 0xff000000;
+
+#if 1
+    // Testing perlin noise output
+    BMPFileHeader file_header = {};
+    file_header.file_header = 0x4D42; // BM in little endian
+    file_header.file_size = sizeof(file_header) + 4 * output_width * output_height;
+    file_header.pixel_offset = sizeof(BMPFileHeader);
+
+    u8 *pixels = (u8 *)output + sizeof(BMPFileHeader);
+    u8 *row = (u8 *)pixels;
+    f32 z = 0.0f;
+    for(u32 y = 0;
+            y < output_height;
+            ++y)
+    {
+        u32 *pixel = (u32 *)row;
+        for(u32 x = 0;
+                x < output_width;
+                ++x)
+        {
+            f32 xf = x / (f32)output_width;
+            f32 yf = y / (f32)output_height;
+
+            float perlin_result = perlin_noise01(xf*8.0f, yf*8.0f, 0.0f) * 1.0f;
+
+            // f32 perlin_value = perlin_noise01((f32)x, (f32)y, z);
+            u8 single_channel_value = (u8)round_r32_to_u32(perlin_result * 255.0f);
+
+            *pixel = (0xff << 24) |
+                    (single_channel_value << 16) |
+                    (single_channel_value << 8) |
+                    (single_channel_value << 0);
+            pixel++;
+        }
+
+        row += 4 * output_width;
+    }
+
+    debug_macos_write_entire_file("/Volumes/meka/HB_engine/misc/output.bmp", output, output_size);
+#endif
 #if 0
     // Testing font in macos...
     UIFont * arial_font = [fontWithName : [NSString stringWithUTF8String:vertex_shader_name]
@@ -914,8 +1002,6 @@ int main(void)
     MacOSGameCode macos_game_code = {};
     macos_load_game_code(&macos_game_code, game_code_path);
  
-    srand(time(NULL));
-    RandomSeries random_series = start_random_series(rand()); 
     // TODO(gh) Terrible way to handle this...
     u32 random_grass_hash_count = grass_per_grid_count_x * grass_per_grid_count_y;
     u32 *random_grass_hashes = (u32 *)malloc(sizeof(u32) * random_grass_hash_count);

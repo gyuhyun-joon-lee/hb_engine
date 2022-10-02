@@ -173,6 +173,17 @@ operator*(f32 value, v2 a)
     return result;
 }
 
+inline v2
+lerp(v2 min, f32 t, v2 max)
+{
+    v2 result = {};
+
+    result.x = lerp(min.x, t, max.x);
+    result.y = lerp(min.y, t, max.y);
+
+    return result;
+}
+
 inline v3
 V3()
 {
