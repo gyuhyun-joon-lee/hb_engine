@@ -447,8 +447,9 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 {
     // Update gpu side of combined vertex and index buffer
     // TODO(gh) Do we need to sync before we render??
-    metal_flush_managed_buffer(&render_context->combined_vertex_buffer, render_push_buffer->used_vertex_buffer);
-    metal_flush_managed_buffer(&render_context->combined_index_buffer, render_push_buffer->used_index_buffer);
+    metal_flush_managed_buffer(&render_context->perlin_value_buffer, 0, render_context->perlin_value_buffer.size);
+    metal_flush_managed_buffer(&render_context->combined_vertex_buffer, 0, render_push_buffer->used_vertex_buffer);
+    metal_flush_managed_buffer(&render_context->combined_index_buffer, 0, render_push_buffer->used_index_buffer);
 
     id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
@@ -937,29 +938,8 @@ int main(void)
     // and change it per frame. (and maybe also measure the performance)
     u32 perlin_output_width = 512;
     u32 perlin_output_height = 512;
-    f32 *perlin_values = (f32 *)malloc(sizeof(f32) * perlin_output_width * perlin_output_height);
-    u32 perlin_value_count = 0;
 
-    for(u32 y = 0;
-            y < perlin_output_height;
-            ++y)
-    {
-        for(u32 x = 0;
-                x < perlin_output_width;
-                ++x)
-        {
-            f32 xf = x / (f32)perlin_output_width;
-            f32 yf = y / (f32)perlin_output_height;
-            f32 factor = 16.0f;
-
-            float perlin_value = perlin_noise01(factor*xf, factor * yf, 0.0f);
-            perlin_values[perlin_value_count++] = perlin_value;
-        }
-    }
-    assert(perlin_value_count == (perlin_output_width * perlin_output_height));
-
-    // NOTE(gh) Enable this to see the result of the perlin noise
-#if 1
+#if 0
     u32 output_size = sizeof(u32)*perlin_output_width*perlin_output_height + sizeof(BMPFileHeader);
     u8 *output = (u8 *)malloc(output_size);
     zero_memory(output, output_size);
@@ -1365,7 +1345,7 @@ int main(void)
     metal_render_context.combined_index_buffer = metal_make_managed_buffer(device, megabytes(256));
 
     metal_render_context.random_grass_hash_buffer = metal_make_managed_buffer(device, random_grass_hashes, sizeof(u32) * random_grass_hash_count);
-    metal_render_context.perlin_value_buffer = metal_make_managed_buffer(device, perlin_values, sizeof(f32) * perlin_output_width * perlin_output_height);
+    metal_render_context.perlin_value_buffer = metal_make_managed_buffer(device, sizeof(f32) * perlin_output_width * perlin_output_height);
 
     metal_render_context.device = device;
     metal_render_context.view = view;
@@ -1446,6 +1426,28 @@ int main(void)
         {
             macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer);
         }
+
+        // TODO(gh) Put this inside the game code!
+        u32 perlin_value_count = 0;
+        for(u32 y = 0;
+                y < perlin_output_height;
+                ++y)
+        {
+            for(u32 x = 0;
+                    x < perlin_output_width;
+                    ++x)
+            {
+                f32 xf = x / (f32)perlin_output_width;
+                f32 yf = y / (f32)perlin_output_height;
+                f32 factor = 16.0f;
+
+                float perlin_value = perlin_noise01(factor*xf, factor * yf, time_elapsed_from_start);
+                f32 *dst = (f32 *)metal_render_context.perlin_value_buffer.memory + perlin_value_count++;
+                *dst = perlin_value;
+            }
+        }
+        
+        assert(perlin_value_count == (perlin_output_width * perlin_output_height));
 
         @autoreleasepool
         {

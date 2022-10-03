@@ -226,7 +226,7 @@ forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
 fragment float4
 forward_show_perlin_noise_grid_frag(ShowPerlinNoiseGridVertexOutput vertex_output [[stage_in]])
 {
-    float4 result = float4(vertex_output.color, 0.6f);
+    float4 result = float4(vertex_output.color, 1.0f);
     return result;
 }
 

@@ -161,12 +161,11 @@ metal_make_managed_buffer(id<MTLDevice> device, u64 size)
     return result;
 }
 
-
 inline void
-metal_flush_managed_buffer(MetalManagedBuffer *buffer, u64 size_to_flush)
+metal_flush_managed_buffer(MetalManagedBuffer *buffer, u64 start, u64 size_to_flush)
 {
     assert(size_to_flush <= buffer->size);
-    NSRange range = NSMakeRange(0, size_to_flush);
+    NSRange range = NSMakeRange(start, size_to_flush);
     [buffer->buffer didModifyRange:range];
 }
 
@@ -175,7 +174,7 @@ metal_make_managed_buffer(id<MTLDevice> device, void *source, u64 size)
 {
     MetalManagedBuffer result = metal_make_managed_buffer(device, size);
     memcpy(result.memory, source, size);
-    metal_flush_managed_buffer(&result, size);
+    metal_flush_managed_buffer(&result, 0, size);
 
     return result;
 }
