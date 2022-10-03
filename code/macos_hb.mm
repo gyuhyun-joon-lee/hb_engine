@@ -637,7 +637,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
         metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
-        metal_set_cull_mode(render_encoder, MTLCullModeNone); 
+        metal_set_cull_mode(render_encoder, MTLCullModeBack); 
 
         u32 voxel_instance_count = 0;
         for(u32 consumed = 0;
@@ -765,8 +765,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_cull_mode(forward_render_encoder, MTLCullModeBack); 
 
         metal_set_render_pipeline(forward_render_encoder, render_context->forward_line_pipeline);
-
-
         metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
 
         f32 x_axis[] = {0.0f, 0.0f, 0.0f, 100.0f, 0.0f, 0.0f};
@@ -815,7 +813,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 2);
         metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
                                         0, 6, 0, grass_per_grid_count_x * grass_per_grid_count_y);
-
 
 #if 0
 
