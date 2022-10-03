@@ -1129,9 +1129,7 @@ int main(void)
                                                                   MTLPixelFormatRGBA32Float, // position
                                                                   MTLPixelFormatRGBA32Float, // normal
                                                                   MTLPixelFormatRGBA8Unorm}; // color
-    // TODO(gh) The first write mask(drawable texture) should really be MaskNone, but doing this might help optimizing the HSR
-    // But I should double check on this later(and also, do I even care because the forward rendering should remain simple anyway)
-    MTLColorWriteMask singlepass_color_attachment_write_masks[] = {MTLColorWriteMaskAll,
+    MTLColorWriteMask singlepass_color_attachment_write_masks[] = {MTLColorWriteMaskNone,
                                                                    MTLColorWriteMaskAll, 
                                                                    MTLColorWriteMaskAll,
                                                                    MTLColorWriteMaskAll};
@@ -1159,8 +1157,8 @@ int main(void)
                             "singlepass_deferred_lighting_vertex", "singlepass_deferred_lighting_frag", 
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
-                            singlepass_color_attachment_pixel_formats, array_count(singlepass_color_attachment_pixel_formats),
-                            singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
+                            deferred_lighting_pipeline_color_attachment_pixel_formats, array_count(deferred_lighting_pipeline_color_attachment_pixel_formats),
+                            deferred_lighting_pipeline_color_attachment_write_masks, array_count(deferred_lighting_pipeline_color_attachment_write_masks),
                             MTLPixelFormatDepth32Float);
 
     metal_render_context.directional_light_shadowmap_pipeline = 
