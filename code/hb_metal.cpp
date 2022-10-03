@@ -352,7 +352,8 @@ metal_make_render_pipeline(id<MTLDevice> device,
                     MTLPrimitiveTopologyClass topology, 
                     MTLPixelFormat *pixel_formats, u32 pixel_format_count, 
                     MTLColorWriteMask *masks, u32 mask_count,
-                    MTLPixelFormat depth_pixel_format)
+                    MTLPixelFormat depth_pixel_format,
+                    b32 *blending_enabled = 0)
 {
     assert(pixel_format_count == mask_count);
 
@@ -383,6 +384,22 @@ metal_make_render_pipeline(id<MTLDevice> device,
     {
         pipeline_descriptor.colorAttachments[color_attachment_index].pixelFormat = pixel_formats[color_attachment_index];
         pipeline_descriptor.colorAttachments[color_attachment_index].writeMask = masks[color_attachment_index];
+        if(blending_enabled)
+        {
+            pipeline_descriptor.colorAttachments[color_attachment_index].blendingEnabled = 
+                blending_enabled[color_attachment_index];
+            
+            // Not really necessary, but just for the clarification
+            if(blending_enabled[color_attachment_index])
+            {
+                // TODO(gh) Should we support other blending methods?
+                // For now, the equation for RGB is : (1-sa)*d + sa*s, and (sa + (1-sa)*da)} for the alpha   
+                pipeline_descriptor.colorAttachments[color_attachment_index].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+                pipeline_descriptor.colorAttachments[color_attachment_index].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+                pipeline_descriptor.colorAttachments[color_attachment_index].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+                pipeline_descriptor.colorAttachments[color_attachment_index].sourceAlphaBlendFactor = MTLBlendFactorOne;
+            }
+        }
     }
 
 

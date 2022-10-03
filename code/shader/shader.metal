@@ -185,10 +185,47 @@ screen_space_triangle_frag(ScreenSpaceTriangleVertexOutput vertex_output [[stage
     float y = factor * vertex_output.p0to1.y; 
     float perlin_noise_value = perlin_noise01(x, y, 0.0f);
 
-    float4 result = float4(perlin_noise_value, perlin_noise_value, perlin_noise_value, 1.0f);
+    float4 result = float4(perlin_noise_value, perlin_noise_value, perlin_noise_value, 0.2f);
 
     return result;
 }
+
+struct ShowPerlinNoiseGridVertexOutput
+{
+    float4 clip_p [[position]];
+};
+
+vertex ShowPerlinNoiseGridVertexOutput
+forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
+                            uint instanceID [[instance_id]],
+                             constant float *vertices [[buffer(0)]], 
+                             constant float2 *grid_dim [[buffer(1)]],
+                             constant PerFrameData *per_frame_data [[buffer(2)]])
+{
+    ShowPerlinNoiseGridVertexOutput result = {};
+
+    uint grid_y = instanceID / grass_per_grid_count_x;
+    uint grid_x = instanceID - grid_y * grass_per_grid_count_x;
+
+    float4 world_p = float4(vertices[3*vertexID+0], 
+                                vertices[3*vertexID+1],
+                                vertices[3*vertexID+2],
+                                1.0f);
+    world_p.y += grid_y * grid_dim->y;
+    world_p.x += grid_x * grid_dim->x;
+
+    result.clip_p = per_frame_data->proj_view * world_p;
+
+    return result;
+}
+
+fragment float4
+forward_show_perlin_noise_grid_frag(ShowPerlinNoiseGridVertexOutput vertex_output [[stage_in]])
+{
+    float4 result = float4(1, 0, 0, 0.2f);
+    return result;
+}
+
 
 struct ShadowmapVertexOutput
 {

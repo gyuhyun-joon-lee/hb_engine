@@ -65,6 +65,7 @@ struct MetalRenderContext
     // Forward Pipelines
     id<MTLRenderPipelineState> forward_line_pipeline;
     id<MTLRenderPipelineState> screen_space_triangle_pipeline;
+    id<MTLRenderPipelineState> forward_show_perlin_noise_grid_pipeline;
 
     // Compute Pipelines
     id<MTLComputePipelineState> add_compute_pipeline;

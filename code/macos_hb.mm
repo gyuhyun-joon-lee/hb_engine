@@ -754,7 +754,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 //////// NOTE(gh) Forward rendering start
         render_context->forward_renderpass.colorAttachments[0].texture = drawable_texture;
         id<MTLRenderCommandEncoder> forward_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->forward_renderpass];
-        metal_wait_for_fence(forward_render_encoder, render_context->forwardRenderFence, MTLRenderStageTile);
+        metal_wait_for_fence(forward_render_encoder, render_context->forwardRenderFence, MTLRenderStageFragment);
 
         metal_set_viewport(forward_render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(forward_render_encoder, 0, 0, window_width, window_height);
@@ -791,30 +791,33 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_vertex_bytes(forward_render_encoder, &z_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeLine, 0, 2);
 
+        // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
+        // indierct draw method?
+        // NTOE(gh) show perlin noise grid on top of the grass grid
+        v3 plane_left_bottom_p = floor_left_bottom_p + V3(0, 0, 3.0f);
+        v3 plane_right_bottom_p = plane_left_bottom_p + V3(one_object_thread_worth_dim.x, 0, 0);
+        v3 plane_top_left_p = plane_left_bottom_p + V3(0, one_object_thread_worth_dim.y, 0);
+        v3 plane_top_right_p = plane_top_left_p + V3(one_object_thread_worth_dim.x, 0, 0);
+        v3 plane_vertices[] = 
+        {
+            plane_left_bottom_p,
+            plane_right_bottom_p,
+            plane_top_left_p,
+
+            plane_right_bottom_p,
+            plane_top_right_p,
+            plane_top_left_p
+        };
+        metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_perlin_noise_grid_pipeline);
+
+        metal_set_vertex_bytes(forward_render_encoder, plane_vertices, array_size(plane_vertices), 0);
+        metal_set_vertex_bytes(forward_render_encoder, &one_object_thread_worth_dim, sizeof(one_object_thread_worth_dim), 1);
+        metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 2);
+        metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
+                                        0, 6, 0, grass_per_grid_count_x * grass_per_grid_count_y);
+
+
 #if 0
-        // NOTE(gh) draw light cube for indication
-        m4x4 model = st_m4x4(directional_light_p, V3(0.5f, 0.5f, 0.5f));
-        model = transpose(model); // make the matrix column-major
-        PerObjectData per_object_data = {};
-        per_object_data.model = model;
-        per_object_data.color = V3(1, 0, 0);
-
-        metal_set_render_pipeline(forward_render_encoder, render_context->singlepass_cube_pipeline);
-        metal_set_vertex_bytes(forward_render_encoder, &per_object_data, sizeof(per_object_data), 1);
-        metal_set_vertex_bytes(forward_render_encoder, cube_vertices, array_size(cube_vertices), 2);
-        metal_set_vertex_bytes(forward_render_encoder, cube_normals, sizeof(f32) * array_count(cube_normals), 3);
-        metal_set_vertex_bytes(forward_render_encoder, &light_proj_view, sizeof(light_proj_view), 4);
-
-        metal_set_fragment_texture(forward_render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-
-        metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
-#endif
-
-    // metal_draw_non_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type,
-                                    // u64 vertex_start, u64 vertex_count, u64 instance_start, u64 instance_count)
-
-
-#if 1
 
         v3 screen_space_triangle_vertices[] = 
         {
@@ -1187,6 +1190,9 @@ int main(void)
                             MTLPixelFormatDepth32Float);
 
     // NOTE(gh) forward pipelines
+    // Not every forward pipelines use the blending
+    b32 forward_blending_enabled[] = {true};
+
     MTLPixelFormat forward_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm}; // This is the default pixel format for displaying
     MTLColorWriteMask forward_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll};
     metal_render_context.forward_line_pipeline = 
@@ -1204,7 +1210,16 @@ int main(void)
                             MTLPrimitiveTopologyClassTriangle,
                             forward_pipeline_color_attachment_pixel_formats, array_count(forward_pipeline_color_attachment_pixel_formats),
                             forward_pipeline_color_attachment_write_masks, array_count(forward_pipeline_color_attachment_write_masks),
-                            view.depthStencilPixelFormat);
+                            view.depthStencilPixelFormat, forward_blending_enabled);
+
+    metal_render_context.forward_show_perlin_noise_grid_pipeline = 
+        metal_make_render_pipeline(device, "Forward Show Perlin Noise Grid Pipeline", 
+                            "forward_show_perlin_noise_grid_vert", "forward_show_perlin_noise_grid_frag",
+                            shader_library,
+                            MTLPrimitiveTopologyClassTriangle,
+                            forward_pipeline_color_attachment_pixel_formats, array_count(forward_pipeline_color_attachment_pixel_formats),
+                            forward_pipeline_color_attachment_write_masks, array_count(forward_pipeline_color_attachment_write_masks),
+                            view.depthStencilPixelFormat, forward_blending_enabled);
 
     metal_render_context.add_compute_pipeline = metal_make_compute_pipeline(device, shader_library, "get_random_numbers");
     // make the number of threads in the threadgroup a multiple of threadExecutionWidth
