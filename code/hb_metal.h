@@ -60,8 +60,10 @@ struct MetalRenderContext
     // NOTE(gh) Those that are marked as 'singlepass' will be sharing 
     // single renderpass & color attachments will be sharing single renderpass & color attachments
     id<MTLRenderPipelineState> singlepass_cube_pipeline;
-    id<MTLRenderPipelineState> singlepass_line_pipeline;
     id<MTLRenderPipelineState> singlepass_deferred_lighting_pipeline;
+
+    // Forward Pipelines
+    id<MTLRenderPipelineState> forward_line_pipeline;
     id<MTLRenderPipelineState> screen_space_triangle_pipeline;
 
     // Compute Pipelines
@@ -75,11 +77,16 @@ struct MetalRenderContext
     // TODO(gh) There might be more effeicient way of doing this, 
     // so think about tiled forward rendering or clustered forward rendering
     // when we 'really' need it. 
+    // TODO(gh) Also, we can combine this with the singlepass pretty easily
     MTLRenderPassDescriptor *forward_renderpass;
 
     // NOTE(gh) G buffer generation + lighting renderpass
     // TODO(gh) One downside of this single pass is that we don't have access to depth buffer (wait, what?)
-    MTLRenderPassDescriptor *single_lighting_renderpass; 
+    MTLRenderPassDescriptor *single_renderpass; 
+
+    // Fences
+    // Fence to detect whether the deferred rendering has been finished beforedoing the foward rendering
+    id<MTLFence> forwardRenderFence;
 
     // Textures
     id<MTLTexture> g_buffer_position_texture;

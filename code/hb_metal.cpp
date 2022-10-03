@@ -78,7 +78,25 @@ perspective_projection(f32 fov, f32 n, f32 f, f32 width_over_height)
     return result;
 }
 
-internal void
+inline void
+metal_update_fence(id<MTLRenderCommandEncoder> encoder, id<MTLFence> fence, MTLRenderStages after_render_stage)
+{
+    // Make GPU signal the fence after executing the specified render stage
+    [encoder updateFence : 
+            fence
+            afterStages:after_render_stage];
+}
+
+inline void
+metal_wait_for_fence(id<MTLRenderCommandEncoder> encoder, id<MTLFence> fence, MTLRenderStages before_render_stage)
+{
+    // Make GPU wait for the fence before executing the specified render stage
+    [encoder waitForFence : 
+            fence
+            beforeStages : before_render_stage];
+}
+
+inline void
 metal_set_viewport(id<MTLRenderCommandEncoder> render_encoder, f32 x, f32 y, f32 width, f32 height, f32 near, f32 far)
 {
     MTLViewport viewport = {};
@@ -93,7 +111,7 @@ metal_set_viewport(id<MTLRenderCommandEncoder> render_encoder, f32 x, f32 y, f32
     [render_encoder setViewport: viewport];
 }
 
-internal void
+inline void
 metal_set_scissor_rect(id<MTLRenderCommandEncoder> render_encoder, u32 x, u32 y, u32 width, u32 height)
 {
     MTLScissorRect scissor_rect = {};
@@ -108,7 +126,7 @@ metal_set_scissor_rect(id<MTLRenderCommandEncoder> render_encoder, u32 x, u32 y,
 
 // NOTE(joon) creates a shared memory between CPU and GPU
 // TODO(joon) Do we want the buffer to be more than 4GB?
-internal MetalSharedBuffer
+inline MetalSharedBuffer
 metal_make_shared_buffer(id<MTLDevice> device, u64 max_size)
 {
     MetalSharedBuffer result = {};
@@ -122,14 +140,14 @@ metal_make_shared_buffer(id<MTLDevice> device, u64 max_size)
     return result;
 }
 
-internal void
+inline void
 metal_write_shared_buffer(MetalSharedBuffer *buffer, void *source, u64 source_size)
 {
     assert(source_size <= buffer->max_size);
     memcpy(buffer->memory, source, source_size);
 }
 
-internal MetalManagedBuffer
+inline MetalManagedBuffer
 metal_make_managed_buffer(id<MTLDevice> device, u64 size)
 {
     MetalManagedBuffer result = {};
@@ -144,7 +162,7 @@ metal_make_managed_buffer(id<MTLDevice> device, u64 size)
 }
 
 
-internal void
+inline void
 metal_flush_managed_buffer(MetalManagedBuffer *buffer, u64 size_to_flush)
 {
     assert(size_to_flush <= buffer->size);
@@ -152,7 +170,7 @@ metal_flush_managed_buffer(MetalManagedBuffer *buffer, u64 size_to_flush)
     [buffer->buffer didModifyRange:range];
 }
 
-internal MetalManagedBuffer
+inline MetalManagedBuffer
 metal_make_managed_buffer(id<MTLDevice> device, void *source, u64 size)
 {
     MetalManagedBuffer result = metal_make_managed_buffer(device, size);
@@ -163,7 +181,7 @@ metal_make_managed_buffer(id<MTLDevice> device, void *source, u64 size)
 }
 
 // NOTE(gh) no bound checking here
-internal MetalPrivateBuffer
+inline MetalPrivateBuffer
 metal_make_private_buffer(id<MTLDevice> device, void *source, u64 size)
 {
     MetalPrivateBuffer result = {};
@@ -179,37 +197,37 @@ metal_make_private_buffer(id<MTLDevice> device, void *source, u64 size)
 
 // NOTE(joon) wrapping functions
 // TODO(joon) might do some interesting things by inserting something here...(i.e renderdoc?)
-internal void
+inline void
 metal_set_render_pipeline(id<MTLRenderCommandEncoder> render_encoder, id<MTLRenderPipelineState> pipeline)
 {
     [render_encoder setRenderPipelineState : pipeline];
 }
 
-internal void
+inline void
 metal_set_triangle_fill_mode(id<MTLRenderCommandEncoder> render_encoder, MTLTriangleFillMode fill_mode)
 {
     [render_encoder setTriangleFillMode : fill_mode];
 }
 
-internal void
+inline void
 metal_set_front_facing_winding(id<MTLRenderCommandEncoder> render_encoder, MTLWinding winding)
 {
     [render_encoder setFrontFacingWinding :winding];
 }
 
-internal void
+inline void
 metal_set_cull_mode(id<MTLRenderCommandEncoder> render_encoder, MTLCullMode cull_mode)
 {
     [render_encoder setCullMode :cull_mode];
 }
 
-internal void
+inline void
 metal_set_detph_stencil_state(id<MTLRenderCommandEncoder> render_encoder, id<MTLDepthStencilState> depth_stencil_state)
 {
     [render_encoder setDepthStencilState: depth_stencil_state];
 }
 
-internal void
+inline void
 metal_set_vertex_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u64 size, u64 index)
 {
     [render_encoder setVertexBytes: data 
@@ -217,7 +235,7 @@ metal_set_vertex_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u
                     atIndex: index]; 
 }
 
-internal void
+inline void
 metal_set_vertex_buffer(id<MTLRenderCommandEncoder> render_encoder, id<MTLBuffer> buffer, u64 offset, u64 index)
 {
     [render_encoder setVertexBuffer:buffer
@@ -225,34 +243,34 @@ metal_set_vertex_buffer(id<MTLRenderCommandEncoder> render_encoder, id<MTLBuffer
                     atIndex:index];
 }
 
-internal void
+inline void
 metal_set_vertex_texture(id<MTLRenderCommandEncoder> render_encoder, id<MTLTexture> texture, u64 index)
 {
     [render_encoder setVertexTexture : texture
                     atIndex : index];
 }
 
-internal void
+inline void
 metal_set_fragment_texture(id<MTLRenderCommandEncoder> render_encoder, id<MTLTexture> texture, u64 index)
 {
     [render_encoder setFragmentTexture : texture
                              atIndex:index];
 }
 
-internal void
+inline void
 metal_set_fragment_sampler(id<MTLRenderCommandEncoder> render_encoder, id<MTLSamplerState> sampler, u64 index)
 {
     [render_encoder setFragmentSamplerState : sampler
                                 atIndex : index];
 }
 
-internal void
+inline void
 metal_set_depth_bias(id<MTLRenderCommandEncoder> render_encoder, f32 depth_bias, f32 slope_scale, f32 clamp)
 {
     [render_encoder setDepthBias:depth_bias slopeScale:slope_scale clamp:clamp];
 }
 
-internal void
+inline void
 metal_draw_non_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, 
                         u64 vertex_start, u64 vertex_count)
 {
@@ -262,7 +280,7 @@ metal_draw_non_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveT
                     vertexCount:vertex_count];
 }
 
-internal void
+inline void
 metal_draw_non_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type,
                                 u64 vertex_start, u64 vertex_count, u64 instance_start, u64 instance_count)
 {
@@ -273,7 +291,7 @@ metal_draw_non_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTL
                     baseInstance: instance_start];
 }
 
-internal void
+inline void
 metal_draw_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, id<MTLBuffer> index_buffer, u64 index_offset, u64 index_count)
 {
     [render_encoder drawIndexedPrimitives : primitive_type
@@ -283,7 +301,7 @@ metal_draw_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType 
             indexBufferOffset : index_offset];
 }
 
-internal void
+inline void
 metal_draw_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type,
                             id<MTLBuffer> index_buffer, u64 index_count, u64 instance_count)
 {
@@ -295,13 +313,13 @@ metal_draw_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTLPrim
                     instanceCount:instance_count];
 }
 
-internal void
+inline void
 metal_end_encoding(id<MTLRenderCommandEncoder> render_encoder)
 {
     [render_encoder endEncoding];
 }
 
-internal void
+inline void
 metal_present_drawable(id<MTLCommandBuffer> command_buffer, MTKView *view)
 {
     if(view.currentDrawable)
@@ -314,20 +332,20 @@ metal_present_drawable(id<MTLCommandBuffer> command_buffer, MTKView *view)
     }
 }
 
-internal void
+inline void
 metal_commit_command_buffer(id<MTLCommandBuffer> command_buffer)
 {
     // NOTE(gh) also enqueues the command buffer into command queue
     [command_buffer commit];
 }
 
-internal void
+inline void
 metal_wait_until_command_buffer_completed(id<MTLCommandBuffer> command_buffer)
 {
     [command_buffer waitUntilCompleted];
 }
 
-internal id<MTLRenderPipelineState>
+inline id<MTLRenderPipelineState>
 metal_make_render_pipeline(id<MTLDevice> device,
                     const char *pipeline_name, const char *vertex_shader_name, const char *fragment_shader_name,
                     id<MTLLibrary> shader_library,
@@ -382,7 +400,7 @@ metal_make_render_pipeline(id<MTLDevice> device,
 }
 
 
-internal id<MTLTexture>
+inline id<MTLTexture>
 metal_make_texture_2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, 
                   MTLTextureType type, MTLTextureUsage usage, MTLStorageMode storage_mode)
 {
@@ -400,7 +418,7 @@ metal_make_texture_2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 wid
     return result;
 }
 
-internal id<MTLDepthStencilState>
+inline id<MTLDepthStencilState>
 metal_make_depth_state(id<MTLDevice> device, MTLCompareFunction compare_function, b32 should_enable_write)
 {
     /*
@@ -418,7 +436,7 @@ metal_make_depth_state(id<MTLDevice> device, MTLCompareFunction compare_function
     return result;
 }
 
-internal MTLRenderPassDescriptor *
+inline MTLRenderPassDescriptor *
 metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
                       MTLStoreAction *store_actions, u32 store_action_count,
                       id<MTLTexture> *textures, u32 texture_count,
@@ -428,13 +446,20 @@ metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
                       f32 depth_clear_value)
 {
     assert(load_action_count == store_action_count); 
-    assert(load_action_count == texture_count); 
-    assert(load_action_count == clear_color_count);
+    if(textures)
+    {
+        assert(load_action_count == texture_count); 
+    }
+
+    if(clear_colors)
+    {
+        assert(load_action_count == clear_color_count);
+    }
 
     MTLRenderPassDescriptor *result = [MTLRenderPassDescriptor new];
 
     for(u32 color_attachment_index = 0;
-            color_attachment_index < texture_count;
+            color_attachment_index < load_action_count;
             ++color_attachment_index)
     {
         result.colorAttachments[color_attachment_index].loadAction = load_actions[color_attachment_index]; // Will DONTCARE work here?
@@ -463,7 +488,7 @@ metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
     return result;
 }
 
-internal id<MTLSamplerState> 
+inline id<MTLSamplerState> 
 metal_make_sampler(id<MTLDevice> device, b32 normalized_coordinates, MTLSamplerAddressMode address_mode, 
                    MTLSamplerMinMagFilter min_mag_filter, MTLSamplerMipFilter mip_filter, MTLCompareFunction compare_function)
 {
@@ -486,7 +511,7 @@ metal_make_sampler(id<MTLDevice> device, b32 normalized_coordinates, MTLSamplerA
 }
        
 /////////////// NOTE(gh) compute
-internal id<MTLComputePipelineState>
+inline id<MTLComputePipelineState>
 metal_make_compute_pipeline(id<MTLDevice> device, id<MTLLibrary> shader_library, const char *compute_function_name)
 {
     id<MTLFunction> compute_function = 0;
@@ -500,13 +525,13 @@ metal_make_compute_pipeline(id<MTLDevice> device, id<MTLLibrary> shader_library,
     return result;
 }
 
-internal void
+inline void
 metal_set_compute_pipeline(id<MTLComputeCommandEncoder> encoder, id<MTLComputePipelineState> pipeline)
 {
     [encoder setComputePipelineState : pipeline];
 }
 
-internal void
+inline void
 metal_set_compute_buffer(id<MTLComputeCommandEncoder> encoder, id<MTLBuffer> buffer, u64 offset, u64 index)
 {
     [encoder setBuffer : buffer
@@ -514,7 +539,7 @@ metal_set_compute_buffer(id<MTLComputeCommandEncoder> encoder, id<MTLBuffer> buf
             atIndex : index];
 }
 
-internal void
+inline void
 metal_dispatch_threads(id<MTLComputeCommandEncoder> encoder, v3u threads_per_grid, v3u threads_per_group)
 {
     // NOTE(gh)
@@ -541,7 +566,7 @@ metal_dispatch_threads(id<MTLComputeCommandEncoder> encoder, v3u threads_per_gri
         threadsPerThreadgroup : metal_make_mtl_size(threads_per_group)];
 }
 
-internal void
+inline void
 metal_end_encoding(id<MTLComputeCommandEncoder> encoder)
 {
     [encoder endEncoding];
@@ -549,7 +574,7 @@ metal_end_encoding(id<MTLComputeCommandEncoder> encoder)
 
 // TODO(gh) Set things properly that were not been documented yet
 // i.e meshThreadgroupSizeIsMultipleOfThreadExecutionWidth, payloadMemoryLength
-internal id<MTLRenderPipelineState>
+inline id<MTLRenderPipelineState>
 metal_make_mesh_render_pipeline(id<MTLDevice> device,
                     const char *pipeline_name, 
                     const char *object_function_name, 
@@ -601,7 +626,7 @@ metal_make_mesh_render_pipeline(id<MTLDevice> device,
     return result;
 }
 
-internal void
+inline void
 metal_set_object_buffer(id<MTLRenderCommandEncoder> encoder, id<MTLBuffer> buffer, u64 offset, u64 index)
 {
     [encoder setObjectBuffer : buffer 
@@ -609,7 +634,7 @@ metal_set_object_buffer(id<MTLRenderCommandEncoder> encoder, id<MTLBuffer> buffe
                 atIndex : index];
 }
 
-internal void
+inline void
 metal_set_object_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u64 size, u64 index)
 {
     [render_encoder setObjectBytes: data 
@@ -617,7 +642,7 @@ metal_set_object_bytes(id<MTLRenderCommandEncoder> render_encoder, void *data, u
                     atIndex: index]; 
 }
 
-internal void
+inline void
 metal_set_mesh_buffer(id<MTLRenderCommandEncoder> encoder, id<MTLBuffer> buffer, u64 offset, u64 index)
 {
     [encoder setMeshBuffer : buffer 
@@ -625,7 +650,7 @@ metal_set_mesh_buffer(id<MTLRenderCommandEncoder> encoder, id<MTLBuffer> buffer,
                 atIndex : index];
 }
 
-internal void
+inline void
 metal_set_mesh_bytes(id<MTLRenderCommandEncoder> encoder, void *data, u64 size, u64 index)
 {
     [encoder setMeshBytes: 
@@ -634,13 +659,20 @@ metal_set_mesh_bytes(id<MTLRenderCommandEncoder> encoder, void *data, u64 size, 
                     atIndex: index]; 
 }
 
-internal void
+inline void
 metal_draw_mesh_thread_groups(id<MTLRenderCommandEncoder> encoder, v3u object_threadgroups_per_grid, v3u thread_per_object_threadgroup, v3u thread_per_mesh_threadgroup)
 {
     [encoder drawMeshThreadgroups : 
             metal_make_mtl_size(object_threadgroups_per_grid)
             threadsPerObjectThreadgroup : metal_make_mtl_size(thread_per_object_threadgroup)
             threadsPerMeshThreadgroup : metal_make_mtl_size(thread_per_mesh_threadgroup)];
+}
+
+inline id<MTLFence>
+metal_make_fence(id<MTLDevice> device)
+{
+    id<MTLFence> result = [device newFence];
+    return result;
 }
 
 

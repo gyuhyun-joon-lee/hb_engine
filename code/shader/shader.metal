@@ -4,6 +4,36 @@
 
 #include "shader_common.h"
 
+struct LineVertexOutput
+{
+    float4 clip_p[[position]];
+    float3 color;
+};
+
+vertex LineVertexOutput
+forward_line_vertex(uint vertex_ID [[vertex_id]],
+            constant PerFrameData *per_frame_data [[buffer(0)]],
+            constant float *vertices [[buffer(1)]],
+            constant float *color [[buffer(2)]])
+{
+    LineVertexOutput result = {};
+
+    float3 world_p = float3(vertices[3*vertex_ID + 0], vertices[3*vertex_ID + 1], vertices[3*vertex_ID + 2]);
+
+    result.clip_p = per_frame_data->proj_view * float4(world_p, 1.0f);
+
+    result.color = *(constant float3 *)color;
+
+    return result;
+}
+
+fragment float4 
+forward_line_frag(LineVertexOutput vertex_output [[stage_in]])
+{
+    // NOTE(gh) This will automatically output to 0th color attachment, which is drawableTexture
+    return float4(vertex_output.color, 1.0f);
+}
+
 float
 get_gradient_value(uint hash, float x, float y, float z)
 {
