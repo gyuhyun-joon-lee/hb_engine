@@ -130,18 +130,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_AABB:
             {
             }break;
-
-            case EntityType_Grass:
-            {
-#if 0
-                wind_phase = u * wiggliness + hash * two_pi + time
-                control_point_1.z += 0.1 * sin(wind_phase);
-                control_point_2.z += 0.2 * sin(wind_phase);
-                entity->tilt = 2.5f + sinf(entity->tilt_dt);
-#endif
-                populate_grass_vertices(entity->p, entity->blade_width, entity->stride, entity->height, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
-                                        entity->vertices, entity->vertex_count, entity->hash, game_state->accumulated_dt);
-            }break;
         }
     }
 
@@ -170,15 +158,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                           entity->p, entity->dim, entity->color, 
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count, true);
             }break;
-
-            case EntityType_Grass:
-            {
-                push_grass(platform_render_push_buffer, entity->p, entity->dim, entity->color, 
-                            entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
-            }break;
         }
     }
-
-    game_state->accumulated_dt += 2.0f*platform_input->dt_per_frame;
 }
 

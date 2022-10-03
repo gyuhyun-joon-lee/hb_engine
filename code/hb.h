@@ -27,7 +27,6 @@ struct GameState
     // TODO(gh) seed this properly
     RandomSeries random_series;
 
-    f32 accumulated_dt; // time from the game started
     // TODO(gh) More structured light information
 };
 

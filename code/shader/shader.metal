@@ -4,7 +4,6 @@
 
 #include "shader_common.h"
 
-
 float
 get_gradient_value(uint hash, float x, float y, float z)
 {
@@ -154,7 +153,7 @@ screen_space_triangle_frag(ScreenSpaceTriangleVertexOutput vertex_output [[stage
     float factor = 16.0f;
     float x = factor * vertex_output.p0to1.x; 
     float y = factor * vertex_output.p0to1.y; 
-    float perlin_noise_value = perlin_noise01(x, y, vertex_output.time_elasped);
+    float perlin_noise_value = perlin_noise01(x, y, 0.0f);
 
     float4 result = float4(perlin_noise_value, perlin_noise_value, perlin_noise_value, 1.0f);
 
@@ -260,7 +259,8 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
     payloadOutput->per_grass_data[thread_index].blade_width = 0.15f;
     payloadOutput->per_grass_data[thread_index].stride = 2.2f;
     payloadOutput->per_grass_data[thread_index].height = 2.5f;
-    payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
+    payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos(0.0f), sin(0.0f));
+    // payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
     payloadOutput->per_grass_data[thread_index].bend = 0.5f;
     payloadOutput->per_grass_data[thread_index].wiggliness = 2.1f;
     payloadOutput->per_grass_data[thread_index].time_elasped_from_start = *time_elasped_from_start;
@@ -311,7 +311,7 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     float wiggliness = per_grass_data->wiggliness;
     packed_float3 color = per_grass_data->color;
     uint hash = per_grass_data->hash;
-    float time_elasped_from_start = per_grass_data->time_elasped_from_start;
+    float time_elasped_from_start = 3.5f*per_grass_data->time_elasped_from_start;
 
     float3 p0 = center;
 
@@ -326,7 +326,6 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
 
     float t = (float)(thread_index / 2) / (float)grass_divide_count;
     float hash_value = hash*pi_32;
-    // TODO(gh) how do we get time since engine startup?
     // float exponent = 4.0f*(t-1.0f);
     // float wind_factor = 0.5f*powr(euler_contant, exponent) * t * wiggliness + hash_value + time_elasped_from_start;
     float wind_factor = t * wiggliness + hash_value + time_elasped_from_start;

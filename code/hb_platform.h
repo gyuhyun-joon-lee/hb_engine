@@ -85,6 +85,7 @@ struct PlatformInput
     b32 space;
 
     f32 dt_per_frame;
+    f32 time_elapsed_from_start;
 };
 
 // TODO(gh) Make this string to be similar to what Casey has done in his HH project

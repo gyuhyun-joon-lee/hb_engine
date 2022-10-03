@@ -780,9 +780,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(cube_vertices) / 3);
 #endif
 
-
-
-
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
@@ -917,10 +914,34 @@ int main(void)
     srand(time(NULL));
     RandomSeries random_series = start_random_series(rand()); 
 
-    u32 output_width = 256;
-    u32 output_height = 256;
+    // TODO(gh) The value is not changing for now, but later we will move this to game code
+    // and change it per frame. (and maybe also measure the performance)
+    u32 perlin_output_width = 512;
+    u32 perlin_output_height = 512;
+    f32 *perlin_values = (f32 *)malloc(sizeof(f32) * perlin_output_width * perlin_output_height);
+    u32 perlin_value_count = 0;
 
-    u32 output_size = sizeof(u32)*output_width*output_height + sizeof(BMPFileHeader);
+    for(u32 y = 0;
+            y < perlin_output_height;
+            ++y)
+    {
+        for(u32 x = 0;
+                x < perlin_output_width;
+                ++x)
+        {
+            f32 xf = x / (f32)perlin_output_width;
+            f32 yf = y / (f32)perlin_output_height;
+            f32 factor = 16.0f;
+
+            float perlin_value = perlin_noise01(factor*xf, factor * yf, 0.0f);
+            perlin_values[perlin_value_count++] = perlin_value;
+        }
+    }
+    assert(perlin_value_count == (perlin_output_width * perlin_output_height));
+
+    // NOTE(gh) Enable this to see the result of the perlin noise
+#if 1
+    u32 output_size = sizeof(u32)*perlin_output_width*perlin_output_height + sizeof(BMPFileHeader);
     u8 *output = (u8 *)malloc(output_size);
     zero_memory(output, output_size);
     
@@ -930,13 +951,13 @@ int main(void)
     bmp_header->pixel_offset = sizeof(BMPFileHeader);
 
     bmp_header->header_size = sizeof(BMPFileHeader) - 14;
-    bmp_header->width = output_width;
-    bmp_header->height = output_height;
+    bmp_header->width = perlin_output_width;
+    bmp_header->height = perlin_output_height;
     bmp_header->color_plane_count = 1;
     bmp_header->bits_per_pixel = 32;
     bmp_header->compression = 3;
 
-    bmp_header->image_size = sizeof(u32)*output_width*output_height;
+    bmp_header->image_size = sizeof(u32)*perlin_output_width*perlin_output_height;
     bmp_header->pixels_in_meter_x = 11811;
     bmp_header->pixels_in_meter_y = 11811;
     bmp_header->red_mask = 0x00ff0000;
@@ -944,32 +965,27 @@ int main(void)
     bmp_header->blue_mask = 0x000000ff;
     bmp_header->alpha_mask = 0xff000000;
 
-#if 1
     // Testing perlin noise output
     BMPFileHeader file_header = {};
     file_header.file_header = 0x4D42; // BM in little endian
-    file_header.file_size = sizeof(file_header) + 4 * output_width * output_height;
+    file_header.file_size = sizeof(file_header) + 4 * perlin_output_width * perlin_output_height;
     file_header.pixel_offset = sizeof(BMPFileHeader);
 
     u8 *pixels = (u8 *)output + sizeof(BMPFileHeader);
     u8 *row = (u8 *)pixels;
     f32 z = 0.0f;
     for(u32 y = 0;
-            y < output_height;
+            y < perlin_output_height;
             ++y)
     {
         u32 *pixel = (u32 *)row;
         for(u32 x = 0;
-                x < output_width;
+                x < perlin_output_width;
                 ++x)
         {
-            f32 xf = x / (f32)output_width;
-            f32 yf = y / (f32)output_height;
-
-            float perlin_result = perlin_noise01(xf*8.0f, yf*8.0f, 0.0f) * 1.0f;
-
             // f32 perlin_value = perlin_noise01((f32)x, (f32)y, z);
-            u8 single_channel_value = (u8)round_r32_to_u32(perlin_result * 255.0f);
+            f32 perlin_value = perlin_values[y * perlin_output_width + x];
+            u8 single_channel_value = (u8)round_r32_to_u32(perlin_value * 255.0f);
 
             *pixel = (0xff << 24) |
                     (single_channel_value << 16) |
@@ -978,7 +994,7 @@ int main(void)
             pixel++;
         }
 
-        row += 4 * output_width;
+        row += 4 * perlin_output_width;
     }
 
     debug_macos_write_entire_file("/Volumes/meka/HB_engine/misc/output.bmp", output, output_size);
@@ -1107,21 +1123,25 @@ int main(void)
                                                                 error: &error];
     check_ns_error(error);
 
-    MTLPixelFormat cube_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm, // placeholder for single pass deferred rendering
-                                                                     MTLPixelFormatRGBA32Float, // position
-                                                                     MTLPixelFormatRGBA32Float, // normal
-                                                                     MTLPixelFormatRGBA8Unorm}; // color
-    MTLColorWriteMask cube_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskNone,
-                                                                      MTLColorWriteMaskAll, 
-                                                                      MTLColorWriteMaskAll,
-                                                                      MTLColorWriteMaskAll};
+    // NOTE(gh) Not entirely sure if this is the right way to do, but I'll just do this
+    // because it seems like every pipeline in singlepass should share same color attachments
+    MTLPixelFormat singlepass_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm, // placeholder for single pass deferred rendering
+                                                                  MTLPixelFormatRGBA32Float, // position
+                                                                  MTLPixelFormatRGBA32Float, // normal
+                                                                  MTLPixelFormatRGBA8Unorm}; // color
+    // TODO(gh) The first write mask(drawable texture) should really be MaskNone, but doing this might help optimizing the HSR
+    // But I should double check on this later(and also, do I even care because the forward rendering should remain simple anyway)
+    MTLColorWriteMask singlepass_color_attachment_write_masks[] = {MTLColorWriteMaskAll,
+                                                                   MTLColorWriteMaskAll, 
+                                                                   MTLColorWriteMaskAll,
+                                                                   MTLColorWriteMaskAll};
     metal_render_context.singlepass_cube_pipeline = 
         metal_make_render_pipeline(device, "Cube Pipeline", 
                             "singlepass_cube_vertex", "singlepass_cube_frag", 
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
-                            cube_pipeline_color_attachment_pixel_formats, array_count(cube_pipeline_color_attachment_pixel_formats),
-                            cube_pipeline_color_attachment_write_masks, array_count(cube_pipeline_color_attachment_write_masks),
+                            singlepass_color_attachment_pixel_formats, array_count(singlepass_color_attachment_pixel_formats),
+                            singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
                             view.depthStencilPixelFormat);
 
     MTLPixelFormat deferred_lighting_pipeline_color_attachment_pixel_formats[] = 
@@ -1139,8 +1159,8 @@ int main(void)
                             "singlepass_deferred_lighting_vertex", "singlepass_deferred_lighting_frag", 
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
-                            deferred_lighting_pipeline_color_attachment_pixel_formats, array_count(deferred_lighting_pipeline_color_attachment_pixel_formats),
-                            deferred_lighting_pipeline_color_attachment_write_masks, array_count(deferred_lighting_pipeline_color_attachment_write_masks),
+                            singlepass_color_attachment_pixel_formats, array_count(singlepass_color_attachment_pixel_formats),
+                            singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
                             MTLPixelFormatDepth32Float);
 
     metal_render_context.directional_light_shadowmap_pipeline = 
@@ -1152,21 +1172,13 @@ int main(void)
                             0, 0,
                             MTLPixelFormatDepth32Float);
 
-    MTLPixelFormat line_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm, // This is the default pixel format for displaying
-                                                                    MTLPixelFormatRGBA32Float,
-                                                                    MTLPixelFormatRGBA32Float,
-                                                                    MTLPixelFormatRGBA8Unorm}; 
-    MTLColorWriteMask line_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll,
-                                                                      MTLColorWriteMaskNone,
-                                                                      MTLColorWriteMaskNone,
-                                                                      MTLColorWriteMaskNone};
     metal_render_context.singlepass_line_pipeline = 
         metal_make_render_pipeline(device, "Line Pipeline", 
                             "singlepass_line_vertex", "singlepass_line_frag",
                             shader_library,
                             MTLPrimitiveTopologyClassLine,
-                            line_pipeline_color_attachment_pixel_formats, array_count(line_pipeline_color_attachment_pixel_formats),
-                            line_pipeline_color_attachment_write_masks, array_count(line_pipeline_color_attachment_write_masks),
+                            singlepass_color_attachment_pixel_formats, array_count(singlepass_color_attachment_pixel_formats),
+                            singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
                             view.depthStencilPixelFormat);
 
     MTLPixelFormat screen_space_triangle_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm}; // This is the default pixel format for displaying
@@ -1201,8 +1213,8 @@ int main(void)
                                         "singlepass_cube_frag",
                                         shader_library,
                                         MTLPrimitiveTopologyClassTriangle,
-                                        cube_pipeline_color_attachment_pixel_formats, array_count(cube_pipeline_color_attachment_pixel_formats),
-                                        cube_pipeline_color_attachment_write_masks, array_count(cube_pipeline_color_attachment_write_masks),
+                                        singlepass_color_attachment_pixel_formats, array_count(singlepass_color_attachment_pixel_formats),
+                                        singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
                                         view.depthStencilPixelFormat,
                                         max_object_thread_count_per_object_threadgroup,
                                         max_mesh_threadgroup_count_per_mesh_grid,
@@ -1364,6 +1376,7 @@ int main(void)
     while(is_game_running)
     {
         platform_input.dt_per_frame = target_seconds_per_frame;
+        platform_input.time_elapsed_from_start = time_elapsed_from_start;
         macos_handle_event(app, window, &platform_input);
 
         // TODO(gh): check if the focued window is working properly
