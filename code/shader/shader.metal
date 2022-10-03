@@ -193,6 +193,7 @@ screen_space_triangle_frag(ScreenSpaceTriangleVertexOutput vertex_output [[stage
 struct ShowPerlinNoiseGridVertexOutput
 {
     float4 clip_p [[position]];
+    float3 color;
 };
 
 vertex ShowPerlinNoiseGridVertexOutput
@@ -200,7 +201,8 @@ forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
                             uint instanceID [[instance_id]],
                              constant float *vertices [[buffer(0)]], 
                              constant float2 *grid_dim [[buffer(1)]],
-                             constant PerFrameData *per_frame_data [[buffer(2)]])
+                             constant float *perlin_values [[buffer(2)]],
+                             constant PerFrameData *per_frame_data [[buffer(3)]])
 {
     ShowPerlinNoiseGridVertexOutput result = {};
 
@@ -215,6 +217,8 @@ forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
     world_p.x += grid_x * grid_dim->x;
 
     result.clip_p = per_frame_data->proj_view * world_p;
+    float perlin_value = perlin_values[instanceID];
+    result.color = float3(perlin_value, perlin_value, perlin_value);
 
     return result;
 }
@@ -222,7 +226,7 @@ forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
 fragment float4
 forward_show_perlin_noise_grid_frag(ShowPerlinNoiseGridVertexOutput vertex_output [[stage_in]])
 {
-    float4 result = float4(1, 0, 0, 0.2f);
+    float4 result = float4(vertex_output.color, 0.6f);
     return result;
 }
 

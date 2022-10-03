@@ -584,7 +584,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                                            render_push_buffer->width_over_height);
         per_frame_data.proj_view = transpose(proj * render_push_buffer->view);
 
-#if 1
         // NOTE(gh) first, render all the grasses with mesh render pipeline
         metal_set_render_pipeline(render_encoder, render_context->grass_mesh_render_pipeline);
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
@@ -627,6 +626,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                                                       object_thread_per_threadgroup_count_y, 
                                                       1);
         v3u mesh_thread_per_threadgroup_count = V3u(39, 1, 1); // same as index count for the grass blade
+#if 1
         metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
                                       object_thread_per_threadgroup_count, 
                                       mesh_thread_per_threadgroup_count);
@@ -747,7 +747,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
 
-        metal_update_fence(render_encoder, render_context->forwardRenderFence, MTLRenderStageFragment);
+        // TODO(gh) Should this be tile stage or fragment stage?
+        metal_update_fence(render_encoder, render_context->forwardRenderFence, MTLRenderStageTile);
 
         metal_end_encoding(render_encoder);
 
@@ -792,10 +793,11 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
         // indierct draw method?
         // NTOE(gh) show perlin noise grid on top of the grass grid
+        v3 plane_dim = V3(0.9f*one_object_thread_worth_dim, 0.0f);
         v3 plane_left_bottom_p = floor_left_bottom_p + V3(0, 0, 3.0f);
-        v3 plane_right_bottom_p = plane_left_bottom_p + V3(one_object_thread_worth_dim.x, 0, 0);
-        v3 plane_top_left_p = plane_left_bottom_p + V3(0, one_object_thread_worth_dim.y, 0);
-        v3 plane_top_right_p = plane_top_left_p + V3(one_object_thread_worth_dim.x, 0, 0);
+        v3 plane_right_bottom_p = plane_left_bottom_p + V3(plane_dim.x, 0, 0);
+        v3 plane_top_left_p = plane_left_bottom_p + V3(0, plane_dim.y, 0);
+        v3 plane_top_right_p = plane_top_left_p + V3(plane_dim.x, 0, 0);
         v3 plane_vertices[] = 
         {
             plane_left_bottom_p,
@@ -810,7 +812,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         metal_set_vertex_bytes(forward_render_encoder, plane_vertices, array_size(plane_vertices), 0);
         metal_set_vertex_bytes(forward_render_encoder, &one_object_thread_worth_dim, sizeof(one_object_thread_worth_dim), 1);
-        metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 2);
+        metal_set_vertex_buffer(forward_render_encoder, render_context->perlin_value_buffer.buffer, 0, 2);
+        metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 3);
         metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
                                         0, 6, 0, grass_per_grid_count_x * grass_per_grid_count_y);
 
@@ -837,7 +840,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_end_encoding(forward_render_encoder);
 
         metal_commit_command_buffer(command_buffer);
-        // TODO(gh) Double check whether this is syncing correctly...
+        // TODO(gh) Don't wait, use fence?
         metal_wait_until_command_buffer_completed(command_buffer);
     }
 }
@@ -1362,6 +1365,7 @@ int main(void)
     metal_render_context.combined_index_buffer = metal_make_managed_buffer(device, megabytes(256));
 
     metal_render_context.random_grass_hash_buffer = metal_make_managed_buffer(device, random_grass_hashes, sizeof(u32) * random_grass_hash_count);
+    metal_render_context.perlin_value_buffer = metal_make_managed_buffer(device, perlin_values, sizeof(f32) * perlin_output_width * perlin_output_height);
 
     metal_render_context.device = device;
     metal_render_context.view = view;

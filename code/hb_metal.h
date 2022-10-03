@@ -110,6 +110,7 @@ struct MetalRenderContext
     MetalManagedBuffer cube_outward_facing_index_buffer;
 
     MetalManagedBuffer random_grass_hash_buffer;
+    MetalManagedBuffer perlin_value_buffer;
 };
 
 #endif
