@@ -307,16 +307,10 @@ struct PlatformRenderPushBuffer
     void *device;
     f32 width_over_height; 
 
-    // NOTE(gh) game code needs to fill these up
-    m4x4 view;
-    f32 camera_near;
-    f32 camera_far;
-    f32 camera_fov;
-    v3 clear_color;
-
-    // TODO(gh) Make configuration as struct
-    b32 enable_complex_lighting; // when disabled, only use ambient value
-    b32 enable_shadow;
+    // TODO(gh) Rename this into command buffer or something
+    u8 *base;
+    u32 total_size;
+    u32 used;
 
     // NOTE(gh) This is a cpu side memory, needs to be flushed later to the GPU.
     void *combined_vertex_buffer;
@@ -327,10 +321,19 @@ struct PlatformRenderPushBuffer
     u32 index_buffer_size;
     u32 used_index_buffer;
 
-    // TODO(gh) Rename this into command buffer or something
-    u8 *base;
-    u32 total_size;
-    u32 used;
+    // NOTE(gh) game code needs to fill these up
+    m4x4 view;
+    f32 camera_near;
+    f32 camera_far;
+    f32 camera_fov;
+    v3 clear_color;
+
+    // Configurations
+    // TODO(gh) Make configuration as struct
+    b32 enable_complex_lighting; // when disabled, only use ambient value
+    b32 enable_shadow;
+    b32 enable_show_perlin_noise_grid; // show perlin noise on top of the floor
+    b32 enable_grass_mesh_rendering;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void (name)(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory, PlatformRenderPushBuffer *platform_render_push_buffer)

@@ -473,7 +473,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
     metal_set_render_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
 
     local_persist f32 rad = 2.4f;
-    v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 100); 
+    v3 directional_light_p = V3(100 * cosf(rad), 100 * sinf(rad), 20); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
     // TODO(gh) These are totally made up near, far, width values 
@@ -549,6 +549,12 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                 }
             }break;
 
+            case RenderEntryType_Grass:
+            {
+                RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
+                consumed += sizeof(*entry);
+            }break;
+
             default: 
             {
                 invalid_code_path;
@@ -594,9 +600,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_cull_mode(render_encoder, MTLCullModeNone); 
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
-        assert(grass_per_grid_count_x % object_thread_per_threadgroup_count_x == 0);
-        assert(grass_per_grid_count_y % object_thread_per_threadgroup_count_y == 0);
-
         // TODO(gh) This was part of game code, and I want to make it stay that way. 
         // Is there any way to do so?
         v3 floor_center = V3(0, 0, 0);
@@ -605,33 +608,40 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         v2 one_object_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
                                             floor_dim.y / (f32)grass_per_grid_count_y);
 
-        GrassObjectFunctionInput grass_object_input = {};
-        grass_object_input.floor_left_bottom_p = floor_left_bottom_p.xy;
-        grass_object_input.one_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
-                                                    floor_dim.y / (f32)grass_per_grid_count_y);
+        if(render_push_buffer->enable_grass_mesh_rendering)
+        {
+            assert(grass_per_grid_count_x % object_thread_per_threadgroup_count_x == 0);
+            assert(grass_per_grid_count_y % object_thread_per_threadgroup_count_y == 0);
 
-        metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
-        metal_set_object_buffer(render_encoder, render_context->random_grass_hash_buffer.buffer, 0, 1);
-        metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 2);
 
-        metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
-        metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
-        metal_set_mesh_bytes(render_encoder, grass_blade_indices, array_size(grass_blade_indices), 2);
 
-        metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
-        metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-        v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
-                                                    object_threadgroup_per_grid_count_y, 
-                                                    1);
-        v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
-                                                      object_thread_per_threadgroup_count_y, 
-                                                      1);
-        v3u mesh_thread_per_threadgroup_count = V3u(39, 1, 1); // same as index count for the grass blade
-#if 1
-        metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
-                                      object_thread_per_threadgroup_count, 
-                                      mesh_thread_per_threadgroup_count);
-#endif
+            GrassObjectFunctionInput grass_object_input = {};
+            grass_object_input.floor_left_bottom_p = floor_left_bottom_p.xy;
+            grass_object_input.one_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
+                                                        floor_dim.y / (f32)grass_per_grid_count_y);
+
+            metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
+            metal_set_object_buffer(render_encoder, render_context->random_grass_hash_buffer.buffer, 0, 1);
+            metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 2);
+
+            metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
+            metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
+            metal_set_mesh_bytes(render_encoder, grass_blade_indices, array_size(grass_blade_indices), 2);
+
+            metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
+            metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+            v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
+                                                        object_threadgroup_per_grid_count_y, 
+                                                        1);
+            v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
+                                                          object_thread_per_threadgroup_count_y, 
+                                                          1);
+            v3u mesh_thread_per_threadgroup_count = V3u(39, 1, 1); // same as index count for the grass blade
+
+            metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
+                                          object_thread_per_threadgroup_count, 
+                                          mesh_thread_per_threadgroup_count);
+        }
 
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
@@ -726,6 +736,34 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                             render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
                 }break;
 
+                case RenderEntryType_Grass:
+                {
+                    RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += sizeof(*entry);
+
+                    m4x4 model = M4x4();
+                    model = transpose(model); // make the matrix column-major
+
+                    PerObjectData per_object_data = {};
+                    per_object_data.model = model;
+                    per_object_data.color = entry->color;
+
+                    metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
+
+                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
+                    metal_set_vertex_buffer(render_encoder, 
+                                            render_context->combined_vertex_buffer.buffer, 
+                                            entry->vertex_buffer_offset, 2);
+                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
+
+                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
+
+                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+
+                    metal_draw_indexed(render_encoder, MTLPrimitiveTypeTriangle, 
+                            render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+                }break;
+
                 default:
                 {
                     invalid_code_path;
@@ -791,32 +829,35 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_vertex_bytes(forward_render_encoder, &z_axis_color, sizeof(v3), 2);
         metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeLine, 0, 2);
 
-        // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
-        // indierct draw method?
-        // NTOE(gh) show perlin noise grid on top of the grass grid
-        v3 plane_dim = V3(0.9f*one_object_thread_worth_dim, 0.0f);
-        v3 plane_left_bottom_p = floor_left_bottom_p + V3(0, 0, 3.0f);
-        v3 plane_right_bottom_p = plane_left_bottom_p + V3(plane_dim.x, 0, 0);
-        v3 plane_top_left_p = plane_left_bottom_p + V3(0, plane_dim.y, 0);
-        v3 plane_top_right_p = plane_top_left_p + V3(plane_dim.x, 0, 0);
-        v3 plane_vertices[] = 
+        if(render_push_buffer->enable_show_perlin_noise_grid)
         {
-            plane_left_bottom_p,
-            plane_right_bottom_p,
-            plane_top_left_p,
+            // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
+            // indierct draw method?
+            // NTOE(gh) show perlin noise grid on top of the grass grid
+            v3 plane_dim = V3(0.9f*one_object_thread_worth_dim, 0.0f);
+            v3 plane_left_bottom_p = floor_left_bottom_p + V3(0, 0, 3.0f);
+            v3 plane_right_bottom_p = plane_left_bottom_p + V3(plane_dim.x, 0, 0);
+            v3 plane_top_left_p = plane_left_bottom_p + V3(0, plane_dim.y, 0);
+            v3 plane_top_right_p = plane_top_left_p + V3(plane_dim.x, 0, 0);
+            v3 plane_vertices[] = 
+            {
+                plane_left_bottom_p,
+                plane_right_bottom_p,
+                plane_top_left_p,
 
-            plane_right_bottom_p,
-            plane_top_right_p,
-            plane_top_left_p
-        };
-        metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_perlin_noise_grid_pipeline);
+                plane_right_bottom_p,
+                plane_top_right_p,
+                plane_top_left_p
+            };
+            metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_perlin_noise_grid_pipeline);
 
-        metal_set_vertex_bytes(forward_render_encoder, plane_vertices, array_size(plane_vertices), 0);
-        metal_set_vertex_bytes(forward_render_encoder, &one_object_thread_worth_dim, sizeof(one_object_thread_worth_dim), 1);
-        metal_set_vertex_buffer(forward_render_encoder, render_context->perlin_value_buffer.buffer, 0, 2);
-        metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 3);
-        metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
-                                        0, 6, 0, grass_per_grid_count_x * grass_per_grid_count_y);
+            metal_set_vertex_bytes(forward_render_encoder, plane_vertices, array_size(plane_vertices), 0);
+            metal_set_vertex_bytes(forward_render_encoder, &one_object_thread_worth_dim, sizeof(one_object_thread_worth_dim), 1);
+            metal_set_vertex_buffer(forward_render_encoder, render_context->perlin_value_buffer.buffer, 0, 2);
+            metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 3);
+            metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
+                    0, 6, 0, grass_per_grid_count_x * grass_per_grid_count_y);
+        }
 
 #if 0
 
@@ -1427,7 +1468,7 @@ int main(void)
             macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer);
         }
 
-        // TODO(gh) Put this inside the game code!
+        // TODO(gh) Put this inside the game code, or maybe do this in compute shader
         u32 perlin_value_count = 0;
         for(u32 y = 0;
                 y < perlin_output_height;

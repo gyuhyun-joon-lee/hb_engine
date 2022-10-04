@@ -118,18 +118,21 @@ add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
     return result;
 }
 
+// NOTE(gh) creates 512 x 512 grid
 internal Entity *
-add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 color)
+add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v3 color)
 {
     Entity *result = add_entity(game_state, EntityType_Floor, Entity_Flag_Collides);
-    result->p = p;
-    result->dim = dim;
+    result->p = center;
+    result->dim = V3(dim, 0);
     result->color = color;
 
+    u32 x_quad_count = 512;
+    u32 y_quad_count = 512;
+
     // TODO(gh) Also make this configurable?
-    f32 triangle_size = 1.0f;
-    u32 x_quad_count = round_r32_to_u32(dim.x / triangle_size);
-    u32 y_quad_count = round_r32_to_u32(dim.y / triangle_size);
+    f32 quad_width = dim.x / (f32)x_quad_count;
+    f32 quad_height = dim.y / (f32)y_quad_count;
 
     u32 x_vertex_count = x_quad_count + 1;
     u32 y_vertex_count = y_quad_count + 1;
@@ -138,28 +141,28 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
     result->vertex_count = total_vertex_count;
     result->vertices = push_array(arena, CommonVertex, result->vertex_count);
 
-    v3 left_bottom_p = p - V3(dim.x/2, dim.y/2, 0);
-
-    RandomSeries series = start_random_series(148983); 
+    v3 left_bottom_p = center - V3(dim.x/2, dim.y/2, 0);
 
     u32 populated_vertex_count = 0;
     for(u32 y = 0;
             y < y_vertex_count;
             ++y)
     {
-        f32 py = left_bottom_p.y + y * triangle_size;
+        f32 py = left_bottom_p.y + y * quad_height;
+        f32 yf = (f32)y/(f32)y_vertex_count;
 
         for(u32 x = 0;
                 x < x_vertex_count;
                 ++x)
         {
-            f32 px = left_bottom_p.x + x*triangle_size;
-            f32 pz = left_bottom_p.z + random_between(&series, 0.0f, 0.0f);
+            f32 px = left_bottom_p.x + x * quad_width;
+            f32 xf = (f32)x/(f32)x_vertex_count;
+            f32 factor = 8.0f;
+
+            f32 pz = 10.0f * perlin_noise01(factor * xf, factor * yf, 0);
 
             result->vertices[populated_vertex_count].p = V3(px, py, pz);
             result->vertices[populated_vertex_count].normal = V3(0, 0, 0);
-
-            assert(result->vertices[populated_vertex_count].p.z <= 0.0f);
 
             populated_vertex_count++;
         }
@@ -200,7 +203,7 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
             result->indices[populated_index_count++] = i3;
             result->indices[populated_index_count++] = i2;
 
-            // TODO(gh) properly calculate normals
+            // TODO(gh) properly calculate normals(normal histogram?)
             v3 p0 = result->vertices[i0].p;
             v3 p1 = result->vertices[i1].p;
             v3 p2 = result->vertices[i2].p;
@@ -213,7 +216,7 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
             result->vertices[i1].normal += first_normal + second_normal;
             result->vertices[i2].normal += first_normal + second_normal;
 
-            result->vertices[i3].normal += second_normal;
+            result->vertices[i3].normal = second_normal;
         }
     }
     assert(result->index_count == populated_index_count);
@@ -236,7 +239,9 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 p, v3 dim, v3 col
    ||
    ||
    ||
-   grass_divided_count == 5
+   ||
+   ||
+   grass_divided_count == 7
 */
 internal void
 populate_grass_vertices(v3 p0, 
@@ -245,7 +250,7 @@ populate_grass_vertices(v3 p0,
                         f32 height, // how tall the grass should be
                         v2 facing_direction, 
                         f32 tilt, f32 bend, f32 grass_divided_count, 
-                        CommonVertex *vertices, u32 vertex_count, u32 hash, f32 time)
+                        CommonVertex *vertices, u32 vertex_count, u32 hash, f32 time, f32 wiggliness)
 {
     assert(compare_with_epsilon(length_square(facing_direction), 1.0f));
 
@@ -254,9 +259,11 @@ populate_grass_vertices(v3 p0,
 
     v3 blade_normal = normalize(cross(p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
     
+    f32 hash_value = hash*pi_32;
+
     // TODO(gh) bend value is a bit unintuitive, because this is not represented in world unit.
     // But if bend value is 0, it means the grass will be completely flat
-    v3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
+    v3 p1 = p0 + (2.6f/4.0f) * (p2 - p0) + bend * blade_normal;
 
     for(u32 i = 0;
             i <= grass_divided_count; 
@@ -264,11 +271,7 @@ populate_grass_vertices(v3 p0,
     {
         f32 t = (f32)i/(f32)grass_divided_count;
 
-        f32 wiggliness = 2.1f;
-        f32 hash_value = hash*pi_32;
-        // f32 exponent = 4.0f*(t-1.0f);
-        // f32 wind_factor = 0.5f*power(euler_contant, exponent) * t * wiggliness + hash*tau_32 + time;
-        f32 wind_factor = t * wiggliness + hash_value + time;
+        f32 wind_factor = t*wiggliness + hash_value + time;
 
 #if 0
         // p1 += V3(0, 0, 0.05f * sinf(wind_factor));
@@ -281,7 +284,7 @@ populate_grass_vertices(v3 p0,
         v3 point_on_bezier_curve = quadratic_bezier(p0, p1, p2, t);
 #else 
         v3 modified_p1 = p1 + V3(0, 0, 0.1f * sinf(wind_factor));
-        v3 modified_p2 = p2 + V3(0, 0, 0.15f * sinf(wind_factor));
+        v3 modified_p2 = p2 + V3(0, 0, 0.3f * sinf(wind_factor));
 
         v3 point_on_bezier_curve = quadratic_bezier(p0, modified_p1, modified_p2, t);
 #endif
@@ -442,11 +445,14 @@ plant_grasses_using_brute_force_blue_noise(GameState *game_state, RandomSeries *
                 f32 tilt_direction_rad = random_between(series, 0.0f, tau_32);
                 v2 tilt_direction = V2(cosf(tilt_direction_rad), sinf(tilt_direction_rad));
             
+                f32 blade_width = 0.2f;
+                f32 stride = 2.0f;
+                f32 height = 1.9f;
                 add_grass_entity(game_state, series, platform_render_push_buffer, arena, 
                                 p, 
-                                0.2f, 2.0f, 1.8f, 
+                                blade_width, stride, height, 
                                 V3(0, 0.8f, 0.2f),
-                                tilt_direction, random_between(series, 4.0f, 5.0f), random_between(series, 0.5f, 1.0f));
+                                tilt_direction, random_between(series, 0.1f*height, 0.9f*height), random_between(series, 0.5f, 1.0f));
 
                 planted = true;
             }

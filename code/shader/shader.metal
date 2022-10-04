@@ -217,6 +217,8 @@ forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
     world_p.x += grid_x * grid_dim->x;
 
     result.clip_p = per_frame_data->proj_view * world_p;
+
+    // TODO(gh) Handle the case where the buffer is smaller than the grass grid
     float perlin_value = perlin_values[instanceID];
     result.color = float3(perlin_value, perlin_value, perlin_value);
 
@@ -226,7 +228,7 @@ forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
 fragment float4
 forward_show_perlin_noise_grid_frag(ShowPerlinNoiseGridVertexOutput vertex_output [[stage_in]])
 {
-    float4 result = float4(vertex_output.color, 1.0f);
+    float4 result = float4(vertex_output.color, 0.7f);
     return result;
 }
 
@@ -330,8 +332,8 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
     payloadOutput->per_grass_data[thread_index].blade_width = 0.15f;
     payloadOutput->per_grass_data[thread_index].stride = 2.2f;
     payloadOutput->per_grass_data[thread_index].height = 2.5f;
-    payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos(0.0f), sin(0.0f));
-    // payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
+    // payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos(0.0f), sin(0.0f));
+    payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
     payloadOutput->per_grass_data[thread_index].bend = 0.5f;
     payloadOutput->per_grass_data[thread_index].wiggliness = 2.1f;
     payloadOutput->per_grass_data[thread_index].time_elasped_from_start = *time_elasped_from_start;
@@ -382,7 +384,7 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     float wiggliness = per_grass_data->wiggliness;
     packed_float3 color = per_grass_data->color;
     uint hash = per_grass_data->hash;
-    float time_elasped_from_start = 3.5f*per_grass_data->time_elasped_from_start;
+    float time_elasped_from_start = 2.0f*per_grass_data->time_elasped_from_start;
 
     float3 p0 = center;
 
