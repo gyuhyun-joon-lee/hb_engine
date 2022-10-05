@@ -1,6 +1,7 @@
 /*
  * Written by Gyuhyun Lee
  */
+#include <stdio.h>
 
 v3 gradient_vectors[] = 
 {
@@ -11,7 +12,7 @@ v3 gradient_vectors[] =
 
 
 // NOTE(gh) original 256 random numbers used by Ken Perlin, ranging from 0 to 255
-global_variable u32 permutations255[] = 
+global_variable u32 permutations255[256] = 
 { 
     151,160,137,91,90,15,                 
     131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,    
@@ -76,12 +77,12 @@ fade(f32 t)
 internal f32 
 perlin_noise01(f32 x, f32 y, f32 z)
 {
-    i32 xi = (i32)x;
-    i32 yi = (i32)y;
-    i32 zi = (i32)z;
-    i32 x255 = xi % 255; // used for hashing from the random numbers
-    i32 y255 = yi % 255; // used for hashing from the random numbers
-    i32 z255 = zi % 255;
+    u32 xi = (u32)x;
+    u32 yi = (u32)y;
+    u32 zi = (u32)z;
+    u32 x255 = xi % 255; // used for hashing from the random numbers
+    u32 y255 = yi % 255; // used for hashing from the random numbers
+    u32 z255 = zi % 255;
 
     f32 xf = x - (f32)xi; // fraction part of x, should be in 0 to 1 range
     f32 yf = y - (f32)yi; // fraction part of y, should be in 0 to 1 range
@@ -116,15 +117,19 @@ perlin_noise01(f32 x, f32 y, f32 z)
        are important as we need to interpolate in x, y, (and possibly z or w) directions.
     */
 
-    i32 random_value0 = permutations255[permutations255[permutations255[x255]+y255]+z255];
-    i32 random_value1 = permutations255[permutations255[permutations255[x255+1]+y255]+z255];
-    i32 random_value2 = permutations255[permutations255[permutations255[x255]+y255+1]+z255];
-    i32 random_value3 = permutations255[permutations255[permutations255[x255+1]+y255+1]+z255];
+    u32 x255_inc = (x255+1)%256;
+    u32 y255_inc = (y255+1)%256;
+    u32 z255_inc = (z255+1)%256;
 
-    i32 random_value4 = permutations255[permutations255[permutations255[x255]+y255]+z255+1];
-    i32 random_value5 = permutations255[permutations255[permutations255[x255+1]+y255]+z255+1];
-    i32 random_value6 = permutations255[permutations255[permutations255[x255]+y255+1]+z255+1];
-    i32 random_value7 = permutations255[permutations255[permutations255[x255+1]+y255+1]+z255+1];
+    i32 random_value0 = permutations255[permutations255[permutations255[x255]+y255]+z255];
+    i32 random_value1 = permutations255[permutations255[permutations255[x255_inc]+y255]+z255];
+    i32 random_value2 = permutations255[permutations255[permutations255[x255]+y255_inc]+z255];
+    i32 random_value3 = permutations255[permutations255[permutations255[x255_inc]+y255_inc]+z255];
+
+    i32 random_value4 = permutations255[permutations255[permutations255[x255]+y255]+z255_inc];
+    i32 random_value5 = permutations255[permutations255[permutations255[x255_inc]+y255]+z255_inc];
+    i32 random_value6 = permutations255[permutations255[permutations255[x255]+y255_inc]+z255_inc];
+    i32 random_value7 = permutations255[permutations255[permutations255[x255_inc]+y255_inc]+z255_inc];
 
     // NOTE(gh) -1 are for getting the distance vector
     f32 gradient0 = get_gradient_value(random_value0, xf, yf, zf);

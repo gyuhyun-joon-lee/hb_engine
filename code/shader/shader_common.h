@@ -30,6 +30,70 @@ constant uint permutations255[] =
     138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180
 };
 
+/*
+   NOTE(gh)
+
+   High LOD
+
+   15
+   / \
+   13 12
+   |\|
+   11 10
+   |\|
+   9 8
+   |\|
+   7 6
+   |\|
+   5 4
+   |\|
+   3 2
+   |\|
+   1 0
+
+   Low LOD
+    6
+   / \
+   5 4
+   |\|
+   3 2
+   |\|
+   1 0
+ */
+constant uint grass_high_lod_indices[] = 
+{
+    0, 3, 1,
+    0, 2, 3,
+
+    2, 5, 3,
+    2, 4, 5,
+
+    4, 7, 5,
+    4, 6, 7,
+
+    6, 9 ,7,
+    6, 8, 9,
+
+    8, 11, 9,
+    8, 10, 11,
+
+    10, 13, 11,
+    10, 12, 13,
+
+    12, 14, 13,
+};
+
+constant uint grass_low_lod_indices[] = 
+{
+    0, 3, 1,
+    0, 2, 3,
+
+    2, 5, 3,
+    2, 4, 5,
+
+    4, 6, 5,
+};
+
 // Vertex shader for populating g buffer
 struct GBufferVertexOutput
 {

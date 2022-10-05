@@ -330,6 +330,7 @@ struct PlatformRenderPushBuffer
 
     // NOTE(gh) game code needs to fill these up
     m4x4 view;
+    v3 camera_p;
     f32 camera_near;
     f32 camera_far;
     f32 camera_fov;

@@ -587,6 +587,7 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCame
     render_push_buffer->camera_far = camera->far;
     render_push_buffer->camera_fov = camera->fov;
     render_push_buffer->clear_color = clear_color;
+    render_push_buffer->camera_p = camera->p;
 
     render_push_buffer->enable_shadow = enable_shadow;
     
@@ -606,6 +607,7 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *ca
     render_push_buffer->camera_near = camera->near;
     render_push_buffer->camera_far = camera->far;
     render_push_buffer->camera_fov = camera->fov;
+    render_push_buffer->camera_p = camera->p;
     render_push_buffer->clear_color = clear_color;
 
     render_push_buffer->enable_shadow = enable_shadow;

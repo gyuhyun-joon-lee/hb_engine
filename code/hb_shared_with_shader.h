@@ -46,10 +46,15 @@ struct PerObjectData
 
 #define grass_per_grid_count_x 512
 #define grass_per_grid_count_y 512
-#define grass_vertex_count 15
-#define grass_triangle_count 13
-#define grass_index_count (grass_triangle_count*3)
-#define grass_divide_count 7
+#define grass_high_lod_vertex_count 15
+#define grass_high_lod_triangle_count 13
+#define grass_high_lod_index_count (grass_high_lod_triangle_count*3)
+#define grass_high_lod_divide_count 7
+
+#define grass_low_lod_vertex_count 7
+#define grass_low_lod_triangle_count 5
+#define grass_low_lod_index_count (grass_low_lod_triangle_count*3)
+#define grass_low_lod_divide_count 3
 
 // NOTE(gh) The way we setup how many threads there should be in one object threadgroup
 // is based on the payload size limit(16kb) and the simd group width(32)
