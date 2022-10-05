@@ -161,8 +161,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     // init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
     init_render_push_buffer(platform_render_push_buffer, &game_state->camera, V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
-    platform_render_push_buffer->enable_show_perlin_noise_grid = false;
     platform_render_push_buffer->enable_grass_mesh_rendering = true;
+    platform_render_push_buffer->enable_show_perlin_noise_grid = false;
 
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;

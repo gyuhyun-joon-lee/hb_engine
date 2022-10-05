@@ -233,6 +233,7 @@ end_temp_memory(TempMemory *temp_memory)
 enum debug_cycle_counter_id
 {
     debug_cycle_counter_generate_vertex_normals,
+    debug_cycle_counter_update_perlin_noise,
     debug_cycle_counter_count
 };
 
@@ -285,8 +286,9 @@ typedef PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(platform_add_thread_work_queue_item)
 struct ThreadWorkQueue
 {
     // NOTE(gh) : volatile forces the compiler not to optimize the value out, and always to the load(as other thread can change it)
+    // NOTE(gh) These two just increments, and the function is responsible for doing the modular 
     int volatile work_index; // index to the queue that is currently under work
-    int volatile add_index;
+    int volatile add_index; // Only the main thread should increment this, as this is not barriered!!!
 
     ThreadWorkItem items[1024];
 

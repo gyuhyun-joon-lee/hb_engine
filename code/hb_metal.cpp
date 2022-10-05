@@ -135,7 +135,7 @@ metal_make_shared_buffer(id<MTLDevice> device, u64 max_size)
                     options:MTLResourceStorageModeShared];
 
     result.memory = [result.buffer contents];
-    result.max_size = max_size;
+    result.size = max_size;
 
     return result;
 }
@@ -143,8 +143,17 @@ metal_make_shared_buffer(id<MTLDevice> device, u64 max_size)
 inline void
 metal_write_shared_buffer(MetalSharedBuffer *buffer, void *source, u64 source_size)
 {
-    assert(source_size <= buffer->max_size);
+    assert(source_size <= buffer->size);
     memcpy(buffer->memory, source, source_size);
+}
+
+inline MetalSharedBuffer
+metal_make_shared_buffer(id<MTLDevice> device, void *source, u64 max_size)
+{
+    MetalSharedBuffer result = metal_make_shared_buffer(device, max_size);
+    metal_write_shared_buffer(&result, source, max_size);
+
+    return result;
 }
 
 inline MetalManagedBuffer

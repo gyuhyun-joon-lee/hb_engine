@@ -202,16 +202,20 @@ forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
                              constant float *vertices [[buffer(0)]], 
                              constant float2 *grid_dim [[buffer(1)]],
                              constant float *perlin_values [[buffer(2)]],
-                             constant PerFrameData *per_frame_data [[buffer(3)]])
+                             constant float *floor_z_values [[buffer(3)]],
+                             constant PerFrameData *per_frame_data [[buffer(4)]])
 {
     ShowPerlinNoiseGridVertexOutput result = {};
 
     uint grid_y = instanceID / grass_per_grid_count_x;
     uint grid_x = instanceID - grid_y * grass_per_grid_count_x;
 
-    float4 world_p = float4(vertices[3*vertexID+0], 
-                                vertices[3*vertexID+1],
-                                vertices[3*vertexID+2],
+    // TODO(gh) instead of hard coding this, any way to get what should be the maximum z value 
+    float z = floor_z_values[instanceID] + 5.0f;
+
+    float4 world_p = float4(vertices[2*vertexID+0], 
+                                vertices[2*vertexID+1],
+                                z,
                                 1.0f);
     world_p.y += grid_y * grid_dim->y;
     world_p.x += grid_x * grid_dim->x;

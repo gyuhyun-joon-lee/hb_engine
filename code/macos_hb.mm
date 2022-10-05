@@ -324,7 +324,7 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
 #define write_barrier() OSMemoryBarrier(); 
 #define read_barrier() OSMemoryBarrier();
 
-struct MacOSthread
+struct MacOSThread
 {
     u32 ID;
     ThreadWorkQueue *queue;
@@ -342,6 +342,49 @@ THREAD_WORK_CALLBACK(print_string)
     printf("%s\n", stringToPrint);
 }
 
+struct ThreadUpdatePerlinNoiseBufferData
+{
+    u32 total_x_count; 
+    u32 total_y_count;
+
+    u32 start_x;
+    u32 start_y;
+
+    u32 one_past_end_x;
+    u32 one_past_end_y;
+
+    f32 time_elapsed_from_start;
+
+    void *perlin_noise_buffer_memory;
+};
+
+internal
+THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
+{
+    ThreadUpdatePerlinNoiseBufferData *d = (ThreadUpdatePerlinNoiseBufferData *)data;
+
+    // TODO(gh) Put this inside the game code, or maybe do this in compute shader
+    f32 *row = (f32 *)d->perlin_noise_buffer_memory + d->start_y * d->total_x_count + d->start_x;
+    for(u32 y = d->start_y;
+            y < d->one_past_end_y;
+            ++y)
+    {
+        f32 *column = (f32 *)row;
+        for(u32 x = d->start_x;
+                x < d->one_past_end_x;
+                ++x)
+        {
+            f32 xf = x / (f32)d->total_x_count;
+            f32 yf = y / (f32)d->total_y_count;
+            f32 factor = 16.0f;
+
+            *column++ = perlin_noise01(factor*xf, factor * yf, d->time_elapsed_from_start);
+        }
+
+        row += d->total_x_count;
+    }
+}
+
 // NOTE(gh): This is single producer multiple consumer - 
 // meaning, it _does not_ provide any thread safety
 // For example, if the two threads try to add the work item,
@@ -351,8 +394,11 @@ macos_add_thread_work_item(ThreadWorkQueue *queue,
                             ThreadWorkCallback *work_callback,
                             void *data)
 {
+    // TODO(gh) instead of just grabbing the next item, check if next item is available first 
+    u32 next_item_index = queue->add_index % array_count(queue->items);
+
     assert(data); // TODO(gh) : There might be a work that does not need any data?
-    ThreadWorkItem *item = queue->items + queue->add_index;
+    ThreadWorkItem *item = queue->items + next_item_index;
     item->callback = work_callback;
     item->data = data;
     item->written = true;
@@ -370,12 +416,13 @@ macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
     b32 did_work = false;
     if(queue->work_index != queue->add_index)
     {
+        // TODO(gh) Check if wrapping is working properly!
         int original_work_index = queue->work_index;
         int desired_work_index = original_work_index + 1;
 
         if(OSAtomicCompareAndSwapIntBarrier(original_work_index, desired_work_index, &queue->work_index))
         {
-            ThreadWorkItem *item = queue->items + original_work_index;
+            ThreadWorkItem *item = queue->items + original_work_index % array_count(queue->items);
             item->callback(item->data);
 
             //printf("Thread %u: Finished working\n", thread_index);
@@ -401,7 +448,7 @@ PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_que
 internal void*
 thread_proc(void *data)
 {
-    MacOSthread *thread = (MacOSthread *)data;
+    MacOSThread *thread = (MacOSThread *)data;
     while(1)
     {
         if(macos_do_thread_work_item(thread->queue, thread->ID))
@@ -448,10 +495,19 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
     // Update gpu side of combined vertex and index buffer
     // TODO(gh) Do we need to sync before we render??
     // TODO(gh) Don't update the buffer when it's not modified? 
-    metal_update_managed_buffer(&render_context->floor_z_buffer, 0, render_context->floor_z_buffer.size);
+
+#if 0
+    // TODO(gh) Replace this with proper buffer update detection
+    local_persist bool updated_z_buffer = false;
+    if(!updated_z_buffer)
+    {
+        metal_update_managed_buffer(&render_context->floor_z_buffer, 0, render_context->floor_z_buffer.size);
+        updated_z_buffer = true;
+    }
     metal_update_managed_buffer(&render_context->perlin_value_buffer, 0, render_context->perlin_value_buffer.size);
     metal_update_managed_buffer(&render_context->combined_vertex_buffer, 0, render_push_buffer->used_vertex_buffer);
     metal_update_managed_buffer(&render_context->combined_index_buffer, 0, render_push_buffer->used_index_buffer);
+#endif
 
     id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
@@ -604,9 +660,9 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         // TODO(gh) This was part of game code, and I want to make it stay that way. 
         // Is there any way to do so?
-        v3 floor_center = V3(0, 0, 0);
-        v3 floor_dim = V3(200, 200, 0);
-        v3 floor_left_bottom_p = floor_center - 0.5f * floor_dim;
+        v2 floor_center = V2(0, 0);
+        v2 floor_dim = V2(200, 200);
+        v2 floor_left_bottom_p = floor_center - 0.5f * floor_dim;
         v2 one_object_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
                                             floor_dim.y / (f32)grass_per_grid_count_y);
 
@@ -618,7 +674,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
 
             GrassObjectFunctionInput grass_object_input = {};
-            grass_object_input.floor_left_bottom_p = floor_left_bottom_p.xy;
+            grass_object_input.floor_left_bottom_p = floor_left_bottom_p;
             grass_object_input.one_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
                                                         floor_dim.y / (f32)grass_per_grid_count_y);
 
@@ -836,13 +892,13 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         {
             // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
             // indierct draw method?
-            // NTOE(gh) show perlin noise grid on top of the grass grid
-            v3 plane_dim = V3(0.9f*one_object_thread_worth_dim, 0.0f);
-            v3 plane_left_bottom_p = floor_left_bottom_p + V3(0, 0, 3.0f);
-            v3 plane_right_bottom_p = plane_left_bottom_p + V3(plane_dim.x, 0, 0);
-            v3 plane_top_left_p = plane_left_bottom_p + V3(0, plane_dim.y, 0);
-            v3 plane_top_right_p = plane_top_left_p + V3(plane_dim.x, 0, 0);
-            v3 plane_vertices[] = 
+            // NOTE(gh) z value will come from the floor z buffer
+            v2 plane_dim = 0.9f*one_object_thread_worth_dim;
+            v2 plane_left_bottom_p = floor_left_bottom_p;
+            v2 plane_right_bottom_p = plane_left_bottom_p + V2(plane_dim.x, 0);
+            v2 plane_top_left_p = plane_left_bottom_p + V2(0, plane_dim.y);
+            v2 plane_top_right_p = plane_top_left_p + V2(plane_dim.x, 0);
+            v2 plane_vertices[] = 
             {
                 plane_left_bottom_p,
                 plane_right_bottom_p,
@@ -857,7 +913,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
             metal_set_vertex_bytes(forward_render_encoder, plane_vertices, array_size(plane_vertices), 0);
             metal_set_vertex_bytes(forward_render_encoder, &one_object_thread_worth_dim, sizeof(one_object_thread_worth_dim), 1);
             metal_set_vertex_buffer(forward_render_encoder, render_context->perlin_value_buffer.buffer, 0, 2);
-            metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 3);
+            metal_set_vertex_buffer(forward_render_encoder, render_context->floor_z_buffer.buffer, 0, 3);
+            metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 4);
             metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
                     0, 6, 0, grass_per_grid_count_x * grass_per_grid_count_y);
         }
@@ -997,7 +1054,7 @@ int main(void)
             ++thread_index)
     {
         pthread_t ID = 0;
-        MacOSthread *thread = (MacOSthread *)malloc(sizeof(MacOSthread)); 
+        MacOSThread *thread = (MacOSThread *)malloc(sizeof(MacOSThread)); 
 
         thread->ID = thread_index + 1; // 0th thread is the main thread
         thread->queue = &thread_work_queue;
@@ -1423,13 +1480,13 @@ int main(void)
 
     metal_render_context.forwardRenderFence = metal_make_fence(device);
     
-    metal_render_context.combined_vertex_buffer = metal_make_managed_buffer(device, gigabytes(1));
-    metal_render_context.combined_index_buffer = metal_make_managed_buffer(device, megabytes(256));
+    metal_render_context.combined_vertex_buffer = metal_make_shared_buffer(device, gigabytes(1));
+    metal_render_context.combined_index_buffer = metal_make_shared_buffer(device, megabytes(256));
 
-    metal_render_context.random_grass_hash_buffer = metal_make_managed_buffer(device, random_grass_hashes, sizeof(u32) * random_grass_hash_count);
-    metal_render_context.perlin_value_buffer = metal_make_managed_buffer(device, sizeof(f32) * random_grass_hash_count);
+    metal_render_context.random_grass_hash_buffer = metal_make_shared_buffer(device, random_grass_hashes, sizeof(u32) * random_grass_hash_count);
+    metal_render_context.perlin_value_buffer = metal_make_shared_buffer(device, sizeof(f32) * random_grass_hash_count);
 
-    metal_render_context.floor_z_buffer = metal_make_managed_buffer(device, sizeof(f32) * random_grass_hash_count);
+    metal_render_context.floor_z_buffer = metal_make_shared_buffer(device, sizeof(f32) * random_grass_hash_count);
 
     metal_render_context.device = device;
     metal_render_context.view = view;
@@ -1481,6 +1538,9 @@ int main(void)
     [app activateIgnoringOtherApps:YES];
     [app run];
 
+    // TODO(gh) Very bad idea, need to clean this up!
+    ThreadUpdatePerlinNoiseBufferData *update_perlin_noise_buffer_data = (ThreadUpdatePerlinNoiseBufferData *)malloc(sizeof(ThreadUpdatePerlinNoiseBufferData)*8*8);
+
     u64 last_time = mach_absolute_time();
     is_game_running = true;
     // TODO(gh) use f64? but metal does not allow double?
@@ -1508,32 +1568,65 @@ int main(void)
             close(lock_file);
         }
 
+        // TODO(gh) Put this inside the game code?
+        // Initialize counters
+        for(u32 counter_index = 0;
+                counter_index < array_count(debug_cycle_counters);
+                ++counter_index)
+        {
+            debug_cycle_counters[counter_index].cycle_count = 0;
+            debug_cycle_counters[counter_index].hit_count = 0;
+        }
+
+#if 1
+        begin_cycle_counter(update_perlin_noise);
+#if 1
+        for(u32 y = 0;
+                y < 8;
+                ++y)
+        {
+            for(u32 x = 0;
+                    x < 8;
+                    ++x)
+            {
+                ThreadUpdatePerlinNoiseBufferData *data = update_perlin_noise_buffer_data + 8*y + x;
+                data->total_x_count = perlin_output_width;
+                data->total_y_count = perlin_output_height;
+                data->start_x = x * (data->total_x_count / 8);
+                data->start_y = y * (data->total_y_count / 8);
+                data->one_past_end_x = data->start_x + (data->total_x_count / 8);
+                data->one_past_end_y = data->start_y + (data->total_y_count / 8);
+                data->time_elapsed_from_start = time_elapsed_from_start;
+                data->perlin_noise_buffer_memory = metal_render_context.perlin_value_buffer.memory;
+                macos_add_thread_work_item(&thread_work_queue, thread_update_perlin_noise_buffer_callback, (void *)data);
+            }
+        }
+#endif
+
+
+#if 0
+        ThreadUpdatePerlinNoiseBufferData *data = update_perlin_noise_buffer_data;
+        data->total_x_count = perlin_output_width;
+        data->total_y_count = perlin_output_height;
+        data->start_x = 0;
+        data->start_y = 0;
+        data->one_past_end_x = 512;
+        data->one_past_end_y = 512;
+        data->time_elapsed_from_start = time_elapsed_from_start;
+        data->perlin_noise_buffer_memory = metal_render_context.perlin_value_buffer.memory;
+        macos_add_thread_work_item(&thread_work_queue, thread_update_perlin_noise_buffer_callback, (void *)data);
+#endif
+
+        macos_complete_all_thread_work_queue_items(&thread_work_queue);
+        end_cycle_counter(update_perlin_noise);
+#endif
+
         if(macos_game_code.update_and_render)
         {
             macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer);
         }
 
-        // TODO(gh) Put this inside the game code, or maybe do this in compute shader
-        u32 perlin_value_count = 0;
-        for(u32 y = 0;
-                y < perlin_output_height;
-                ++y)
-        {
-            for(u32 x = 0;
-                    x < perlin_output_width;
-                    ++x)
-            {
-                f32 xf = x / (f32)perlin_output_width;
-                f32 yf = y / (f32)perlin_output_height;
-                f32 factor = 16.0f;
-
-                float perlin_value = perlin_noise01(factor*xf, factor * yf, time_elapsed_from_start);
-                f32 *dst = (f32 *)metal_render_context.perlin_value_buffer.memory + perlin_value_count++;
-                *dst = perlin_value;
-            }
-        }
-        
-        assert(perlin_value_count == (perlin_output_width * perlin_output_height));
+        // TODO(gh) Priority queue?
 
         @autoreleasepool
         {
@@ -1590,12 +1683,12 @@ int main(void)
             {
                 // TODO : Missed Frame!
                 // TODO(gh) : Whenever we miss the frame re-sync with the display link
-                // printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
+                printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
             }
 
 
             time_elapsed_from_start += target_seconds_per_frame;
-            // printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
+            printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
 
             metal_display(&metal_render_context);
         }

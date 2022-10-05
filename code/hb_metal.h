@@ -10,7 +10,7 @@
 // NOTE(joon) shared buffer between CPU and GPU, in a coherent way
 struct MetalSharedBuffer
 {
-    u32 max_size;
+    u32 size;
     void *memory; // host memory
 
     id<MTLBuffer> buffer;
@@ -100,18 +100,18 @@ struct MetalRenderContext
     id<MTLTexture> directional_light_shadowmap_depth_texture;
 
     // Buffers
-    MetalManagedBuffer combined_vertex_buffer;
-    MetalManagedBuffer combined_index_buffer;
+    MetalSharedBuffer combined_vertex_buffer;
+    MetalSharedBuffer combined_index_buffer;
 
-    MetalManagedBuffer voxel_position_buffer;
-    MetalManagedBuffer voxel_color_buffer;
+    MetalSharedBuffer voxel_position_buffer;
+    MetalSharedBuffer voxel_color_buffer;
 
-    MetalManagedBuffer cube_inward_facing_index_buffer;
-    MetalManagedBuffer cube_outward_facing_index_buffer;
+    MetalSharedBuffer cube_inward_facing_index_buffer;
+    MetalSharedBuffer cube_outward_facing_index_buffer;
 
-    MetalManagedBuffer random_grass_hash_buffer;
-    MetalManagedBuffer perlin_value_buffer;
-    MetalManagedBuffer floor_z_buffer;
+    MetalSharedBuffer random_grass_hash_buffer;
+    MetalSharedBuffer perlin_value_buffer;
+    MetalSharedBuffer floor_z_buffer;
 };
 
 #endif
