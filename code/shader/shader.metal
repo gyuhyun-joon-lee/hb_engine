@@ -452,7 +452,7 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
                                 uint2 threadgroup_count_per_grid [[threadgroups_per_grid]])
 {
     const object_data PerGrassData *per_grass_data = &(payload->per_grass_data[threadgroup_position.y * threadgroup_count_per_grid.x + threadgroup_position.x]);
-    if(length_squared(per_grass_data->center - *camera_p) < 10000)
+    // if(length_squared(per_grass_data->center - *camera_p) < 10000)
     {
         // these if statements are needed, as we are firing more threads than the grass vertex count.
         if (thread_index < grass_high_lod_vertex_count)

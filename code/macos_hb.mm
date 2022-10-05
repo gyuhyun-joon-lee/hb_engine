@@ -1013,8 +1013,8 @@ int main(void)
 
     // TODO(gh) The value is not changing for now, but later we will move this to game code
     // and change it per frame. (and maybe also measure the performance)
-    u32 perlin_output_width = 512;
-    u32 perlin_output_height = 512;
+    u32 perlin_output_width = grass_per_grid_count_x;
+    u32 perlin_output_height = grass_per_grid_count_y;
 
     u32 thread_to_spawn_count = 8;
     pthread_attr_t  attr;
@@ -1133,10 +1133,9 @@ int main(void)
     macos_load_game_code(&macos_game_code, game_code_path);
  
     // TODO(gh) Terrible way to handle this...
-    u32 random_grass_hash_count = grass_per_grid_count_x * grass_per_grid_count_y;
-    u32 *random_grass_hashes = (u32 *)malloc(sizeof(u32) * random_grass_hash_count);
+    u32 *random_grass_hashes = (u32 *)malloc(sizeof(u32) * total_grass_per_grid_count);
     for(u32 i = 0;
-            i < random_grass_hash_count;
+            i < total_grass_per_grid_count;
             ++i)
     {
         random_grass_hashes[i] = random_between_u32(&random_series, 0, 10000);
@@ -1459,10 +1458,10 @@ int main(void)
     metal_render_context.combined_vertex_buffer = metal_make_shared_buffer(device, gigabytes(1));
     metal_render_context.combined_index_buffer = metal_make_shared_buffer(device, megabytes(256));
 
-    metal_render_context.random_grass_hash_buffer = metal_make_shared_buffer(device, random_grass_hashes, sizeof(u32) * random_grass_hash_count);
-    metal_render_context.perlin_value_buffer = metal_make_shared_buffer(device, sizeof(f32) * random_grass_hash_count);
+    metal_render_context.random_grass_hash_buffer = metal_make_shared_buffer(device, random_grass_hashes, sizeof(u32) * total_grass_per_grid_count);
+    metal_render_context.perlin_value_buffer = metal_make_shared_buffer(device, sizeof(f32) * total_grass_per_grid_count);
 
-    metal_render_context.floor_z_buffer = metal_make_shared_buffer(device, sizeof(f32) * random_grass_hash_count);
+    metal_render_context.floor_z_buffer = metal_make_shared_buffer(device, sizeof(f32) * total_grass_per_grid_count);
 
     metal_render_context.device = device;
     metal_render_context.view = view;

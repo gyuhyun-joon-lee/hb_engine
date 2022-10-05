@@ -957,6 +957,7 @@ render_raytraced_image_tile(raytracer_data *data)
 #endif
 
 // TODO(gh) Should be a way to optimize this...
+// TODO(gh) Later, we would want to gather arbitrary meshes
 internal void
 raycast_to_populate_floor_z_buffer(Entity *floor, void *floor_z_buffer)
 {
@@ -968,7 +969,6 @@ raycast_to_populate_floor_z_buffer(Entity *floor, void *floor_z_buffer)
     v3 floor_left_bottom_p = floor->p - V3(floor->dim.x/2, floor->dim.y/2, 0);
 
     u32 floor_z_count = 0;
-    // TODO(gh) Later, we would want to gather arbitrary meshes
     for(u32 y = 0;
             y < floor->y_quad_count;
             ++y)

@@ -11,6 +11,7 @@
 #include "hb_simulation.h"
 #include "hb_entity.h"
 #include "hb_render_group.h"
+#include "hb_shared_with_shader.h"
 #include "hb.h"
 
 #include "hb_mesh_loader.cpp"
@@ -67,7 +68,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // add_cube_entity(game_state, V3(0, 0, 15), V3(7, 7, 7), V3(1, 1, 1));
 
         v2 floor_dim = V2(200, 200); // Floor is only consisted of the flat triangles
-        Entity *floor_entity = add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), floor_dim, V3(1, 1, 1), 512, 512);
+        Entity *floor_entity = add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), floor_dim, V3(1, 1, 1), grass_per_grid_count_x, grass_per_grid_count_y);
 
         raycast_to_populate_floor_z_buffer(floor_entity, platform_render_push_buffer->floor_z_buffer);
 

@@ -46,6 +46,8 @@ struct PerObjectData
 
 #define grass_per_grid_count_x 512
 #define grass_per_grid_count_y 512
+#define total_grass_per_grid_count (grass_per_grid_count_x * grass_per_grid_count_y)
+
 #define grass_high_lod_vertex_count 15
 #define grass_high_lod_triangle_count 13
 #define grass_high_lod_index_count (grass_high_lod_triangle_count*3)
@@ -58,7 +60,9 @@ struct PerObjectData
 
 // NOTE(gh) The way we setup how many threads there should be in one object threadgroup
 // is based on the payload size limit(16kb) and the simd group width(32)
-#define object_thread_per_threadgroup_count_x 32
+// TODO(gh) It seems like the minimum thread count should be at least 128, wonder if there's something 
+// to do with the command buffer size inside the GPU?
+#define object_thread_per_threadgroup_count_x 16
 #define object_thread_per_threadgroup_count_y 8
 #define object_threadgroup_per_grid_count_x (grass_per_grid_count_x / object_thread_per_threadgroup_count_x)
 #define object_threadgroup_per_grid_count_y (grass_per_grid_count_y / object_thread_per_threadgroup_count_y)
