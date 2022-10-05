@@ -266,9 +266,9 @@ struct ThreadWorkQueue;
 typedef THREAD_WORK_CALLBACK(ThreadWorkCallback);
 
 // TODO(gh) task_with_memory
-struct thread_work_item
+struct ThreadWorkItem
 {
-    ThreadWorkCallback *callback;
+    ThreadWorkCallback *callback; // callback to the function that we wanna execute
     void *data;
 
     b32 written; // indicates whether this item is properly filled or not
@@ -288,11 +288,11 @@ struct ThreadWorkQueue
     int volatile work_index; // index to the queue that is currently under work
     int volatile add_index;
 
-    thread_work_item items[1024];
+    ThreadWorkItem items[1024];
 
     // now this can be passed onto other codes, such as seperate game code to be used as rendering 
-    platform_add_thread_work_queue_item *add_ThreadWorkQueue_item;
-    platform_complete_all_thread_work_queue_items * complete_all_ThreadWorkQueue_items;
+    platform_add_thread_work_queue_item *add_thread_work_queue_item;
+    platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
 };
 
 struct CommonVertex
@@ -312,7 +312,8 @@ struct PlatformRenderPushBuffer
     u32 total_size;
     u32 used;
 
-    // NOTE(gh) This is a cpu side memory, needs to be flushed later to the GPU.
+    // NOTE(gh) These are cpu side of the buffers that will be updated by the game code, 
+    // which need to be updated later to the GPU.
     void *combined_vertex_buffer;
     u32 vertex_buffer_size;
     u32 used_vertex_buffer;
@@ -320,6 +321,10 @@ struct PlatformRenderPushBuffer
     void *combined_index_buffer;
     u32 index_buffer_size;
     u32 used_index_buffer;
+
+    void *floor_z_buffer;
+    u32 floor_z_buffer_size;
+    u32 used_floor_z_buffer;
 
     // NOTE(gh) game code needs to fill these up
     m4x4 view;

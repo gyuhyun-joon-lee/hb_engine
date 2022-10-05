@@ -120,15 +120,14 @@ add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 
 // NOTE(gh) creates 512 x 512 grid
 internal Entity *
-add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v3 color)
+add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count)
 {
     Entity *result = add_entity(game_state, EntityType_Floor, Entity_Flag_Collides);
     result->p = center;
     result->dim = V3(dim, 0);
     result->color = color;
-
-    u32 x_quad_count = 512;
-    u32 y_quad_count = 512;
+    result->x_quad_count = x_quad_count;
+    result->y_quad_count = y_quad_count;
 
     // TODO(gh) Also make this configurable?
     f32 quad_width = dim.x / (f32)x_quad_count;

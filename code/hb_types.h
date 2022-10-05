@@ -53,13 +53,13 @@ typedef double r64;
 // NOTE(joon) As you may have noticed, structs that are in this file start with lower case,
 // compared to other structs in the codebase.
 
-struct v2
+typedef struct v2
 {
     r32 x;
     r32 y;
-};
+}v2;
 
-struct v3
+typedef struct v3
 {
     union
     {
@@ -83,7 +83,7 @@ struct v3
 
         r32 e[3];
     };
-};
+}v3;
 
 struct v3u
 {

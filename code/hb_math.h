@@ -173,6 +173,14 @@ operator*(f32 value, v2 a)
     return result;
 }
 
+inline f32
+dot(v2 a, v2 b)
+{
+    f32 result = a.x * b.x + a.y * b.y;
+
+    return result;
+}
+
 inline v2
 lerp(v2 min, f32 t, v2 max)
 {

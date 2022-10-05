@@ -312,14 +312,17 @@ struct Payload
 void grass_object_function(object_data Payload *payloadOutput [[payload]],
                           const device GrassObjectFunctionInput *object_function_input[[buffer (0)]],
                           const device uint *hashes[[buffer (1)]],
-                          const device float *time_elasped_from_start[[buffer (2)]],
+                          const device float *floor_z_values[[buffer (2)]],
+                          const device float *time_elasped_from_start[[buffer (3)]],
                           uint thread_index [[thread_index_in_threadgroup]], // thread index in object threadgroup 
                           uint2 thread_count_per_threadgroup [[threads_per_threadgroup]],
                           uint2 thread_count_per_grid [[threads_per_grid]],
                           uint2 thread_position_in_grid [[thread_position_in_grid]], 
                           mesh_grid_properties mgp)
 {
+    // NOTE(gh) These cannot be thread_index, because the buffer we are passing has all the data for the 'grid' 
     uint hash = hashes[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
+    float z = floor_z_values[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
 
     // TODO(gh) Calculate this correctly, also minding the 0.5f offset per square
     // float center_x = object_function_input->floor_left_bottom_p.x + object_function_input->one_thread_worth_dim.x * (thread_position_in_grid.x + random_between_0_1(thread_position_in_grid.x, thread_position_in_grid.y, hash));
@@ -327,8 +330,7 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
     float center_x = object_function_input->floor_left_bottom_p.x + object_function_input->one_thread_worth_dim.x * ((float)thread_position_in_grid.x + 0.5f);
     float center_y = object_function_input->floor_left_bottom_p.y + object_function_input->one_thread_worth_dim.y * ((float)thread_position_in_grid.y + 0.5f);
 
-    // TODO(gh) also feed z value
-    payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, 0.0f);
+    payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, z);
     payloadOutput->per_grass_data[thread_index].blade_width = 0.15f;
     payloadOutput->per_grass_data[thread_index].stride = 2.2f;
     payloadOutput->per_grass_data[thread_index].height = 2.5f;

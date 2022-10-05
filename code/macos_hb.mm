@@ -324,7 +324,7 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
 #define write_barrier() OSMemoryBarrier(); 
 #define read_barrier() OSMemoryBarrier();
 
-struct macos_thread
+struct MacOSthread
 {
     u32 ID;
     ThreadWorkQueue *queue;
@@ -352,7 +352,7 @@ macos_add_thread_work_item(ThreadWorkQueue *queue,
                             void *data)
 {
     assert(data); // TODO(gh) : There might be a work that does not need any data?
-    thread_work_item *item = queue->items + queue->add_index;
+    ThreadWorkItem *item = queue->items + queue->add_index;
     item->callback = work_callback;
     item->data = data;
     item->written = true;
@@ -375,7 +375,7 @@ macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
 
         if(OSAtomicCompareAndSwapIntBarrier(original_work_index, desired_work_index, &queue->work_index))
         {
-            thread_work_item *item = queue->items + original_work_index;
+            ThreadWorkItem *item = queue->items + original_work_index;
             item->callback(item->data);
 
             //printf("Thread %u: Finished working\n", thread_index);
@@ -387,7 +387,7 @@ macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
 }
 
 internal 
-PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_ThreadWorkQueue_items)
+PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_queue_items)
 {
     // TODO(gh): If there was a last thread that was working on the item,
     // this does not guarantee that the last work will be finished.
@@ -401,7 +401,7 @@ PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_ThreadWorkQueue
 internal void*
 thread_proc(void *data)
 {
-    macos_thread *thread = (macos_thread *)data;
+    MacOSthread *thread = (MacOSthread *)data;
     while(1)
     {
         if(macos_do_thread_work_item(thread->queue, thread->ID))
@@ -447,9 +447,11 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 {
     // Update gpu side of combined vertex and index buffer
     // TODO(gh) Do we need to sync before we render??
-    metal_flush_managed_buffer(&render_context->perlin_value_buffer, 0, render_context->perlin_value_buffer.size);
-    metal_flush_managed_buffer(&render_context->combined_vertex_buffer, 0, render_push_buffer->used_vertex_buffer);
-    metal_flush_managed_buffer(&render_context->combined_index_buffer, 0, render_push_buffer->used_index_buffer);
+    // TODO(gh) Don't update the buffer when it's not modified? 
+    metal_update_managed_buffer(&render_context->floor_z_buffer, 0, render_context->floor_z_buffer.size);
+    metal_update_managed_buffer(&render_context->perlin_value_buffer, 0, render_context->perlin_value_buffer.size);
+    metal_update_managed_buffer(&render_context->combined_vertex_buffer, 0, render_push_buffer->used_vertex_buffer);
+    metal_update_managed_buffer(&render_context->combined_index_buffer, 0, render_push_buffer->used_index_buffer);
 
     id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
@@ -622,7 +624,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
             metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
             metal_set_object_buffer(render_encoder, render_context->random_grass_hash_buffer.buffer, 0, 1);
-            metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 2);
+            metal_set_object_buffer(render_encoder, render_context->floor_z_buffer.buffer, 0, 2);
+            metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 3);
 
             metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
             metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
@@ -979,6 +982,44 @@ int main(void)
     // and change it per frame. (and maybe also measure the performance)
     u32 perlin_output_width = 512;
     u32 perlin_output_height = 512;
+
+    u32 thread_to_spawn_count = 8;
+    pthread_attr_t  attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    
+    ThreadWorkQueue thread_work_queue = {};
+
+    semaphore = dispatch_semaphore_create(0);
+
+    for(u32 thread_index = 0;
+            thread_index < thread_to_spawn_count;
+            ++thread_index)
+    {
+        pthread_t ID = 0;
+        MacOSthread *thread = (MacOSthread *)malloc(sizeof(MacOSthread)); 
+
+        thread->ID = thread_index + 1; // 0th thread is the main thread
+        thread->queue = &thread_work_queue;
+
+        if(pthread_create(&ID, &attr, &thread_proc, (void *)thread) != 0)
+        {
+            // TODO(gh) Creating thread failed
+            assert(0);
+        }
+    }
+    pthread_attr_destroy(&attr);
+
+    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 0");
+    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 1");
+    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 2");
+    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 3");
+    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 4");
+    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 5");
+    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 6");
+    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 7");
+    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 8");
+    macos_complete_all_thread_work_queue_items(&thread_work_queue);
 
 #if 0
     u32 output_size = sizeof(u32)*perlin_output_width*perlin_output_height + sizeof(BMPFileHeader);
@@ -1386,7 +1427,9 @@ int main(void)
     metal_render_context.combined_index_buffer = metal_make_managed_buffer(device, megabytes(256));
 
     metal_render_context.random_grass_hash_buffer = metal_make_managed_buffer(device, random_grass_hashes, sizeof(u32) * random_grass_hash_count);
-    metal_render_context.perlin_value_buffer = metal_make_managed_buffer(device, sizeof(f32) * perlin_output_width * perlin_output_height);
+    metal_render_context.perlin_value_buffer = metal_make_managed_buffer(device, sizeof(f32) * random_grass_hash_count);
+
+    metal_render_context.floor_z_buffer = metal_make_managed_buffer(device, sizeof(f32) * random_grass_hash_count);
 
     metal_render_context.device = device;
     metal_render_context.view = view;
@@ -1432,6 +1475,8 @@ int main(void)
     platform_render_push_buffer.vertex_buffer_size = metal_render_context.combined_vertex_buffer.size;
     platform_render_push_buffer.combined_index_buffer = metal_render_context.combined_index_buffer.memory;
     platform_render_push_buffer.index_buffer_size = metal_render_context.combined_index_buffer.size;
+    platform_render_push_buffer.floor_z_buffer = metal_render_context.floor_z_buffer.memory;
+    platform_render_push_buffer.floor_z_buffer_size = metal_render_context.floor_z_buffer.size;
 
     [app activateIgnoringOtherApps:YES];
     [app run];
@@ -1545,12 +1590,12 @@ int main(void)
             {
                 // TODO : Missed Frame!
                 // TODO(gh) : Whenever we miss the frame re-sync with the display link
-                printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
+                // printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
             }
 
 
             time_elapsed_from_start += target_seconds_per_frame;
-            printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
+            // printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
 
             metal_display(&metal_render_context);
         }

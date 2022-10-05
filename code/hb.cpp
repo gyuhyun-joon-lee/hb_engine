@@ -30,12 +30,17 @@
         - If we are going to use the packed texture, how should we correctly sample from it in the shader?
 */
 
+
 extern "C" 
 GAME_UPDATE_AND_RENDER(update_and_render)
 {
     GameState *game_state = (GameState *)platform_memory->permanent_memory;
     if(!game_state->is_initialized)
     {
+        assert(platform_render_push_buffer->combined_vertex_buffer && 
+                platform_render_push_buffer->combined_index_buffer &&
+                platform_render_push_buffer->floor_z_buffer);
+
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
 
         // TODO(gh) entity arena?
@@ -51,7 +56,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         srand(time(0));
         game_state->random_series = start_random_series(rand());
 
-        game_state->camera = init_fps_camera(V3(0, 0, 5), 1.0f, 135, 0.01f, 10000.0f);
+        game_state->camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.01f, 10000.0f);
         // Close camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 135, 0.01f, 10000.0f);
         // Far away camera
@@ -62,7 +67,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_cube_entity(game_state, V3(0, 0, 15), V3(7, 7, 7), V3(1, 1, 1));
 
         v2 floor_dim = V2(200, 200); // Floor is only consisted of the flat triangles
-        add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), floor_dim, V3(1, 1, 1));
+        Entity *floor_entity = add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), floor_dim, V3(1, 1, 1), 512, 512);
+
+        raycast_to_populate_floor_z_buffer(floor_entity, platform_render_push_buffer->floor_z_buffer);
 
 #if 0
         u32 desired_grass_count = 5000;
@@ -155,7 +162,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     init_render_push_buffer(platform_render_push_buffer, &game_state->camera, V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
     platform_render_push_buffer->enable_show_perlin_noise_grid = false;
-    platform_render_push_buffer->enable_grass_mesh_rendering = false;
+    platform_render_push_buffer->enable_grass_mesh_rendering = true;
 
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;

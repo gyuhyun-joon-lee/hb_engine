@@ -45,10 +45,14 @@ struct Entity
     v2 tilt_direction; // only x and y values, z == 0
     u32 hash;
 
+    u32 x_quad_count;
+    u32 y_quad_count;
+
     CommonVertex *vertices;
     u32 vertex_count;
 
     // TODO(gh) We don't really need to hold the indices, as long as we have the index buffer.
+    // or maybe we do? For example, to ray cast upon this entity?
     u32 *indices; 
     u32 index_count;
 

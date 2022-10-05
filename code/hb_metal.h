@@ -111,6 +111,7 @@ struct MetalRenderContext
 
     MetalManagedBuffer random_grass_hash_buffer;
     MetalManagedBuffer perlin_value_buffer;
+    MetalManagedBuffer floor_z_buffer;
 };
 
 #endif
