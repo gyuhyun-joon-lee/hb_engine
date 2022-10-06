@@ -576,6 +576,72 @@ perspective_projection(f32 near, f32 far, f32 width, f32 width_over_height)
 }
 #endif
 
+// TODO(gh) Later we would want to minimize passing the platform buffer here
+// TODO(gh) Make the grass count more configurable?
+internal void
+init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, RandomSeries *series, GrassGrid *grass_grid, u32 grass_count_x, u32 grass_count_y, v2 min, v2 max)
+{
+    grass_grid->grass_count_x = grass_count_x;
+    grass_grid->grass_count_y = grass_count_y;
+    grass_grid->updated_hash_buffer = false;
+    grass_grid->updated_floor_z_buffer = false;
+    grass_grid->min = min;
+    grass_grid->max = max;
+
+    u32 total_grass_count = grass_grid->grass_count_x * grass_grid->grass_count_y;
+
+    if(!grass_grid->hash_buffer)
+    {
+        grass_grid->hash_buffer = (u32 *)((u8 *)render_push_buffer->giant_buffer + render_push_buffer->giant_buffer_used);
+        grass_grid->hash_buffer_size = sizeof(u32) * total_grass_count;
+        grass_grid->hash_buffer_offset = render_push_buffer->giant_buffer_used;
+
+        for(u32 i = 0;
+                i < total_grass_count;
+                ++i)
+        {
+            grass_grid->hash_buffer[i] = random_between_u32(series, 0, 10000);
+        }
+
+        render_push_buffer->giant_buffer_used += grass_grid->hash_buffer_size;
+        assert(render_push_buffer->giant_buffer_used <= render_push_buffer->giant_buffer_size);
+
+        grass_grid->updated_hash_buffer = true;
+    }
+
+    if(!grass_grid->floor_z_buffer)
+    {
+        grass_grid->floor_z_buffer = (f32 *)((u8 *)render_push_buffer->giant_buffer + render_push_buffer->giant_buffer_used);
+        grass_grid->floor_z_buffer_size = sizeof(f32) * total_grass_count;
+        grass_grid->floor_z_buffer_offset = render_push_buffer->giant_buffer_used;
+
+        render_push_buffer->giant_buffer_used += grass_grid->floor_z_buffer_size;
+        assert(render_push_buffer->giant_buffer_used <= render_push_buffer->giant_buffer_size);
+
+        for(u32 i = 0;
+                i < total_grass_count;
+                ++i)
+        {
+            grass_grid->floor_z_buffer[i] = 10.0f;
+        }
+
+        // TODO(gh) later(with arbitrary mesh gatering)!
+        // raycast_to_populate_floor_z_buffer(floor, grass_grid_floor_z_buffer);
+
+        grass_grid->updated_floor_z_buffer = true;
+    }
+
+    if(!grass_grid->perlin_noise_buffer)
+    {
+        grass_grid->perlin_noise_buffer = (f32 *)((u8 *)render_push_buffer->giant_buffer + render_push_buffer->giant_buffer_used);
+        grass_grid->perlin_noise_buffer_size = sizeof(f32) * total_grass_count;
+        grass_grid->perlin_noise_buffer_offset = render_push_buffer->giant_buffer_used;
+
+        render_push_buffer->giant_buffer_used += grass_grid->perlin_noise_buffer_size;
+        assert(render_push_buffer->giant_buffer_used <= render_push_buffer->giant_buffer_size);
+    }
+}
+
 internal void
 init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCamera *camera, v3 clear_color, 
                         b32 enable_shadow)
@@ -591,8 +657,8 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCame
 
     render_push_buffer->enable_shadow = enable_shadow;
     
-    render_push_buffer->used_vertex_buffer = 0;
-    render_push_buffer->used_index_buffer = 0;
+    render_push_buffer->combined_vertex_buffer_used = 0;
+    render_push_buffer->combined_index_buffer_used = 0;
 
     render_push_buffer->used = 0;
 }
@@ -612,8 +678,8 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *ca
 
     render_push_buffer->enable_shadow = enable_shadow;
     
-    render_push_buffer->used_vertex_buffer = 0;
-    render_push_buffer->used_index_buffer = 0;
+    render_push_buffer->combined_vertex_buffer_used = 0;
+    render_push_buffer->combined_index_buffer_used = 0;
 
     render_push_buffer->used = 0;
 }
@@ -636,15 +702,15 @@ push_line(PlatformRenderPushBuffer *render_push_buffer, v3 start, v3 end, v3 col
 internal u32
 push_vertex_data(PlatformRenderPushBuffer *render_push_buffer, CommonVertex *vertices, u32 vertex_count)
 {
-    u32 result = render_push_buffer->used_vertex_buffer;
+    u32 result = render_push_buffer->combined_vertex_buffer_used;
 
     u32 size_to_copy = sizeof(vertices[0]) * vertex_count;
 
-    void *dst = (u8 *)render_push_buffer->combined_vertex_buffer + render_push_buffer->used_vertex_buffer;
+    void *dst = (u8 *)render_push_buffer->combined_vertex_buffer + render_push_buffer->combined_vertex_buffer_used;
     memcpy(dst, vertices, size_to_copy);
 
-    render_push_buffer->used_vertex_buffer += size_to_copy;
-    assert(render_push_buffer->used_vertex_buffer <= render_push_buffer->vertex_buffer_size);
+    render_push_buffer->combined_vertex_buffer_used += size_to_copy;
+    assert(render_push_buffer->combined_vertex_buffer_used <= render_push_buffer->combined_vertex_buffer_size);
 
     // returns original used vertex buffer
     return result;
@@ -653,15 +719,15 @@ push_vertex_data(PlatformRenderPushBuffer *render_push_buffer, CommonVertex *ver
 internal u32
 push_index_data(PlatformRenderPushBuffer *render_push_buffer, u32 *indices, u32 index_count)
 {
-    u32 result = render_push_buffer->used_index_buffer;
+    u32 result = render_push_buffer->combined_index_buffer_used;
 
     u32 size_to_copy = sizeof(indices[0]) * index_count;
     
-    void *dst = (u8 *)render_push_buffer->combined_index_buffer + render_push_buffer->used_index_buffer;
+    void *dst = (u8 *)render_push_buffer->combined_index_buffer + render_push_buffer->combined_index_buffer_used;
     memcpy(dst, indices, size_to_copy);
 
-    render_push_buffer->used_index_buffer += size_to_copy;
-    assert(render_push_buffer->used_index_buffer <= render_push_buffer->index_buffer_size);
+    render_push_buffer->combined_index_buffer_used += size_to_copy;
+    assert(render_push_buffer->combined_index_buffer_used <= render_push_buffer->combined_index_buffer_size);
 
     // returns original used index buffer
     return result;

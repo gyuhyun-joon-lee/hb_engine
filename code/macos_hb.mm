@@ -342,64 +342,21 @@ THREAD_WORK_CALLBACK(print_string)
     printf("%s\n", stringToPrint);
 }
 
-struct ThreadUpdatePerlinNoiseBufferData
-{
-    u32 total_x_count; 
-    u32 total_y_count;
 
-    u32 start_x;
-    u32 start_y;
-
-    u32 one_past_end_x;
-    u32 one_past_end_y;
-
-    f32 time_elapsed_from_start;
-
-    void *perlin_noise_buffer_memory;
-};
-
-internal
-THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
-{
-    ThreadUpdatePerlinNoiseBufferData *d = (ThreadUpdatePerlinNoiseBufferData *)data;
-
-    // TODO(gh) Put this inside the game code, or maybe do this in compute shader
-    f32 *row = (f32 *)d->perlin_noise_buffer_memory + d->start_y * d->total_x_count + d->start_x;
-    for(u32 y = d->start_y;
-            y < d->one_past_end_y;
-            ++y)
-    {
-        f32 *column = (f32 *)row;
-        for(u32 x = d->start_x;
-                x < d->one_past_end_x;
-                ++x)
-        {
-            f32 xf = x / (f32)d->total_x_count;
-            f32 yf = y / (f32)d->total_y_count;
-            f32 factor = 16.0f;
-
-            *column++ = perlin_noise01(factor*xf, factor * yf, d->time_elapsed_from_start);
-        }
-
-        row += d->total_x_count;
-    }
-}
 
 // NOTE(gh): This is single producer multiple consumer - 
 // meaning, it _does not_ provide any thread safety
 // For example, if the two threads try to add the work item,
 // one item might end up over-writing the other one
-internal void
-macos_add_thread_work_item(ThreadWorkQueue *queue,
-                            ThreadWorkCallback *work_callback,
-                            void *data)
+internal
+PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(macos_add_thread_work_item) 
 {
     // TODO(gh) instead of just grabbing the next item, check if next item is available first 
     u32 next_item_index = queue->add_index % array_count(queue->items);
 
     assert(data); // TODO(gh) : There might be a work that does not need any data?
     ThreadWorkItem *item = queue->items + next_item_index;
-    item->callback = work_callback;
+    item->callback = thread_work_callback;
     item->data = data;
     item->written = true;
 
@@ -471,23 +428,6 @@ thread_proc(void *data)
 internal void
 metal_render_and_wait_until_completion(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 time_elapsed_from_start)
 {
-    // Update gpu side of combined vertex and index buffer
-    // TODO(gh) Do we need to sync before we render??
-    // TODO(gh) Don't update the buffer when it's not modified? 
-
-#if 0
-    // TODO(gh) Replace this with proper buffer update detection
-    local_persist bool updated_z_buffer = false;
-    if(!updated_z_buffer)
-    {
-        metal_update_managed_buffer(&render_context->floor_z_buffer, 0, render_context->floor_z_buffer.size);
-        updated_z_buffer = true;
-    }
-    metal_update_managed_buffer(&render_context->perlin_value_buffer, 0, render_context->perlin_value_buffer.size);
-    metal_update_managed_buffer(&render_context->combined_vertex_buffer, 0, render_push_buffer->used_vertex_buffer);
-    metal_update_managed_buffer(&render_context->combined_index_buffer, 0, render_push_buffer->used_index_buffer);
-#endif
-
     id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
     // NOTE(gh) render shadow map
@@ -637,58 +577,47 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_cull_mode(render_encoder, MTLCullModeNone); 
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
 
-        // TODO(gh) This was part of game code, and I want to make it stay that way. 
-        // Is there any way to do so?
-        v2 floor_center = V2(0, 0);
-        v2 floor_dim = V2(200, 200);
-        v2 floor_half_dim = 0.5f * floor_dim;
-        v2 floor_left_bottom_p = floor_center - floor_half_dim;
-        v2 one_object_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
-                                            floor_dim.y / (f32)grass_per_grid_count_y);
-
         if(render_push_buffer->enable_grass_mesh_rendering)
         {
-            for(u32 y = 0;
-                    y < 2;
-                    ++y)
+            for(u32 grass_grid_index = 0;
+                    grass_grid_index < array_count(render_push_buffer->grass_grids);
+                    ++grass_grid_index)
             {
-                for(u32 x = 0;
-                        x < 2;
-                        ++x)
-                {
-                    assert(grass_per_grid_count_x % object_thread_per_threadgroup_count_x == 0);
-                    assert(grass_per_grid_count_y % object_thread_per_threadgroup_count_y == 0);
+                GrassGrid *grid = render_push_buffer->grass_grids + grass_grid_index;
 
-                    GrassObjectFunctionInput grass_object_input = {};
-                    grass_object_input.floor_left_bottom_p = floor_left_bottom_p + 0.5f*hadamard(floor_dim, V2(x, y));
-                    grass_object_input.one_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
-                            floor_dim.y / (f32)grass_per_grid_count_y);
-                    grass_object_input.floor_center = floor_center;
-                    grass_object_input.floor_half_dim = floor_half_dim;
+                assert(grid->grass_count_x % object_thread_per_threadgroup_count_x == 0);
+                assert(grid->grass_count_y % object_thread_per_threadgroup_count_y == 0);
+                u32 object_threadgroup_per_grid_count_x = grid->grass_count_x / object_thread_per_threadgroup_count_x;
+                u32 object_threadgroup_per_grid_count_y = grid->grass_count_y / object_thread_per_threadgroup_count_y;
+                
+                v2 grid_dim = grid->max - grid->min;
 
-                    metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
-                    metal_set_object_buffer(render_encoder, render_context->random_grass_hash_buffer.buffer, 0, 1);
-                    metal_set_object_buffer(render_encoder, render_context->floor_z_buffer.buffer, 0, 2);
-                    metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 3);
+                GrassObjectFunctionInput grass_object_input = {};
+                grass_object_input.floor_left_bottom_p = grid->min;
+                grass_object_input.one_thread_worth_dim = V2(grid_dim.x/grid->grass_count_x, grid_dim.y/grid->grass_count_y);
 
-                    metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
-                    metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
-                    metal_set_mesh_bytes(render_encoder, &render_push_buffer->camera_p, sizeof(render_push_buffer->camera_p), 2);
+                metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
+                metal_set_object_buffer(render_encoder, render_context->giant_buffer.buffer, grid->hash_buffer_offset, 1);
+                metal_set_object_buffer(render_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 2);
+                metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 3);
 
-                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
-                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-                    v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
-                            object_threadgroup_per_grid_count_y, 
-                            1);
-                    v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
-                            object_thread_per_threadgroup_count_y, 
-                            1);
-                    v3u mesh_thread_per_threadgroup_count = V3u(grass_high_lod_index_count, 1, 1); // same as index count for the grass blade
+                metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
+                metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
+                metal_set_mesh_bytes(render_encoder, &render_push_buffer->camera_p, sizeof(render_push_buffer->camera_p), 2);
 
-                    metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
-                            object_thread_per_threadgroup_count, 
-                            mesh_thread_per_threadgroup_count);
-                }
+                metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
+                metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+                v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
+                        object_threadgroup_per_grid_count_y, 
+                        1);
+                v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
+                        object_thread_per_threadgroup_count_y, 
+                        1);
+                v3u mesh_thread_per_threadgroup_count = V3u(grass_high_lod_index_count, 1, 1); // same as index count for the grass blade
+
+                metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
+                        object_thread_per_threadgroup_count, 
+                        mesh_thread_per_threadgroup_count);
             }
         }
 
@@ -880,6 +809,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         if(render_push_buffer->enable_show_perlin_noise_grid)
         {
+#if 0 
             // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
             // indierct draw method?
             // NOTE(gh) z value will come from the floor z buffer
@@ -907,6 +837,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
             metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 4);
             metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
                     0, 6, 0, grass_per_grid_count_x * grass_per_grid_count_y);
+#endif
         }
 
 #if 0
@@ -1025,17 +956,14 @@ int main(void)
     srand(time(NULL));
     RandomSeries random_series = start_random_series(rand()); 
 
-    // TODO(gh) The value is not changing for now, but later we will move this to game code
-    // and change it per frame. (and maybe also measure the performance)
-    u32 perlin_output_width = grass_per_grid_count_x;
-    u32 perlin_output_height = grass_per_grid_count_y;
-
     u32 thread_to_spawn_count = 8;
     pthread_attr_t  attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     
     ThreadWorkQueue thread_work_queue = {};
+    thread_work_queue.add_thread_work_queue_item = macos_add_thread_work_item;
+    thread_work_queue.complete_all_thread_work_queue_items = macos_complete_all_thread_work_queue_items;
 
     semaphore = dispatch_semaphore_create(0);
 
@@ -1069,65 +997,6 @@ int main(void)
     macos_complete_all_thread_work_queue_items(&thread_work_queue);
 
 #if 0
-    u32 output_size = sizeof(u32)*perlin_output_width*perlin_output_height + sizeof(BMPFileHeader);
-    u8 *output = (u8 *)malloc(output_size);
-    zero_memory(output, output_size);
-    
-    BMPFileHeader *bmp_header = (BMPFileHeader *)output;  
-    bmp_header->file_header = 19778; 
-    bmp_header->file_size = output_size;
-    bmp_header->pixel_offset = sizeof(BMPFileHeader);
-
-    bmp_header->header_size = sizeof(BMPFileHeader) - 14;
-    bmp_header->width = perlin_output_width;
-    bmp_header->height = perlin_output_height;
-    bmp_header->color_plane_count = 1;
-    bmp_header->bits_per_pixel = 32;
-    bmp_header->compression = 3;
-
-    bmp_header->image_size = sizeof(u32)*perlin_output_width*perlin_output_height;
-    bmp_header->pixels_in_meter_x = 11811;
-    bmp_header->pixels_in_meter_y = 11811;
-    bmp_header->red_mask = 0x00ff0000;
-    bmp_header->green_mask = 0x0000ff00;
-    bmp_header->blue_mask = 0x000000ff;
-    bmp_header->alpha_mask = 0xff000000;
-
-    // Testing perlin noise output
-    BMPFileHeader file_header = {};
-    file_header.file_header = 0x4D42; // BM in little endian
-    file_header.file_size = sizeof(file_header) + 4 * perlin_output_width * perlin_output_height;
-    file_header.pixel_offset = sizeof(BMPFileHeader);
-
-    u8 *pixels = (u8 *)output + sizeof(BMPFileHeader);
-    u8 *row = (u8 *)pixels;
-    f32 z = 0.0f;
-    for(u32 y = 0;
-            y < perlin_output_height;
-            ++y)
-    {
-        u32 *pixel = (u32 *)row;
-        for(u32 x = 0;
-                x < perlin_output_width;
-                ++x)
-        {
-            // f32 perlin_value = perlin_noise01((f32)x, (f32)y, z);
-            f32 perlin_value = perlin_values[y * perlin_output_width + x];
-            u8 single_channel_value = (u8)round_r32_to_u32(perlin_value * 255.0f);
-
-            *pixel = (0xff << 24) |
-                    (single_channel_value << 16) |
-                    (single_channel_value << 8) |
-                    (single_channel_value << 0);
-            pixel++;
-        }
-
-        row += 4 * perlin_output_width;
-    }
-
-    debug_macos_write_entire_file("/Volumes/meka/HB_engine/misc/output.bmp", output, output_size);
-#endif
-#if 0
     // Testing font in macos...
     UIFont * arial_font = [fontWithName : [NSString stringWithUTF8String:vertex_shader_name]
                                     size : 40];
@@ -1146,14 +1015,6 @@ int main(void)
     MacOSGameCode macos_game_code = {};
     macos_load_game_code(&macos_game_code, game_code_path);
  
-    // TODO(gh) Terrible way to handle this...
-    u32 *random_grass_hashes = (u32 *)malloc(sizeof(u32) * total_grass_per_grid_count);
-    for(u32 i = 0;
-            i < total_grass_per_grid_count;
-            ++i)
-    {
-        random_grass_hashes[i] = random_between_u32(&random_series, 0, 10000);
-    }
 
     //TODO : writefile?
     PlatformAPI platform_api = {};
@@ -1219,6 +1080,7 @@ int main(void)
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     NSString *name = device.name;
     bool has_unified_memory = device.hasUnifiedMemory;
+    u64 max_allocation_size = device.recommendedMaxWorkingSetSize;
 
     assert(metal_does_support_gpu_family(device, MTLGPUFamilyApple7));
     // TODO(gh) MTLGPUFamilyApple8 not defined?
@@ -1340,9 +1202,9 @@ int main(void)
 
     // TODO(gh) These are just temporary numbers, there should be more robust way to get these information
     u32 max_object_thread_count_per_object_threadgroup = 
-        object_thread_per_threadgroup_count_x*object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
+        object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
     u32 max_mesh_threadgroup_count_per_mesh_grid = 
-        mesh_threadgroup_count_x*mesh_threadgroup_count_y; // Each mesh thread group is one grass blade
+        max_object_thread_count_per_object_threadgroup; // Each mesh thread group is one grass blade
     u32 max_mesh_thread_count_per_mesh_threadgroup = grass_high_lod_index_count;  // TODO(gh) Fix this as multiple of simd width? 
     metal_render_context.grass_mesh_render_pipeline = 
         metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
@@ -1472,10 +1334,7 @@ int main(void)
     metal_render_context.combined_vertex_buffer = metal_make_shared_buffer(device, gigabytes(1));
     metal_render_context.combined_index_buffer = metal_make_shared_buffer(device, megabytes(256));
 
-    metal_render_context.random_grass_hash_buffer = metal_make_shared_buffer(device, random_grass_hashes, sizeof(u32) * total_grass_per_grid_count);
-    metal_render_context.perlin_value_buffer = metal_make_shared_buffer(device, sizeof(f32) * total_grass_per_grid_count);
-
-    metal_render_context.floor_z_buffer = metal_make_shared_buffer(device, sizeof(f32) * total_grass_per_grid_count);
+    metal_render_context.giant_buffer = metal_make_shared_buffer(device, gigabytes(1));
 
     metal_render_context.device = device;
     metal_render_context.view = view;
@@ -1518,19 +1377,14 @@ int main(void)
     platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
 
     platform_render_push_buffer.combined_vertex_buffer = metal_render_context.combined_vertex_buffer.memory;
-    platform_render_push_buffer.vertex_buffer_size = metal_render_context.combined_vertex_buffer.size;
+    platform_render_push_buffer.combined_vertex_buffer_size = metal_render_context.combined_vertex_buffer.size;
     platform_render_push_buffer.combined_index_buffer = metal_render_context.combined_index_buffer.memory;
-    platform_render_push_buffer.index_buffer_size = metal_render_context.combined_index_buffer.size;
-    platform_render_push_buffer.floor_z_buffer = metal_render_context.floor_z_buffer.memory;
-    platform_render_push_buffer.floor_z_buffer_size = metal_render_context.floor_z_buffer.size;
+    platform_render_push_buffer.combined_index_buffer_size = metal_render_context.combined_index_buffer.size;
+    platform_render_push_buffer.giant_buffer = metal_render_context.giant_buffer.memory;
+    platform_render_push_buffer.giant_buffer_size = metal_render_context.giant_buffer.size;
 
     [app activateIgnoringOtherApps:YES];
     [app run];
-
-    // TODO(gh) Very bad idea, need to clean this up!
-    ThreadUpdatePerlinNoiseBufferData *update_perlin_noise_buffer_data = (ThreadUpdatePerlinNoiseBufferData *)malloc(sizeof(ThreadUpdatePerlinNoiseBufferData)*8*8);
-
-    u32 perlin_offset_x = 0;
 
     u64 last_time = mach_absolute_time();
     is_game_running = true;
@@ -1569,60 +1423,10 @@ int main(void)
             debug_cycle_counters[counter_index].hit_count = 0;
         }
 
-#if 1
-        u32 thread_x_count = 8;
-        u32 thread_y_count = 8;
-        for(u32 y = 0;
-                y < thread_y_count;
-                ++y)
-        {
-            for(u32 x = 0;
-                    x < thread_x_count;
-                    ++x)
-            {
-                ThreadUpdatePerlinNoiseBufferData *data = update_perlin_noise_buffer_data + 8*y + x;
-                data->total_x_count = perlin_output_width;
-                data->total_y_count = perlin_output_height;
-                data->start_x = x * (data->total_x_count / thread_x_count);
-                data->start_y = y * (data->total_y_count / thread_y_count);
-                data->one_past_end_x = data->start_x + (data->total_x_count / thread_x_count);
-                data->one_past_end_y = data->start_y + (data->total_y_count / thread_y_count);
-                data->time_elapsed_from_start = time_elapsed_from_start;
-                data->perlin_noise_buffer_memory = metal_render_context.perlin_value_buffer.memory;
-                macos_add_thread_work_item(&thread_work_queue, thread_update_perlin_noise_buffer_callback, (void *)data);
-            }
-        }
-#endif
-#if 0
-        // TODO(gh) Put this inside the game code, or maybe do this in compute shader
-        u32 perlin_value_count = 0;
-        for(u32 y = 0;
-                y < perlin_output_height;
-                ++y)
-        {
-            for(u32 x = 0;
-                    x < perlin_output_width;
-                    ++x)
-            {
-                f32 xf = (x+perlin_offset_x) / (f32)perlin_output_width;
-                f32 yf = y / (f32)perlin_output_height;
-                f32 factor = 16.0f;
-
-                float perlin_value = perlin_noise01(factor*xf, factor * yf, time_elapsed_from_start);
-                f32 *dst = (f32 *)metal_render_context.perlin_value_buffer.memory + perlin_value_count++;
-                *dst = perlin_value;
-            }
-        }
-        assert(perlin_value_count == (perlin_output_width * perlin_output_height));
-#endif
-
         if(macos_game_code.update_and_render)
         {
-            macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer);
+            macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer, &thread_work_queue);
         }
-
-        // printf("work : %d, add : %d\n", thread_work_queue.work_index, thread_work_queue.add_index);
-        macos_complete_all_thread_work_queue_items(&thread_work_queue);
 
         // TODO(gh) Priority queue?
 
@@ -1703,8 +1507,6 @@ int main(void)
                                                                             (u32)(debug_cycle_counters[cycle_counter_index].cycle_count/debug_cycle_counters[cycle_counter_index].hit_count));
         }
 #endif
-        perlin_offset_x++;
-
         // update the time stamp
         last_time = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
     }

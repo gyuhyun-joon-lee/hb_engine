@@ -103,15 +103,8 @@ struct MetalRenderContext
     MetalSharedBuffer combined_vertex_buffer;
     MetalSharedBuffer combined_index_buffer;
 
-    MetalSharedBuffer voxel_position_buffer;
-    MetalSharedBuffer voxel_color_buffer;
-
-    MetalSharedBuffer cube_inward_facing_index_buffer;
-    MetalSharedBuffer cube_outward_facing_index_buffer;
-
-    MetalSharedBuffer random_grass_hash_buffer;
-    MetalSharedBuffer perlin_value_buffer;
-    MetalSharedBuffer floor_z_buffer;
+    // will be passed on to the game code
+    MetalSharedBuffer giant_buffer;
 };
 
 #endif

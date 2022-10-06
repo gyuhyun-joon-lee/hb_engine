@@ -166,7 +166,7 @@ push_size(MemoryArena *memory_arena, size_t size, size_t alignment = 0)
 {
     assert(size != 0);
     assert(memory_arena->temp_memory_count == 0);
-    assert(memory_arena->used < memory_arena->total_size);
+    assert(memory_arena->used <= memory_arena->total_size);
 
     void *result = (u8 *)memory_arena->base + memory_arena->used;
     memory_arena->used += size;
@@ -193,7 +193,7 @@ push_size(TempMemory *temp_memory, size_t size, size_t alignment = 0)
     void *result = (u8 *)temp_memory->base + temp_memory->used;
     temp_memory->used += size;
 
-    assert(temp_memory->used < temp_memory->total_size);
+    assert(temp_memory->used <= temp_memory->total_size);
 
     return result;
 }
@@ -292,17 +292,49 @@ struct ThreadWorkQueue
 
     ThreadWorkItem items[1024];
 
+    // TODO(gh) Maybe put this in other place
     // now this can be passed onto other codes, such as seperate game code to be used as rendering 
     platform_add_thread_work_queue_item *add_thread_work_queue_item;
     platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
 };
 
+// TODO(gh) Should move these to another file
 struct CommonVertex
 {
     v3 p;
     v3 normal;
 };
 
+// TODO(gh) Only a temporary thing, should move this to the game code?
+struct GrassGrid
+{
+    u32 grass_count_x;
+    u32 grass_count_y;
+
+    // NOTE(gh) Platform layer should give enough memory to each of the buffer to 
+    // hold grass_count_x*grass_count_y amount of elements. 
+    u32 *hash_buffer;
+    u32 hash_buffer_size;
+    u32 hash_buffer_offset; // offset to the giant buffer, game code should not care about this
+    b32 updated_hash_buffer;
+
+    f32 *floor_z_buffer;
+    u32 floor_z_buffer_size;
+    u32 floor_z_buffer_offset; // offset to the giant buffer, game code should not care about this
+    b32 updated_floor_z_buffer;
+
+    // TODO(gh) Also store offset x and y for smooth transition between grids, 
+    // or maybe make perlin noise to be seperate from the grid?
+    // For now, it is given free because of the fact that every grid is 256 x 256
+    f32 *perlin_noise_buffer;
+    u32 perlin_noise_buffer_size;
+    u32 perlin_noise_buffer_offset; // offset to the giant buffer, game code should not care about this
+
+    v2 min;
+    v2 max;
+};
+
+// TODO(gh) Request(game code) - Give(platform layer) system?
 struct PlatformRenderPushBuffer
 {
     // NOTE(gh) provided by the platform layer
@@ -317,16 +349,19 @@ struct PlatformRenderPushBuffer
     // NOTE(gh) These are cpu side of the buffers that will be updated by the game code, 
     // which need to be updated later to the GPU.
     void *combined_vertex_buffer;
-    u32 vertex_buffer_size;
-    u32 used_vertex_buffer;
+    u32 combined_vertex_buffer_size;
+    u32 combined_vertex_buffer_used;
 
     void *combined_index_buffer;
-    u32 index_buffer_size;
-    u32 used_index_buffer;
+    u32 combined_index_buffer_size;
+    u32 combined_index_buffer_used;
 
-    void *floor_z_buffer;
-    u32 floor_z_buffer_size;
-    u32 used_floor_z_buffer;
+    // MTLHeap?
+    void *giant_buffer;
+    u64 giant_buffer_size;
+    u64 giant_buffer_used;
+
+    GrassGrid grass_grids[4];
 
     // NOTE(gh) game code needs to fill these up
     m4x4 view;
@@ -344,7 +379,7 @@ struct PlatformRenderPushBuffer
     b32 enable_grass_mesh_rendering;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void (name)(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory, PlatformRenderPushBuffer *platform_render_push_buffer)
+#define GAME_UPDATE_AND_RENDER(name) void (name)(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory, PlatformRenderPushBuffer *platform_render_push_buffer, ThreadWorkQueue *thread_work_queue)
 typedef GAME_UPDATE_AND_RENDER(UpdateAndRender);
 
 #ifdef __cplusplus
