@@ -403,7 +403,7 @@ macos_add_thread_work_item(ThreadWorkQueue *queue,
     item->data = data;
     item->written = true;
 
-    queue->add_index++;
+    queue->add_index = (queue->add_index+1) % array_count(queue->items);
     write_barrier();
 
     // increment the semaphore value by 1
@@ -440,6 +440,7 @@ PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_que
     // Maybe add some flag inside the thread? (sleep / working / ...)
     while(queue->work_index != queue->add_index) 
     {
+        // printf("waiting... %d, %d\n", queue->work_index, queue->add_index);
         macos_do_thread_work_item(queue, 0);
     }
 }
@@ -647,38 +648,48 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         if(render_push_buffer->enable_grass_mesh_rendering)
         {
-            assert(grass_per_grid_count_x % object_thread_per_threadgroup_count_x == 0);
-            assert(grass_per_grid_count_y % object_thread_per_threadgroup_count_y == 0);
+            for(u32 y = 0;
+                    y < 2;
+                    ++y)
+            {
+                for(u32 x = 0;
+                        x < 2;
+                        ++x)
+                {
+                    assert(grass_per_grid_count_x % object_thread_per_threadgroup_count_x == 0);
+                    assert(grass_per_grid_count_y % object_thread_per_threadgroup_count_y == 0);
 
-            GrassObjectFunctionInput grass_object_input = {};
-            grass_object_input.floor_left_bottom_p = floor_left_bottom_p;
-            grass_object_input.one_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
-                                                        floor_dim.y / (f32)grass_per_grid_count_y);
-            grass_object_input.floor_center = floor_center;
-            grass_object_input.floor_half_dim = floor_half_dim;
+                    GrassObjectFunctionInput grass_object_input = {};
+                    grass_object_input.floor_left_bottom_p = floor_left_bottom_p + 0.5f*hadamard(floor_dim, V2(x, y));
+                    grass_object_input.one_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
+                            floor_dim.y / (f32)grass_per_grid_count_y);
+                    grass_object_input.floor_center = floor_center;
+                    grass_object_input.floor_half_dim = floor_half_dim;
 
-            metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
-            metal_set_object_buffer(render_encoder, render_context->random_grass_hash_buffer.buffer, 0, 1);
-            metal_set_object_buffer(render_encoder, render_context->floor_z_buffer.buffer, 0, 2);
-            metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 3);
+                    metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
+                    metal_set_object_buffer(render_encoder, render_context->random_grass_hash_buffer.buffer, 0, 1);
+                    metal_set_object_buffer(render_encoder, render_context->floor_z_buffer.buffer, 0, 2);
+                    metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 3);
 
-            metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
-            metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
-            metal_set_mesh_bytes(render_encoder, &render_push_buffer->camera_p, sizeof(render_push_buffer->camera_p), 2);
+                    metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
+                    metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
+                    metal_set_mesh_bytes(render_encoder, &render_push_buffer->camera_p, sizeof(render_push_buffer->camera_p), 2);
 
-            metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
-            metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-            v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
-                                                        object_threadgroup_per_grid_count_y, 
-                                                        1);
-            v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
-                                                          object_thread_per_threadgroup_count_y, 
-                                                          1);
-            v3u mesh_thread_per_threadgroup_count = V3u(grass_low_lod_index_count, 1, 1); // same as index count for the grass blade
+                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
+                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+                    v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
+                            object_threadgroup_per_grid_count_y, 
+                            1);
+                    v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
+                            object_thread_per_threadgroup_count_y, 
+                            1);
+                    v3u mesh_thread_per_threadgroup_count = V3u(grass_high_lod_index_count, 1, 1); // same as index count for the grass blade
 
-            metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
-                                          object_thread_per_threadgroup_count, 
-                                          mesh_thread_per_threadgroup_count);
+                    metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
+                            object_thread_per_threadgroup_count, 
+                            mesh_thread_per_threadgroup_count);
+                }
+            }
         }
 
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
@@ -1332,7 +1343,7 @@ int main(void)
         object_thread_per_threadgroup_count_x*object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
     u32 max_mesh_threadgroup_count_per_mesh_grid = 
         mesh_threadgroup_count_x*mesh_threadgroup_count_y; // Each mesh thread group is one grass blade
-    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_low_lod_index_count; 
+    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_high_lod_index_count;  // TODO(gh) Fix this as multiple of simd width? 
     metal_render_context.grass_mesh_render_pipeline = 
         metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
                                         "grass_object_function", 
@@ -1558,7 +1569,7 @@ int main(void)
             debug_cycle_counters[counter_index].hit_count = 0;
         }
 
-#if 0
+#if 1
         u32 thread_x_count = 8;
         u32 thread_y_count = 8;
         for(u32 y = 0;
@@ -1582,6 +1593,7 @@ int main(void)
             }
         }
 #endif
+#if 0
         // TODO(gh) Put this inside the game code, or maybe do this in compute shader
         u32 perlin_value_count = 0;
         for(u32 y = 0;
@@ -1602,13 +1614,14 @@ int main(void)
             }
         }
         assert(perlin_value_count == (perlin_output_width * perlin_output_height));
+#endif
 
         if(macos_game_code.update_and_render)
         {
             macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer);
         }
 
-        printf("writeindex : %d, addindex : %d\n", thread_work_queue.work_index, thread_work_queue.add_index);
+        // printf("work : %d, add : %d\n", thread_work_queue.work_index, thread_work_queue.add_index);
         macos_complete_all_thread_work_queue_items(&thread_work_queue);
 
         // TODO(gh) Priority queue?
@@ -1668,7 +1681,7 @@ int main(void)
             {
                 // TODO : Missed Frame!
                 // TODO(gh) : Whenever we miss the frame re-sync with the display link
-                printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
+                // printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
             }
 
 

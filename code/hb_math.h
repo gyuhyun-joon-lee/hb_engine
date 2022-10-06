@@ -192,6 +192,12 @@ lerp(v2 min, f32 t, v2 max)
     return result;
 }
 
+inline v2
+hadamard(v2 a, v2 b)
+{
+    return V2(a.x*b.x, a.y*b.y);
+}
+
 inline v3
 V3()
 {

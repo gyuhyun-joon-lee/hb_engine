@@ -36,7 +36,9 @@ struct PerObjectData
                   For example, two CU cannot split the threadgroup. Threads in the same thread group shares same thread memory.
     SIMDgroup : Equivalent to wavefront or warp. Threads in the same SIMDgroup will be executed with same instruction set 
                 in lock-step. Threads in the same SIMDgroup cannot diverge, and CU cannot switch to individual thread -
-                it can only switch to entirely new SIMDgroup to hide latency.
+                it can only switch to entirely new SIMDgroup to hide latency. When the GPU collects the threads into SIMDgroup,
+                it can try to do that based on the divergence(for example, one for the A routine of the if statement
+                and another one for the b routine)
 */
 
 #define grass_per_grid_count_x 512
@@ -56,11 +58,11 @@ struct PerObjectData
 // NOTE(gh) The way we setup how many threads there should be in one object threadgroup
 // is based on the payload size limit(16kb) and the simd group width(32)
 // TODO(gh) It seems like the minimum thread count should be at least 128, wonder if there's something 
-// to do with the command buffer size inside the GPU?
-#define object_thread_per_threadgroup_count_x 16
-#define object_thread_per_threadgroup_count_y 8
-#define object_threadgroup_per_grid_count_x (grass_per_grid_count_x / object_thread_per_threadgroup_count_x)
-#define object_threadgroup_per_grid_count_y (grass_per_grid_count_y / object_thread_per_threadgroup_count_y)
+// to do with the command buffer size inside the GPU?, or maybe because
+#define object_thread_per_threadgroup_count_x 8
+#define object_thread_per_threadgroup_count_y 4
+#define object_threadgroup_per_grid_count_x (((grass_per_grid_count_x / object_thread_per_threadgroup_count_x)) / 2)
+#define object_threadgroup_per_grid_count_y (((grass_per_grid_count_y / object_thread_per_threadgroup_count_y)) / 2)
 
 #define mesh_threadgroup_count_x object_thread_per_threadgroup_count_x
 #define mesh_threadgroup_count_y object_thread_per_threadgroup_count_y
