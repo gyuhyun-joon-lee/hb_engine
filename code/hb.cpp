@@ -11,7 +11,6 @@
 #include "hb_simulation.h"
 #include "hb_entity.h"
 #include "hb_render_group.h"
-#include "hb_shared_with_shader.h"
 #include "hb.h"
 
 #include "hb_mesh_loader.cpp"
@@ -39,8 +38,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     if(!game_state->is_initialized)
     {
         assert(platform_render_push_buffer->combined_vertex_buffer && 
-                platform_render_push_buffer->combined_index_buffer &&
-                platform_render_push_buffer->floor_z_buffer);
+                platform_render_push_buffer->combined_index_buffer);
 
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
 
@@ -67,10 +65,37 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         // add_cube_entity(game_state, V3(0, 0, 15), V3(7, 7, 7), V3(1, 1, 1));
 
-        v2 floor_dim = V2(200, 200); // Floor is only consisted of the flat triangles
-        Entity *floor_entity = add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), floor_dim, V3(1, 1, 1), grass_per_grid_count_x, grass_per_grid_count_y);
+        // TODO(gh) This should be independent from the grass count... once we have the mesh gathering system 
+        // for raycasting the floor
+        v2 floor_dim = V2(100, 100); // Floor is only consisted of the flat triangles
 
-        raycast_to_populate_floor_z_buffer(floor_entity, platform_render_push_buffer->floor_z_buffer);
+        u32 floor_count_x = 2;
+        u32 floor_count_y = 2;
+        assert(floor_count_x * floor_count_y == array_count(platform_render_push_buffer->grass_grids));
+
+        v2 floor_left_bottom_p = V2(0, 0);
+        for(u32 y = 0;
+                y < floor_count_y;
+                ++y)
+        {
+            for(u32 x = 0;
+                    x < floor_count_x;
+                    ++x)
+            {
+                u32 grass_on_floor_count_x = 256;
+                u32 grass_on_floor_count_y = 256;
+
+                v2 min = floor_left_bottom_p + hadamard(floor_dim, V2(x, y));
+                v2 max = min + floor_dim;
+                v2 center = 0.5f*(min + max);
+
+                Entity *floor_entity = 
+                    add_floor_entity(game_state, &game_state->transient_arena, V3(center, 0), floor_dim, V3(1, 1, 1), grass_on_floor_count_x, grass_on_floor_count_y);
+
+                GrassGrid *grid = platform_render_push_buffer->grass_grids + y*floor_count_x + x;
+                init_grass_grid(platform_render_push_buffer, &game_state->random_series, grid, 256, 256, min, max);
+            }
+        }
 
 #if 0
         u32 desired_grass_count = 5000;
@@ -78,7 +103,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         plant_grasses_using_white_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                         floor_width, floor_height, 0, desired_grass_count);
 #else 
-#if 1
+#if 0
         u32 desired_grass_count = 100;
         plant_grasses_using_brute_force_blue_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
                                                   10, 10, 0, desired_grass_count, 0.1f);
@@ -158,6 +183,38 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
+    u32 update_perlin_noise_buffer_data_count = 8;
+    TempMemory perlin_noise_temp_memory = 
+        start_temp_memory(&game_state->transient_arena, 
+                        sizeof(ThreadUpdatePerlinNoiseBufferData)*update_perlin_noise_buffer_data_count);
+    ThreadUpdatePerlinNoiseBufferData *update_perlin_noise_buffer_data = 
+        push_array(&perlin_noise_temp_memory, ThreadUpdatePerlinNoiseBufferData, update_perlin_noise_buffer_data_count);
+
+#if 0
+    u32 update_perlin_noise_buffer_data_used_count = 0;
+    // TODO(gh) populate the perlin noise buffer in each grid, should be a better way to handle this?
+    for(u32 grass_grid_index = 0;
+            grass_grid_index < array_count(platform_render_push_buffer->grass_grids);
+            ++grass_grid_index)
+    {
+        GrassGrid *grid = platform_render_push_buffer->grass_grids + grass_grid_index;
+
+        ThreadUpdatePerlinNoiseBufferData *data = update_perlin_noise_buffer_data + update_perlin_noise_buffer_data_used_count++;
+        data->total_x_count = grid->grass_count_x;
+        data->total_y_count = grid->grass_count_y;
+        // TODO(gh) Should be continuous, think about how we'll achieve it later down the road
+        data->start_x = 0;
+        data->start_y = 0;
+        data->one_past_end_x = grid->grass_count_x;
+        data->one_past_end_y = grid->grass_count_x;
+        data->time_elapsed_from_start = platform_input->time_elapsed_from_start;
+        data->perlin_noise_buffer_memory = grid->perlin_noise_buffer;
+        thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_update_perlin_noise_buffer_callback, (void *)data);
+
+        assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
+    }
+#endif
+
     // NOTE(gh) render entity start
     // init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
     init_render_push_buffer(platform_render_push_buffer, &game_state->camera, V3(0, 0, 0), true);
@@ -200,5 +257,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
+
+    thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue);
+
+    end_temp_memory(&perlin_noise_temp_memory);
 }
 

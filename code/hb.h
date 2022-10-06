@@ -24,7 +24,6 @@ struct GameState
 
     MemoryArena mass_agg_arena;
 
-    // TODO(gh) seed this properly
     RandomSeries random_series;
 
     // TODO(gh) More structured light information

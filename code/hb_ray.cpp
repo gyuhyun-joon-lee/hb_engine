@@ -1010,11 +1010,6 @@ raycast_to_populate_floor_z_buffer(Entity *floor, void *floor_z_buffer)
             f32 u = dot(edge01.xy, center - p0.xy) / length(edge01.xy);
             f32 v = dot(edge02.xy, center - p0.xy) / length(edge02.xy);
 
-            if(x == 0)
-            {
-                int a = 1;
-            }
-
             f32 z = 0.0f;
             // NOTE(gh) check the bary centric coordinate
             if(u >= 0.0f && v >= 0.0f && (u+v) <= 1.0f)

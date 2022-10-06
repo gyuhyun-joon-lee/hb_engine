@@ -38,6 +38,27 @@ internal void
 load_bmp(char *file_name)
 {
 
+/*
+    BMPFileHeader *bmp_header = (BMPFileHeader *)output;  
+    bmp_header->file_header = 19778; 
+    bmp_header->file_size = output_size;
+    bmp_header->pixel_offset = sizeof(BMPFileHeader);
+
+    bmp_header->header_size = sizeof(BMPFileHeader) - 14;
+    bmp_header->width = perlin_output_width;
+    bmp_header->height = perlin_output_height;
+    bmp_header->color_plane_count = 1;
+    bmp_header->bits_per_pixel = 32;
+    bmp_header->compression = 3;
+
+    bmp_header->image_size = sizeof(u32)*perlin_output_width*perlin_output_height;
+    bmp_header->pixels_in_meter_x = 11811;
+    bmp_header->pixels_in_meter_y = 11811;
+    bmp_header->red_mask = 0x00ff0000;
+    bmp_header->green_mask = 0x0000ff00;
+    bmp_header->blue_mask = 0x000000ff;
+    bmp_header->alpha_mask = 0xff000000;
+    */
 }
 
 internal void

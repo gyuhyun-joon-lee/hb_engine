@@ -207,8 +207,11 @@ forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
 {
     ShowPerlinNoiseGridVertexOutput result = {};
 
-    uint grid_y = instanceID / grass_per_grid_count_x;
-    uint grid_x = instanceID - grid_y * grass_per_grid_count_x;
+    // uint grid_y = instanceID / grass_per_grid_count_x;
+    // uint grid_x = instanceID - grid_y * grass_per_grid_count_x;
+    // TODO(gh) Come back to this later!
+    uint grid_y = 0;
+    uint grid_x = 0;
 
     // TODO(gh) instead of hard coding this, any way to get what should be the maximum z value 
     float z = floor_z_values[instanceID] + 5.0f;
@@ -348,7 +351,8 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
     {
         // TODO(gh) How does GPU know when it should fire up the mesh grid? 
         // Does it do it when all threads in object threadgroup finishes?
-        mgp.set_threadgroups_per_grid(uint3(mesh_threadgroup_count_x, mesh_threadgroup_count_y, 1));
+        // NOTE(gh) Each object thread _should_ spawn one mesh threadgroup
+        mgp.set_threadgroups_per_grid(uint3(object_thread_per_threadgroup_count_x, object_thread_per_threadgroup_count_y, 1));
     }
 }
 
@@ -370,6 +374,7 @@ quadratic_bezier_first_derivative(float3 p0, float3 p1, float3 p2, float t)
     return result;
 }
 
+#if 0
 bool
 IsInsideFrustum(const object_data PerGrassData *per_grass_data, 
                 constant float4x4 *proj_view)
@@ -394,6 +399,7 @@ IsInsideFrustum(const object_data PerGrassData *per_grass_data,
     bool result = false;
     return result;
 }
+#endif
 
 GBufferVertexOutput
 calculate_grass_vertex(const object_data PerGrassData *per_grass_data, 

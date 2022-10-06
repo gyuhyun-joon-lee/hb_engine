@@ -157,3 +157,46 @@ perlin_noise01(f32 x, f32 y, f32 z)
 
     return result;
 }
+
+struct ThreadUpdatePerlinNoiseBufferData
+{
+    u32 total_x_count; 
+    u32 total_y_count;
+
+    u32 start_x;
+    u32 start_y;
+
+    u32 one_past_end_x;
+    u32 one_past_end_y;
+
+    f32 time_elapsed_from_start;
+
+    void *perlin_noise_buffer_memory;
+};
+
+internal
+THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
+{
+    ThreadUpdatePerlinNoiseBufferData *d = (ThreadUpdatePerlinNoiseBufferData *)data;
+
+    // TODO(gh) Put this inside the game code, or maybe do this in compute shader
+    f32 *row = (f32 *)d->perlin_noise_buffer_memory + d->start_y * d->total_x_count + d->start_x;
+    for(u32 y = d->start_y;
+            y < d->one_past_end_y;
+            ++y)
+    {
+        f32 *column = (f32 *)row;
+        for(u32 x = d->start_x;
+                x < d->one_past_end_x;
+                ++x)
+        {
+            f32 xf = x / (f32)d->total_x_count;
+            f32 yf = y / (f32)d->total_y_count;
+            f32 factor = 16.0f;
+
+            *column++ = perlin_noise01(factor*xf, factor * yf, d->time_elapsed_from_start);
+        }
+
+        row += d->total_x_count;
+    }
+}
