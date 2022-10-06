@@ -30,18 +30,13 @@ struct PerObjectData
 
 // TODO(gh) any way to handle these better?
 /*
-   NOTE(gh) Math here is :
-   each floor is 10m by 10m wide, we want to plant the grass per 0.02m(2cm) 
-   10m / 0.02m = 500, round it up to 512
-   512 * 512 = 262144 grasses
-
-   As we cannot make the payload that huge, we will divide the grid into multiple object threadgroups,
-   so that each object threadgroup is responsible for 32x16 grasses(thread count per threadgroup should be the same).
-
-   When it comes down to mesh threadgroup, each object threadgroup will fire up 
-   object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y amount of mesh threadgroups, 
-   so each mesh threadgroup can handle one grass blade. As we have triangle_count_for_one_grass_blade * 3 amount of indices
-   per grass, each mesh threadgroup should have that amount of threads.
+    TERMINOLOGY
+    thread : a single instance of the shader. Includes registers, ID.
+    threadgroup : bunch of threads. Only one CU will take the threadgroup and do the work. 
+                  For example, two CU cannot split the threadgroup. Threads in the same thread group shares same thread memory.
+    SIMDgroup : Equivalent to wavefront or warp. Threads in the same SIMDgroup will be executed with same instruction set 
+                in lock-step. Threads in the same SIMDgroup cannot diverge, and CU cannot switch to individual thread -
+                it can only switch to entirely new SIMDgroup to hide latency.
 */
 
 #define grass_per_grid_count_x 512
@@ -75,10 +70,14 @@ struct GrassObjectFunctionInput
 #if INSIDE_METAL_SHADER
     packed_float2 floor_left_bottom_p; // in world unit
     packed_float2 one_thread_worth_dim; // In world unit
+    packed_float2 floor_center;
+    packed_float2 floor_half_dim;
 #elif INSIDE_VULKAN_SHADER
 #else
     alignas(8) v2 floor_left_bottom_p; // in world unit
     alignas(8) v2 one_thread_worth_dim; // in world unit
+    alignas(8) v2 floor_center;
+    alignas(8) v2 floor_half_dim;
 #endif
 };
 

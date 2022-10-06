@@ -509,7 +509,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
     metal_set_render_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
 
     local_persist f32 rad = 2.4f;
-    v3 directional_light_p = V3(100 * cosf(rad), 100 * sinf(rad), 20); 
+    v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 100); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
     // TODO(gh) These are totally made up near, far, width values 
@@ -640,7 +640,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         // Is there any way to do so?
         v2 floor_center = V2(0, 0);
         v2 floor_dim = V2(200, 200);
-        v2 floor_left_bottom_p = floor_center - 0.5f * floor_dim;
+        v2 floor_half_dim = 0.5f * floor_dim;
+        v2 floor_left_bottom_p = floor_center - floor_half_dim;
         v2 one_object_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
                                             floor_dim.y / (f32)grass_per_grid_count_y);
 
@@ -653,6 +654,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
             grass_object_input.floor_left_bottom_p = floor_left_bottom_p;
             grass_object_input.one_thread_worth_dim = V2(floor_dim.x / (f32)grass_per_grid_count_x, 
                                                         floor_dim.y / (f32)grass_per_grid_count_y);
+            grass_object_input.floor_center = floor_center;
+            grass_object_input.floor_half_dim = floor_half_dim;
 
             metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
             metal_set_object_buffer(render_encoder, render_context->random_grass_hash_buffer.buffer, 0, 1);
@@ -671,7 +674,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
             v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
                                                           object_thread_per_threadgroup_count_y, 
                                                           1);
-            v3u mesh_thread_per_threadgroup_count = V3u(grass_high_lod_index_count, 1, 1); // same as index count for the grass blade
+            v3u mesh_thread_per_threadgroup_count = V3u(grass_low_lod_index_count, 1, 1); // same as index count for the grass blade
 
             metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
                                           object_thread_per_threadgroup_count, 
@@ -1329,7 +1332,7 @@ int main(void)
         object_thread_per_threadgroup_count_x*object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
     u32 max_mesh_threadgroup_count_per_mesh_grid = 
         mesh_threadgroup_count_x*mesh_threadgroup_count_y; // Each mesh thread group is one grass blade
-    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_high_lod_index_count; 
+    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_low_lod_index_count; 
     metal_render_context.grass_mesh_render_pipeline = 
         metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
                                         "grass_object_function", 
@@ -1516,6 +1519,8 @@ int main(void)
     // TODO(gh) Very bad idea, need to clean this up!
     ThreadUpdatePerlinNoiseBufferData *update_perlin_noise_buffer_data = (ThreadUpdatePerlinNoiseBufferData *)malloc(sizeof(ThreadUpdatePerlinNoiseBufferData)*8*8);
 
+    u32 perlin_offset_x = 0;
+
     u64 last_time = mach_absolute_time();
     is_game_running = true;
     // TODO(gh) use f64? but metal does not allow double?
@@ -1579,7 +1584,6 @@ int main(void)
 #endif
         // TODO(gh) Put this inside the game code, or maybe do this in compute shader
         u32 perlin_value_count = 0;
-
         for(u32 y = 0;
                 y < perlin_output_height;
                 ++y)
@@ -1588,19 +1592,15 @@ int main(void)
                     x < perlin_output_width;
                     ++x)
             {
-                f32 xf = x / (f32)perlin_output_width;
+                f32 xf = (x+perlin_offset_x) / (f32)perlin_output_width;
                 f32 yf = y / (f32)perlin_output_height;
                 f32 factor = 16.0f;
 
                 float perlin_value = perlin_noise01(factor*xf, factor * yf, time_elapsed_from_start);
                 f32 *dst = (f32 *)metal_render_context.perlin_value_buffer.memory + perlin_value_count++;
                 *dst = perlin_value;
-
-
-
             }
         }
-
         assert(perlin_value_count == (perlin_output_width * perlin_output_height));
 
         if(macos_game_code.update_and_render)
@@ -1690,6 +1690,7 @@ int main(void)
                                                                             (u32)(debug_cycle_counters[cycle_counter_index].cycle_count/debug_cycle_counters[cycle_counter_index].hit_count));
         }
 #endif
+        perlin_offset_x++;
 
         // update the time stamp
         last_time = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);

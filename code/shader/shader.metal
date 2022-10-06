@@ -370,6 +370,31 @@ quadratic_bezier_first_derivative(float3 p0, float3 p1, float3 p2, float t)
     return result;
 }
 
+bool
+IsInsideFrustum(const object_data PerGrassData *per_grass_data, 
+                constant float4x4 *proj_view)
+{
+    packed_float3 center = per_grass_data->center;
+    float blade_width = per_grass_data->blade_width;
+    float stride = per_grass_data->stride;
+    float height = per_grass_data->height;
+    packed_float2 facing_direction = normalize(per_grass_data->facing_direction);
+    float bend = per_grass_data->bend;
+    float wiggliness = per_grass_data->wiggliness;
+
+    float3 p0 = center;
+
+    float3 p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, height);  
+    float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade
+
+    float3 blade_normal = normalize(cross(p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
+
+    float3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
+
+    bool result = false;
+    return result;
+}
+
 GBufferVertexOutput
 calculate_grass_vertex(const object_data PerGrassData *per_grass_data, 
                         uint thread_index, 
@@ -398,7 +423,7 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     // But if bend value is 0, it means the grass will be completely flat
     float3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
 
-    float t = (float)(thread_index / 2) / (float)grass_high_lod_divide_count;
+    float t = (float)(thread_index / 2) / (float)grass_low_lod_divide_count;
     float hash_value = hash*pi_32;
     // float exponent = 4.0f*(t-1.0f);
     // float wind_factor = 0.5f*powr(euler_contant, exponent) * t * wiggliness + hash_value + time_elasped_from_start;
@@ -433,14 +458,16 @@ struct StubPerPrimitiveData
 
 using SingleGrassTriangleMesh = metal::mesh<GBufferVertexOutput, // per vertex 
                                             StubPerPrimitiveData, // per primitive
-                                            grass_high_lod_vertex_count, // max vertex count 
-                                            grass_high_lod_triangle_count, // max primitive count
+                                            grass_low_lod_vertex_count, // max vertex count 
+                                            grass_low_lod_triangle_count, // max primitive count
                                             metal::topology::triangle>;
 
 // For the grass, we should launch at least triange count * 3 threads per one mesh threadgroup(which represents one grass blade),
 // because one thread is spawning one index at a time
 // TODO(gh) That being said, this is according to the wwdc mesh shader video. 
 // Double check how much thread we actually need to fire later!
+// TODO(gh) It is highly likely that this vertex shader is OK with branching, 
+// as modern GPUs support MIMD branching in vertex shader(but maybe not in mesh shader?)
 [[mesh]] 
 void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
                                 const object_data Payload *payload [[payload]],
@@ -455,19 +482,19 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     // if(length_squared(per_grass_data->center - *camera_p) < 10000)
     {
         // these if statements are needed, as we are firing more threads than the grass vertex count.
-        if (thread_index < grass_high_lod_vertex_count)
+        if (thread_index < grass_low_lod_vertex_count)
         {
             output_mesh.set_vertex(thread_index, calculate_grass_vertex(per_grass_data, thread_index, proj_view, light_proj_view));
         }
-        if (thread_index < grass_high_lod_index_count)
+        if (thread_index < grass_low_lod_index_count)
         {
             // For now, we are launching the same amount of threads as the grass index count.
-            output_mesh.set_index(thread_index, grass_high_lod_indices[thread_index]);
+            output_mesh.set_index(thread_index, grass_low_lod_indices[thread_index]);
         }
         if (thread_index == 0)
         {
             // NOTE(gh) Only this can fire up the rasterizer and fragment shader
-            output_mesh.set_primitive_count(grass_high_lod_triangle_count);
+            output_mesh.set_primitive_count(grass_low_lod_triangle_count);
         }
     }
 }
