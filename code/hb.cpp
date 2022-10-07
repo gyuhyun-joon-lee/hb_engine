@@ -30,7 +30,6 @@
         - If we are going to use the packed texture, how should we correctly sample from it in the shader?
 */
 
-
 extern "C" 
 GAME_UPDATE_AND_RENDER(update_and_render)
 {
@@ -55,7 +54,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         srand(time(0));
         game_state->random_series = start_random_series(rand());
 
-        game_state->camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.01f, 10000.0f);
+        game_state->camera = init_fps_camera(V3(100, 100, 22), 1.0f, 135, 0.01f, 10000.0f);
         // Close camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 135, 0.01f, 10000.0f);
         // Far away camera
@@ -65,35 +64,33 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         // add_cube_entity(game_state, V3(0, 0, 15), V3(7, 7, 7), V3(1, 1, 1));
 
-        // TODO(gh) This should be independent from the grass count... once we have the mesh gathering system 
-        // for raycasting the floor
-        v2 floor_dim = V2(100, 100); // Floor is only consisted of the flat triangles
+        v2 combined_floor_dim = V2(200, 200); // TODO(gh) just temporary, need to 'gather' the floors later
+        game_state->grass_grid_count_x = 2;
+        game_state->grass_grid_count_y = 2;
+        game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
+        v2 sub_floor_dim = V2(combined_floor_dim.x/game_state->grass_grid_count_x, combined_floor_dim.y/game_state->grass_grid_count_y); // Floor is only consisted of the flat triangles
 
-        u32 floor_count_x = 2;
-        u32 floor_count_y = 2;
-        assert(floor_count_x * floor_count_y == array_count(platform_render_push_buffer->grass_grids));
-
-        v2 floor_left_bottom_p = V2(0, 0);
+        v2 floor_left_bottom_p = 0.5f*combined_floor_dim;
         for(u32 y = 0;
-                y < floor_count_y;
+                y < game_state->grass_grid_count_y;
                 ++y)
         {
             for(u32 x = 0;
-                    x < floor_count_x;
+                    x < game_state->grass_grid_count_x;
                     ++x)
             {
                 u32 grass_on_floor_count_x = 256;
                 u32 grass_on_floor_count_y = 256;
 
-                v2 min = floor_left_bottom_p + hadamard(floor_dim, V2(x, y));
-                v2 max = min + floor_dim;
+                v2 min = floor_left_bottom_p + hadamard(sub_floor_dim, V2(x, y));
+                v2 max = min + sub_floor_dim;
                 v2 center = 0.5f*(min + max);
 
                 Entity *floor_entity = 
-                    add_floor_entity(game_state, &game_state->transient_arena, V3(center, 0), floor_dim, V3(1, 1, 1), grass_on_floor_count_x, grass_on_floor_count_y);
+                    add_floor_entity(game_state, &game_state->transient_arena, V3(center, 0), sub_floor_dim, V3(1, 1, 1), grass_on_floor_count_x, grass_on_floor_count_y);
 
-                GrassGrid *grid = platform_render_push_buffer->grass_grids + y*floor_count_x + x;
-                init_grass_grid(platform_render_push_buffer, &game_state->random_series, grid, 256, 256, min, max);
+                GrassGrid *grid = game_state->grass_grids + y*game_state->grass_grid_count_x + x;
+                init_grass_grid(platform_render_push_buffer, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
             }
         }
 
@@ -135,9 +132,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->circle_camera.rad += 0.6f * platform_input->dt_per_frame;
     }
 
-    b32 is_space_pressed = false;
     v3 camera_dir = get_camera_lookat(camera);
-    f32 camera_speed = 10.0f * platform_input->dt_per_frame;
+        // TODO(gh) Up vector might be same as the camera direction
+    v3 camera_right_dir = normalize(cross(camera_dir, V3(1, 0, 0)));
+    f32 camera_speed = 20.0f * platform_input->dt_per_frame;
     if(platform_input->move_up)
     {
         camera->p += camera_speed*camera_dir;
@@ -146,9 +144,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         camera->p -= camera_speed*camera_dir;
     }
-    if(platform_input->space)
+    if(platform_input->move_right)
     {
-        is_space_pressed = true;
+        camera->p += camera_speed*camera_right_dir;
+    }
+    if(platform_input->move_left)
+    {
+        camera->p += -camera_speed*camera_right_dir;
     }
 
     game_state->circle_camera.p.x = game_state->circle_camera.distance_from_axis * 
@@ -172,10 +174,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_Grass:
             {
                 f32 wiggliness = 3.1f;
-                if(is_space_pressed)
-                {
-                    wiggliness = 5.0f;
-                }
                 // so this is more like where I test some configurations with a small number of grasses 
                 populate_grass_vertices(entity->p, entity->blade_width, entity->stride, entity->height, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
                                         entity->vertices, entity->vertex_count, entity->hash, platform_input->time_elapsed_from_start, wiggliness);
@@ -183,21 +181,20 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    u32 update_perlin_noise_buffer_data_count = 8;
+    u32 update_perlin_noise_buffer_data_count = game_state->grass_grid_count_x * game_state->grass_grid_count_y;
     TempMemory perlin_noise_temp_memory = 
         start_temp_memory(&game_state->transient_arena, 
                         sizeof(ThreadUpdatePerlinNoiseBufferData)*update_perlin_noise_buffer_data_count);
     ThreadUpdatePerlinNoiseBufferData *update_perlin_noise_buffer_data = 
         push_array(&perlin_noise_temp_memory, ThreadUpdatePerlinNoiseBufferData, update_perlin_noise_buffer_data_count);
 
-#if 0
     u32 update_perlin_noise_buffer_data_used_count = 0;
     // TODO(gh) populate the perlin noise buffer in each grid, should be a better way to handle this?
     for(u32 grass_grid_index = 0;
-            grass_grid_index < array_count(platform_render_push_buffer->grass_grids);
+            grass_grid_index < game_state->grass_grid_count_x*game_state->grass_grid_count_y;
             ++grass_grid_index)
     {
-        GrassGrid *grid = platform_render_push_buffer->grass_grids + grass_grid_index;
+        GrassGrid *grid = game_state->grass_grids + grass_grid_index;
 
         ThreadUpdatePerlinNoiseBufferData *data = update_perlin_noise_buffer_data + update_perlin_noise_buffer_data_used_count++;
         data->total_x_count = grid->grass_count_x;
@@ -205,6 +202,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // TODO(gh) Should be continuous, think about how we'll achieve it later down the road
         data->start_x = 0;
         data->start_y = 0;
+        data->offset_x = game_state->offset_x;
         data->one_past_end_x = grid->grass_count_x;
         data->one_past_end_y = grid->grass_count_x;
         data->time_elapsed_from_start = platform_input->time_elapsed_from_start;
@@ -213,11 +211,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
     }
-#endif
 
     // NOTE(gh) render entity start
     // init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
-    init_render_push_buffer(platform_render_push_buffer, &game_state->camera, V3(0, 0, 0), true);
+    init_render_push_buffer(platform_render_push_buffer, &game_state->camera, 
+                            game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
+                            V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
     platform_render_push_buffer->enable_grass_mesh_rendering = true;
     platform_render_push_buffer->enable_show_perlin_noise_grid = true;
@@ -247,10 +246,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_Grass:
             {
                 v3 color = entity->color;
-                if(is_space_pressed)
-                {
-                    color = V3(1, 0, 0);
-                }
 
                 push_grass(platform_render_push_buffer, entity->p, entity->dim, color, 
                             entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
@@ -261,5 +256,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue);
 
     end_temp_memory(&perlin_noise_temp_memory);
+
+    game_state->time_until_offset_x_inc += platform_input->dt_per_frame;
+
+    if(game_state->time_until_offset_x_inc > 0.02f)
+    {
+        game_state->offset_x++;
+        game_state->time_until_offset_x_inc = 0;
+    }
 }
 

@@ -3,71 +3,7 @@
  */
 
 #include "hb_render_group.h"
-inline m3x3
-scale_m3x3(f32 x, f32 y, f32 z)
-{
-    m3x3 result = {};
-    result.e[0][0] = x;
-    result.e[1][1] = y;
-    result.e[2][2] = z;
 
-    return result;
-}
-
-inline m3x3
-scale_m3x3(v3 xyz)
-{
-    return scale_m3x3(xyz.x, xyz.y, xyz.z);
-}
-
-inline m4x4
-translate(f32 x, f32 y, f32 z, f32 w = 1.0f)
-{
-    m4x4 result = M4x4();
-    result.e[0][3] = x;
-    result.e[1][3] = y;
-    result.e[2][3] = z;
-    result.e[3][3] = w;
-
-    return result;
-}
-
-inline m4x4
-translate(v3 xyz)
-{
-    return translate(xyz.x, xyz.y, xyz.z);
-}
-
-// NOTE(gh) operation order here is translate * rotation * scale
-inline m4x4
-srt_m4x4(v3 translate, quat orientation, v3 scale)
-{
-    m3x3 r = rotation_quat_to_m3x3(orientation);
-    m3x3 s = scale_m3x3(scale);
-
-    m4x4 result = M4x4(r * s);
-    result.e[0][3] = translate.x;
-    result.e[1][3] = translate.y;
-    result.e[2][3] = translate.z;
-    result.e[3][3] = 1.0f;
-
-    return result;
-}
-
-inline m4x4
-st_m4x4(v3 translate, v3 scale)
-{
-    m3x3 s = scale_m3x3(scale);
-
-    m4x4 result = M4x4(s);
-    result.e[0][3] = translate.x;
-    result.e[1][3] = translate.y;
-    result.e[2][3] = translate.z;
-    result.e[3][3] = 1.0f;
-
-    return result;
-
-}
 
 struct vertex_normal_hit
 {
@@ -579,7 +515,7 @@ perspective_projection(f32 near, f32 far, f32 width, f32 width_over_height)
 // TODO(gh) Later we would want to minimize passing the platform buffer here
 // TODO(gh) Make the grass count more configurable?
 internal void
-init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, RandomSeries *series, GrassGrid *grass_grid, u32 grass_count_x, u32 grass_count_y, v2 min, v2 max)
+init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, Entity *floor, RandomSeries *series, GrassGrid *grass_grid, u32 grass_count_x, u32 grass_count_y, v2 min, v2 max)
 {
     grass_grid->grass_count_x = grass_count_x;
     grass_grid->grass_count_y = grass_count_y;
@@ -618,15 +554,7 @@ init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, RandomSeries *seri
         render_push_buffer->giant_buffer_used += grass_grid->floor_z_buffer_size;
         assert(render_push_buffer->giant_buffer_used <= render_push_buffer->giant_buffer_size);
 
-        for(u32 i = 0;
-                i < total_grass_count;
-                ++i)
-        {
-            grass_grid->floor_z_buffer[i] = 10.0f;
-        }
-
-        // TODO(gh) later(with arbitrary mesh gatering)!
-        // raycast_to_populate_floor_z_buffer(floor, grass_grid_floor_z_buffer);
+        raycast_to_populate_floor_z_buffer(floor, grass_grid->floor_z_buffer);
 
         grass_grid->updated_floor_z_buffer = true;
     }
@@ -643,7 +571,9 @@ init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, RandomSeries *seri
 }
 
 internal void
-init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCamera *camera, v3 clear_color, 
+init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCamera *camera, 
+                        GrassGrid *grass_grids, u32 grass_grid_count_x, u32 grass_grid_count_y,
+                        v3 clear_color, 
                         b32 enable_shadow)
 {
     assert(render_push_buffer->base);
@@ -654,6 +584,9 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCame
     render_push_buffer->camera_fov = camera->fov;
     render_push_buffer->clear_color = clear_color;
     render_push_buffer->camera_p = camera->p;
+    render_push_buffer->grass_grids = grass_grids;
+    render_push_buffer->grass_grid_count_x = grass_grid_count_x;
+    render_push_buffer->grass_grid_count_y = grass_grid_count_y;
 
     render_push_buffer->enable_shadow = enable_shadow;
     
@@ -664,8 +597,9 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCame
 }
 
 internal void
-init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *camera, v3 clear_color, 
-                        b32 enable_shadow)
+init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *camera,  
+                        GrassGrid *grass_grids, u32 grass_grid_count_x, u32 grass_grid_count_y,
+                        v3 clear_color, b32 enable_shadow)
 {
     assert(render_push_buffer->base);
 
@@ -675,6 +609,9 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *ca
     render_push_buffer->camera_fov = camera->fov;
     render_push_buffer->camera_p = camera->p;
     render_push_buffer->clear_color = clear_color;
+    render_push_buffer->grass_grids = grass_grids;
+    render_push_buffer->grass_grid_count_x = grass_grid_count_x;
+    render_push_buffer->grass_grid_count_y = grass_grid_count_y;
 
     render_push_buffer->enable_shadow = enable_shadow;
     

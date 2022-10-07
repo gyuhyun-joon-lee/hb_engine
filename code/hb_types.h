@@ -59,6 +59,12 @@ typedef struct v2
     r32 y;
 }v2;
 
+typedef struct v2u
+{
+    u32 x;
+    u32 y;
+}v2u;
+
 typedef struct v3
 {
     union

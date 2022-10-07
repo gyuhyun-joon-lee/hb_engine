@@ -75,14 +75,14 @@ fade(f32 t)
 }
 
 internal f32 
-perlin_noise01(f32 x, f32 y, f32 z)
+perlin_noise01(f32 x, f32 y, f32 z, u32 factor)
 {
     u32 xi = (u32)x;
     u32 yi = (u32)y;
     u32 zi = (u32)z;
-    u32 x255 = xi % 255; // used for hashing from the random numbers
-    u32 y255 = yi % 255; // used for hashing from the random numbers
-    u32 z255 = zi % 255;
+    u32 x255 = xi % factor; // used for hashing from the random numbers
+    u32 y255 = yi % factor; // used for hashing from the random numbers
+    u32 z255 = zi % factor;
 
     f32 xf = x - (f32)xi; // fraction part of x, should be in 0 to 1 range
     f32 yf = y - (f32)yi; // fraction part of y, should be in 0 to 1 range
@@ -117,9 +117,9 @@ perlin_noise01(f32 x, f32 y, f32 z)
        are important as we need to interpolate in x, y, (and possibly z or w) directions.
     */
 
-    u32 x255_inc = (x255+1)%256;
-    u32 y255_inc = (y255+1)%256;
-    u32 z255_inc = (z255+1)%256;
+    u32 x255_inc = (x255+1)%factor;
+    u32 y255_inc = (y255+1)%factor;
+    u32 z255_inc = (z255+1)%factor;
 
     i32 random_value0 = permutations255[permutations255[permutations255[x255]+y255]+z255];
     i32 random_value1 = permutations255[permutations255[permutations255[x255_inc]+y255]+z255];
@@ -169,6 +169,8 @@ struct ThreadUpdatePerlinNoiseBufferData
     u32 one_past_end_x;
     u32 one_past_end_y;
 
+    u32 offset_x;
+
     f32 time_elapsed_from_start;
 
     void *perlin_noise_buffer_memory;
@@ -190,11 +192,11 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
                 x < d->one_past_end_x;
                 ++x)
         {
-            f32 xf = x / (f32)d->total_x_count;
+            f32 xf = (x+d->offset_x) / (f32)d->total_x_count;
             f32 yf = y / (f32)d->total_y_count;
-            f32 factor = 16.0f;
+            u32 factor = 16;
 
-            *column++ = perlin_noise01(factor*xf, factor * yf, d->time_elapsed_from_start);
+            *column++ = perlin_noise01(factor*xf, factor * yf, d->time_elapsed_from_start, factor);
         }
 
         row += d->total_x_count;

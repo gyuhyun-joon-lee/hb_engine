@@ -30,12 +30,6 @@
 #include "hb_shared_with_shader.h"
 
 #include "hb_metal.cpp"
-// TODO(gh) I don't like including normal files into platform code, because that means we cannot do
-// live code editing on those including files(the change will not be applied to the platform code)
-#include "hb_render_group.cpp"
-// TODO(gh) This is just temporary, get rid of this when I'm done with outputting the perlin noise in BMP
-#include "hb_image.cpp"
-#include "hb_noise.cpp"
 
 // TODO(gh): Get rid of global variables?
 global v2 last_mouse_p;
@@ -43,6 +37,26 @@ global v2 mouse_diff;
 
 global b32 is_game_running;
 global dispatch_semaphore_t semaphore;
+
+// TODO(gh) temporary thing to remove render_group.cpp
+internal m4x4 
+camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_axis)
+{
+    m4x4 result = {};
+
+    // NOTE(gh) to pack the rotation & translation into one matrix(with an order of translation and the rotation),
+    // we need to first multiply the translation by the rotation matrix
+    v3 multiplied_translation = V3(dot(camera_x_axis, -camera_p), 
+                                    dot(camera_y_axis, -camera_p),
+                                    dot(camera_z_axis, -camera_p));
+
+    result.rows[0] = V4(camera_x_axis, multiplied_translation.x);
+    result.rows[1] = V4(camera_y_axis, multiplied_translation.y);
+    result.rows[2] = V4(camera_z_axis, multiplied_translation.z);
+    result.rows[3] = V4(0.0f, 0.0f, 0.0f, 1.0f); // Dont need to touch the w part, view matrix doesn't produce homogeneous coordinates
+
+    return result;
+}
 
 internal u64 
 mach_time_diff_in_nano_seconds(u64 begin, u64 end, f32 nano_seconds_per_tick)
@@ -580,7 +594,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         if(render_push_buffer->enable_grass_mesh_rendering)
         {
             for(u32 grass_grid_index = 0;
-                    grass_grid_index < array_count(render_push_buffer->grass_grids);
+                    grass_grid_index < render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y;
                     ++grass_grid_index)
             {
                 GrassGrid *grid = render_push_buffer->grass_grids + grass_grid_index;
@@ -613,7 +627,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                 v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
                         object_thread_per_threadgroup_count_y, 
                         1);
-                v3u mesh_thread_per_threadgroup_count = V3u(grass_high_lod_index_count, 1, 1); // same as index count for the grass blade
+                v3u mesh_thread_per_threadgroup_count = V3u(grass_low_lod_index_count, 1, 1); // same as index count for the grass blade
 
                 metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
                         object_thread_per_threadgroup_count, 
@@ -809,34 +823,47 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         if(render_push_buffer->enable_show_perlin_noise_grid)
         {
-#if 0 
-            // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
-            // indierct draw method?
-            // NOTE(gh) z value will come from the floor z buffer
-            v2 plane_dim = 0.9f*one_object_thread_worth_dim;
-            v2 plane_left_bottom_p = floor_left_bottom_p;
-            v2 plane_right_bottom_p = plane_left_bottom_p + V2(plane_dim.x, 0);
-            v2 plane_top_left_p = plane_left_bottom_p + V2(0, plane_dim.y);
-            v2 plane_top_right_p = plane_top_left_p + V2(plane_dim.x, 0);
-            v2 plane_vertices[] = 
+#if 1 
+            for(u32 grass_grid_index = 0;
+                    grass_grid_index < render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y;
+                    ++grass_grid_index)
             {
-                plane_left_bottom_p,
-                plane_right_bottom_p,
-                plane_top_left_p,
+                GrassGrid *grid = render_push_buffer->grass_grids + grass_grid_index;
+                v2 grid_dim = grid->max - grid->min;
+                v2 square_dim = V2(grid_dim.x / (f32)grid->grass_count_x, grid_dim.y / (f32)grid->grass_count_y);
+                v2u grass_count = V2u(grid->grass_count_x, grid->grass_count_y);
 
-                plane_right_bottom_p,
-                plane_top_right_p,
-                plane_top_left_p
-            };
-            metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_perlin_noise_grid_pipeline);
+                v2 square_left_bottom_p = grid->min;
+                v2 square_right_bottom_p = square_left_bottom_p + V2(square_dim.x, 0);
+                v2 square_top_left_p = square_left_bottom_p + V2(0, square_dim.y);
+                v2 square_top_right_p = square_top_left_p + V2(square_dim.x, 0);
+                v2 square_vertices[] = 
+                {
+                    square_left_bottom_p,
+                    square_right_bottom_p,
+                    square_top_left_p,
 
-            metal_set_vertex_bytes(forward_render_encoder, plane_vertices, array_size(plane_vertices), 0);
-            metal_set_vertex_bytes(forward_render_encoder, &one_object_thread_worth_dim, sizeof(one_object_thread_worth_dim), 1);
-            metal_set_vertex_buffer(forward_render_encoder, render_context->perlin_value_buffer.buffer, 0, 2);
-            metal_set_vertex_buffer(forward_render_encoder, render_context->floor_z_buffer.buffer, 0, 3);
-            metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 4);
-            metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
-                    0, 6, 0, grass_per_grid_count_x * grass_per_grid_count_y);
+                    square_right_bottom_p,
+                    square_top_right_p,
+                    square_top_left_p
+                };
+
+                // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
+                // indierct draw method?
+                // NOTE(gh) z value will come from the floor z buffer
+
+                metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_perlin_noise_grid_pipeline);
+
+                metal_set_vertex_bytes(forward_render_encoder, square_vertices, array_size(square_vertices), 0);
+                metal_set_vertex_bytes(forward_render_encoder, &square_dim, sizeof(square_dim), 1);
+                metal_set_vertex_buffer(forward_render_encoder, render_context->giant_buffer.buffer, grid->perlin_noise_buffer_offset, 2);
+                metal_set_vertex_buffer(forward_render_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 3);
+                metal_set_vertex_bytes(forward_render_encoder, &grass_count, sizeof(grass_count), 4);
+                metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 5);
+                metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
+                        0, 6, 0, grid->grass_count_x * grid->grass_count_y);
+            }
+
 #endif
         }
 
@@ -1205,7 +1232,7 @@ int main(void)
         object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
     u32 max_mesh_threadgroup_count_per_mesh_grid = 
         max_object_thread_count_per_object_threadgroup; // Each mesh thread group is one grass blade
-    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_high_lod_index_count;  // TODO(gh) Fix this as multiple of simd width? 
+    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_low_lod_index_count;  // TODO(gh) Fix this as multiple of simd width? 
     metal_render_context.grass_mesh_render_pipeline = 
         metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
                                         "grass_object_function", 

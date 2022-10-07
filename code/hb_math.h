@@ -198,6 +198,17 @@ hadamard(v2 a, v2 b)
     return V2(a.x*b.x, a.y*b.y);
 }
 
+inline v2u
+V2u(u32 x, u32 y)
+{
+    v2u result = {};
+
+    result.x = x;
+    result.y = y;
+
+    return result;
+}
+
 inline v3
 V3()
 {
@@ -1268,6 +1279,71 @@ rotate(v3 p, v3 axis, f32 rad)
     quat result_q = rotation_q * Quat(0, p), inverse(rotation_q);
 
     v3 result = result_q.v;
+
+    return result;
+}
+
+inline m3x3
+scale_m3x3(f32 x, f32 y, f32 z)
+{
+    m3x3 result = {};
+    result.e[0][0] = x;
+    result.e[1][1] = y;
+    result.e[2][2] = z;
+
+    return result;
+}
+
+inline m3x3
+scale_m3x3(v3 xyz)
+{
+    return scale_m3x3(xyz.x, xyz.y, xyz.z);
+}
+
+inline m4x4
+translate(f32 x, f32 y, f32 z, f32 w = 1.0f)
+{
+    m4x4 result = M4x4();
+    result.e[0][3] = x;
+    result.e[1][3] = y;
+    result.e[2][3] = z;
+    result.e[3][3] = w;
+
+    return result;
+}
+
+inline m4x4
+translate(v3 xyz)
+{
+    return translate(xyz.x, xyz.y, xyz.z);
+}
+
+// NOTE(gh) operation order here is translate * rotation * scale
+inline m4x4
+srt_m4x4(v3 translate, quat orientation, v3 scale)
+{
+    m3x3 r = rotation_quat_to_m3x3(orientation);
+    m3x3 s = scale_m3x3(scale);
+
+    m4x4 result = M4x4(r * s);
+    result.e[0][3] = translate.x;
+    result.e[1][3] = translate.y;
+    result.e[2][3] = translate.z;
+    result.e[3][3] = 1.0f;
+
+    return result;
+}
+
+inline m4x4
+st_m4x4(v3 translate, v3 scale)
+{
+    m3x3 s = scale_m3x3(scale);
+
+    m4x4 result = M4x4(s);
+    result.e[0][3] = translate.x;
+    result.e[1][3] = translate.y;
+    result.e[2][3] = translate.z;
+    result.e[3][3] = 1.0f;
 
     return result;
 }

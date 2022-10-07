@@ -361,9 +361,11 @@ struct PlatformRenderPushBuffer
     u64 giant_buffer_size;
     u64 giant_buffer_used;
 
-    GrassGrid grass_grids[4];
+//////////// NOTE(gh) game code needs to fill these up
+    GrassGrid *grass_grids;
+    u32 grass_grid_count_x;
+    u32 grass_grid_count_y;
 
-    // NOTE(gh) game code needs to fill these up
     m4x4 view;
     v3 camera_p;
     f32 camera_near;

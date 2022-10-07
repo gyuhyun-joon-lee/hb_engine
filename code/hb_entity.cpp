@@ -156,9 +156,9 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v
         {
             f32 px = left_bottom_p.x + x * quad_width;
             f32 xf = (f32)x/(f32)x_vertex_count;
-            f32 factor = 8.0f;
+            u32 factor = 4;
 
-            f32 pz = 10.0f * perlin_noise01(factor * xf, factor * yf, 0);
+            f32 pz = 10.0f * perlin_noise01(factor * xf, factor * yf, 0, factor);
 
             result->vertices[populated_vertex_count].p = V3(px, py, pz);
             result->vertices[populated_vertex_count].normal = V3(0, 0, 0);
