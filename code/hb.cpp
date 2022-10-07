@@ -189,7 +189,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         push_array(&perlin_noise_temp_memory, ThreadUpdatePerlinNoiseBufferData, update_perlin_noise_buffer_data_count);
 
     u32 update_perlin_noise_buffer_data_used_count = 0;
-    // TODO(gh) populate the perlin noise buffer in each grid, should be a better way to handle this?
+    // TODO(gh) populate the perlin noise buffer in each grid, but should the perlin noise be one giant thing 
+    // on top of the map?
     for(u32 grass_grid_index = 0;
             grass_grid_index < game_state->grass_grid_count_x*game_state->grass_grid_count_y;
             ++grass_grid_index)
@@ -199,7 +200,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         ThreadUpdatePerlinNoiseBufferData *data = update_perlin_noise_buffer_data + update_perlin_noise_buffer_data_used_count++;
         data->total_x_count = grid->grass_count_x;
         data->total_y_count = grid->grass_count_y;
-        // TODO(gh) Should be continuous, think about how we'll achieve it later down the road
         data->start_x = 0;
         data->start_y = 0;
         data->offset_x = game_state->offset_x;
