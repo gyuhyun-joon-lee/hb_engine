@@ -113,7 +113,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *debug_camera = &game_state->debug_camera;
 
     Camera *render_camera = game_camera;
-    // render_camera = debug_camera;
+    render_camera = debug_camera;
 
     f32 camera_rotation_speed = 2.7f * platform_input->dt_per_frame;
 

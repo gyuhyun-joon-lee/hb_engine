@@ -283,14 +283,14 @@ struct PerGrassData
     // but there might be a more efficient way to do this.
     uint hash;
     float blade_width;
-    float stride;
-    float height;
+    float length;
+    float tilt;
     packed_float2 facing_direction;
     float bend;
     float wiggliness;
     packed_float3 color;
     float time_elasped_from_start; // TODO(gh) Do we even need to pass this?
-    float noise;
+    float pad;
 };
 
 // NOTE(gh) each payload should be less than 16kb
@@ -356,9 +356,13 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
                           uint2 threadgroup_position_in_grid [[threadgroup_position_in_grid]], 
                           mesh_grid_properties mgp)
 {
+    // NOTE(gh) These cannot be thread_index, because the buffer we are passing has all the data for the 'grid' 
+    uint hash = hashes[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
+    float random01 = random_between_0_1(hash, 0, 0);
+
     // Frustum cull
-    float stride = 1.6f;
-    float3 pad = float3(stride, stride, 0.0f);
+    float length = 3.13f + (1-random01);
+    float3 pad = float3(length, length, 0.0f);
 
     float2 threadgroup_dim = float2(thread_count_per_threadgroup.x * object_function_input->one_thread_worth_dim.x, 
                                     thread_count_per_threadgroup.y * object_function_input->one_thread_worth_dim.y);
@@ -374,28 +378,26 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
     // I think this will be fine.
     if(is_inside_frustum(proj_view, min - pad, max + pad))
     {
-        // NOTE(gh) These cannot be thread_index, because the buffer we are passing has all the data for the 'grid' 
-        uint hash = hashes[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
         float z = floor_z_values[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
 
         float center_x = object_function_input->min.x + object_function_input->one_thread_worth_dim.x * ((float)thread_position_in_grid.x + 0.5f);
         float center_y = object_function_input->min.y + object_function_input->one_thread_worth_dim.y * ((float)thread_position_in_grid.y + 0.5f);
 
-        float random01 = random_between_0_1(hash, 0, 0);
 
         payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, z);
         payloadOutput->per_grass_data[thread_index].blade_width = 0.15f;
-        payloadOutput->per_grass_data[thread_index].stride = stride;
-        payloadOutput->per_grass_data[thread_index].height = 1.5f + 1.0f*random01;
+        payloadOutput->per_grass_data[thread_index].length = length;
+
+        float noise = perlin_noise_values[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
+        payloadOutput->per_grass_data[thread_index].tilt = clamp(2.0f + 0.4f*random01 + noise, 0.0f, length - 0.01f);
+
         // payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos(0.0f), sin(0.0f));
         payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
-        payloadOutput->per_grass_data[thread_index].bend = 0.5f;
-        payloadOutput->per_grass_data[thread_index].wiggliness = 1.6f;
+        payloadOutput->per_grass_data[thread_index].bend = 0.8f;
+        payloadOutput->per_grass_data[thread_index].wiggliness = 2.0f + 1.0f*(random01);
         payloadOutput->per_grass_data[thread_index].time_elasped_from_start = *time_elasped_from_start;
         payloadOutput->per_grass_data[thread_index].color = packed_float3(random01, 0.6f, 0.2f);
-        payloadOutput->per_grass_data[thread_index].noise = 1.0f + clamp(perlin_noise_values[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x],
-                                                                    0.5f,
-                                                                    1.0f);
+
         // Hashes got all the values for the grid
         payloadOutput->per_grass_data[thread_index].hash = hash;
 
@@ -436,18 +438,19 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
 {
     packed_float3 center = per_grass_data->center;
     float blade_width = per_grass_data->blade_width;
-    float stride = per_grass_data->stride;
-    float height = per_grass_data->height - 0.1f*per_grass_data->noise;
+    float length = per_grass_data->length; // length of the blade
+    float tilt = per_grass_data->tilt; // z value of the tip
+    float stride = sqrt(length*length - tilt*tilt); // only horizontal length of the blade
     packed_float2 facing_direction = normalize(per_grass_data->facing_direction);
     float bend = per_grass_data->bend;
     float wiggliness = per_grass_data->wiggliness;
     packed_float3 color = per_grass_data->color;
     uint hash = per_grass_data->hash;
-    float time_elasped_from_start = per_grass_data->noise * per_grass_data->time_elasped_from_start;
+    float time_elasped_from_start = per_grass_data->time_elasped_from_start;
 
     float3 p0 = center;
 
-    float3 p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, height);  
+    float3 p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
     float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade
 
     float3 blade_normal = normalize(cross(p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
@@ -460,8 +463,8 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     float hash_value = hash*pi_32;
     float wind_factor = t * wiggliness + hash_value + time_elasped_from_start;
 
-    // float3 modified_p1 = p1 + 0.08f * sin(wind_factor) * (-blade_normal);
-    float3 modified_p2 = p2 + 0.18f * sin(wind_factor) * (-blade_normal);
+    // float3 modified_p2 = p2 + 0.18f * sin(wind_factor) * (-blade_normal);
+    float3 modified_p2 = p2 + float3(0, 0, 0.18f * sin(wind_factor));
     float3 modified_p1 = p1 + float3(0, 0, 0.15f * sin(wind_factor));
     // float3 modified_p2 = p2 + float3(0, 0, 0.15f * sin(wind_factor));
 
@@ -536,16 +539,19 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
 {
     const object_data PerGrassData *per_grass_data = &(payload->per_grass_data[threadgroup_position.y * threadgroup_count_per_grid.x + threadgroup_position.x]);
 
+#if 0
     // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
-    // Also, we can make the stride smaller based on the facing direction
+    // Also, we can make the length smaller based on the facing direction
     // These pad values are not well thought out, just throwing those in
-    float3 stride = 0.001f*float3(per_grass_data->stride, per_grass_data->stride, 0.0f);
-    float3 min = per_grass_data->center - stride;
-    float3 max = per_grass_data->center + stride;
-    max.z += per_grass_data->height + 0.0001f;
+    float3 length = 1.f*float3(per_grass_data->length, per_grass_data->length, 0.0f);
+    float3 min = per_grass_data->center - length;
+    float3 max = per_grass_data->center + length;
+    max.z += per_grass_data->tilt + 1.0f;
 
-    // TODO(gh) Check there is an actual performance gain by doing this
+    // TODO(gh) Check there is an actual performance gain by doing this, because it seems like
+    // when we become too conservative, there isn't much culling going on in per-grass basis anyway.
     if(is_inside_frustum(game_proj_view, min, max))
+#endif
     {
         // these if statements are needed, as we are firing more threads than the grass vertex count.
         if (thread_index < grass_vertex_count)

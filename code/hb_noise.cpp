@@ -196,7 +196,10 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
             f32 yf = y / (f32)d->total_y_count;
             u32 factor = 16;
 
-            *column++ = perlin_noise01(factor*xf, factor * yf, d->time_elapsed_from_start, factor);
+            f32 noise01 = perlin_noise01(factor*xf, factor * yf, d->time_elapsed_from_start, factor);
+            f32 noise = 0.2f*(noise01 - 0.5f);
+
+            *column++ = noise;
         }
 
         row += d->total_x_count;
