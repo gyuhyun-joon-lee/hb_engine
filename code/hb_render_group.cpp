@@ -243,7 +243,8 @@ init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, Entity *floor, Ran
                 i < total_grass_count;
                 ++i)
         {
-            grass_grid->hash_buffer[i] = random_between_u32(series, 0, 10000);
+            // grass_grid->hash_buffer[i] = random_between_u32(series, 0, 10000);
+            grass_grid->hash_buffer[i] = (u32)(10000 * (rand() / (f32)RAND_MAX));
         }
 
         render_push_buffer->giant_buffer_used += grass_grid->hash_buffer_size;

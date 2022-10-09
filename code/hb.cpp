@@ -51,7 +51,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                                     megabytes(128));
 
         // TODO(gh) get rid of rand(), or get the time and rand information from platform layer?
-        srand(time(0));
+        // srand(time(0));
         game_state->random_series = start_random_series(rand());
 
         game_state->game_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 1.0f, 1000.0f);
@@ -113,7 +113,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *debug_camera = &game_state->debug_camera;
 
     Camera *render_camera = game_camera;
-    render_camera = debug_camera;
+    // render_camera = debug_camera;
 
     f32 camera_rotation_speed = 2.7f * platform_input->dt_per_frame;
 
@@ -184,6 +184,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     ThreadUpdatePerlinNoiseBufferData *update_perlin_noise_buffer_data = 
         push_array(&perlin_noise_temp_memory, ThreadUpdatePerlinNoiseBufferData, update_perlin_noise_buffer_data_count);
 
+#if 1
     u32 update_perlin_noise_buffer_data_used_count = 0;
     // TODO(gh) populate the perlin noise buffer in each grid, but should the perlin noise be one giant thing 
     // on top of the map?
@@ -207,6 +208,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
     }
+#endif
 
 
     // NOTE(gh) Frustum cull the grids
@@ -308,7 +310,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     // NOTE(gh) push forward rendering elements
-    b32 enable_show_game_camera_frustum = true;
+    b32 enable_show_game_camera_frustum = (render_camera != game_camera);
     if(enable_show_game_camera_frustum)
     {
         CameraFrustum game_camera_frustum = {};

@@ -621,12 +621,12 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
                     v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
-                            object_threadgroup_per_grid_count_y, 
-                            1);
+                                                                object_threadgroup_per_grid_count_y, 
+                                                                1);
                     v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
-                            object_thread_per_threadgroup_count_y, 
-                            1);
-                    v3u mesh_thread_per_threadgroup_count = V3u(grass_high_lod_index_count, 1, 1); // same as index count for the grass blade
+                                                                object_thread_per_threadgroup_count_y, 
+                                                                1);
+                    v3u mesh_thread_per_threadgroup_count = V3u(grass_index_count, 1, 1); // same as index count for the grass blade
 
                     metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
                             object_thread_per_threadgroup_count, 
@@ -984,7 +984,7 @@ macos_load_game_code(MacOSGameCode *game_code, char *file_name)
 
 int main(void)
 { 
-    srand(time(NULL));
+    // srand(time(NULL));
     RandomSeries random_series = start_random_series(rand()); 
 
     u32 thread_to_spawn_count = 8;
@@ -1232,21 +1232,12 @@ int main(void)
                             forward_pipeline_color_attachment_write_masks, array_count(forward_pipeline_color_attachment_write_masks),
                             view.depthStencilPixelFormat, forward_blending_enabled);
 
-    metal_render_context.add_compute_pipeline = metal_make_compute_pipeline(device, shader_library, "get_random_numbers");
-    // make the number of threads in the threadgroup a multiple of threadExecutionWidth
-    u32 max_threads_per_group = metal_render_context.add_compute_pipeline.maxTotalThreadsPerThreadgroup;
-    u32 thread_execution_width = metal_render_context.add_compute_pipeline.threadExecutionWidth;
-    // TODO(gh) This is assumed to be 32, but this should be the deciding factor of how many threads should one threadgroup
-    // have, and how should we decide the dimension of the grid(of threadgroups )
-    // TODO(gh) also double check if this needs to be a 'width'(32 x 8 for example), or does it need to be in total 
-    assert(metal_render_context.add_compute_pipeline.threadExecutionWidth == 32);
-
     // TODO(gh) These are just temporary numbers, there should be more robust way to get these information
     u32 max_object_thread_count_per_object_threadgroup = 
         object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
     u32 max_mesh_threadgroup_count_per_mesh_grid = 
         max_object_thread_count_per_object_threadgroup; // Each mesh thread group is one grass blade
-    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_high_lod_index_count;  // TODO(gh) Fix this as multiple of simd width? 
+    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_index_count;  // TODO(gh) Fix this as multiple of simd width? 
     metal_render_context.grass_mesh_render_pipeline = 
         metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
                                         "grass_object_function", 
