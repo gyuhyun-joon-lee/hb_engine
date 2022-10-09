@@ -278,19 +278,13 @@ struct PlatformRenderPushBuffer
     u32 total_size;
     u32 used;
 
-    // NOTE(gh) These are cpu side of the buffers that will be updated by the game code, 
-    // which need to be updated later to the GPU.
+    // NOTE(gh) Cleared every frame, includes vertex, index buffer per frame 
     void *combined_vertex_buffer;
-    u32 combined_vertex_buffer_size;
-    u32 combined_vertex_buffer_used;
-
+    u64 combined_vertex_buffer_size;
+    u64 combined_vertex_buffer_used;
     void *combined_index_buffer;
-    u32 combined_index_buffer_size;
-    u32 combined_index_buffer_used;
-
-    void *giant_transient_buffer;
-    u64 giant_transient_buffer_size;
-    u64 giant_transient_buffer_used;
+    u64 combined_index_buffer_size;
+    u64 combined_index_buffer_used;
 
     // MTLHeap?
     void *giant_buffer;
@@ -310,11 +304,11 @@ struct PlatformRenderPushBuffer
     f32 game_camera_fov;
 
     // This is camera that we are looking into
-    m4x4 main_camera_view;
-    v3 main_camera_p;
-    f32 main_camera_near;
-    f32 main_camera_far;
-    f32 main_camera_fov;
+    m4x4 render_camera_view;
+    v3 render_camera_p;
+    f32 render_camera_near;
+    f32 render_camera_far;
+    f32 render_camera_fov;
 
     v3 clear_color;
 

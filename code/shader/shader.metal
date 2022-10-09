@@ -316,12 +316,9 @@ struct Payload
 // TODO(gh) Should be more conservative with the value,
 // and also change this to seperating axis test 
 bool 
-is_inside_frustum(constant float4x4 *proj_view, float2 aabb_min, float2 aabb_max, float z)
+is_inside_frustum(constant float4x4 *proj_view, float3 min, float3 max)
 {
     bool result = false;
-
-    float3 min = float3(aabb_min, 0);
-    float3 max = float3(aabb_max, z);
 
     float4 vertices[8] = 
     {
@@ -373,20 +370,22 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
                           mesh_grid_properties mgp)
 {
     // Frustum cull
-    float stride = 2.2f;
-    float2 pad = float2(stride, stride);
+    float stride = 2.0f;
+    float3 pad = float3(stride, stride, 0.0f);
 
     float2 threadgroup_dim = float2(thread_count_per_threadgroup.x * object_function_input->one_thread_worth_dim.x, 
                                     thread_count_per_threadgroup.y * object_function_input->one_thread_worth_dim.y);
 
-    float2 min = object_function_input->min + 
-                          float2(threadgroup_position_in_grid.x * threadgroup_dim.x, threadgroup_position_in_grid.y * threadgroup_dim.y);
-    float2 max = min + threadgroup_dim;
+    float3 min = float3(object_function_input->min + 
+                          float2(threadgroup_position_in_grid.x * threadgroup_dim.x, threadgroup_position_in_grid.y * threadgroup_dim.y),
+                          0.0f);
+    // TODO(gh) Also need to think carefully about the z value
+    float3 max = min + float3(threadgroup_dim,
+                        10.0f);
 
     // TODO(gh) Should watch out for diverging, but because the min & max value does not differ per thread,
     // I think this will be fine.
-    // TODO(gh) Also need to think carefully about the z value
-    if(is_inside_frustum(proj_view, min - pad, max + pad, 10.0f))
+    if(is_inside_frustum(proj_view, min - pad, max + pad))
     {
         // NOTE(gh) These cannot be thread_index, because the buffer we are passing has all the data for the 'grid' 
         uint hash = hashes[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
@@ -397,8 +396,8 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
 
         payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, z);
         payloadOutput->per_grass_data[thread_index].blade_width = 0.15f;
-        payloadOutput->per_grass_data[thread_index].stride = 2.2f;
-        payloadOutput->per_grass_data[thread_index].height = 2.5f + random_between_0_1(hash, 0, 0);
+        payloadOutput->per_grass_data[thread_index].stride = stride;
+        payloadOutput->per_grass_data[thread_index].height = 2.f + random_between_0_1(hash, 0, 0);
         // payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos(0.0f), sin(0.0f));
         payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
         payloadOutput->per_grass_data[thread_index].bend = 0.5f;
@@ -451,7 +450,7 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     float wiggliness = per_grass_data->wiggliness;
     packed_float3 color = per_grass_data->color;
     uint hash = per_grass_data->hash;
-    float time_elasped_from_start = 2.0f*per_grass_data->time_elasped_from_start;
+    float time_elasped_from_start = per_grass_data->time_elasped_from_start;
 
     float3 p0 = center;
 
@@ -464,10 +463,8 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     // But if bend value is 0, it means the grass will be completely flat
     float3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
 
-    float t = (float)(thread_index / 2) / (float)grass_low_lod_divide_count;
+    float t = (float)(thread_index / 2) / (float)grass_high_lod_divide_count;
     float hash_value = hash*pi_32;
-    // float exponent = 4.0f*(t-1.0f);
-    // float wind_factor = 0.5f*powr(euler_contant, exponent) * t * wiggliness + hash_value + time_elasped_from_start;
     float wind_factor = t * wiggliness + hash_value + time_elasped_from_start;
 
     float3 modified_p1 = p1 + float3(0, 0, 0.1f * sin(wind_factor));
@@ -499,43 +496,53 @@ struct StubPerPrimitiveData
 
 using SingleGrassTriangleMesh = metal::mesh<GBufferVertexOutput, // per vertex 
                                             StubPerPrimitiveData, // per primitive
-                                            grass_low_lod_vertex_count, // max vertex count 
-                                            grass_low_lod_triangle_count, // max primitive count
+                                            grass_high_lod_vertex_count, // max vertex count 
+                                            grass_high_lod_triangle_count, // max primitive count
                                             metal::topology::triangle>;
 
 // For the grass, we should launch at least triange count * 3 threads per one mesh threadgroup(which represents one grass blade),
 // because one thread is spawning one index at a time
 // TODO(gh) That being said, this is according to the wwdc mesh shader video. 
 // Double check how much thread we actually need to fire later!
-// TODO(gh) It is highly likely that this vertex shader is OK with branching, 
-// as modern GPUs support MIMD branching in vertex shader(but maybe not in mesh shader?)
 [[mesh]] 
 void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
                                 const object_data Payload *payload [[payload]],
-                                constant float4x4 *proj_view [[buffer(0)]],
-                                constant float4x4 *light_proj_view [[buffer(1)]],
-                                constant packed_float3 *camera_p [[buffer(2)]],
+                                constant float4x4 *game_proj_view [[buffer(0)]],
+                                constant float4x4 *main_proj_view [[buffer(1)]],
+                                constant float4x4 *light_proj_view [[buffer(2)]],
+                                constant packed_float3 *camera_p [[buffer(3)]],
                                 uint thread_index [[thread_index_in_threadgroup]],
                                 uint2 threadgroup_position [[threadgroup_position_in_grid]],
                                 uint2 threadgroup_count_per_grid [[threadgroups_per_grid]])
 {
     const object_data PerGrassData *per_grass_data = &(payload->per_grass_data[threadgroup_position.y * threadgroup_count_per_grid.x + threadgroup_position.x]);
-    // if(length_squared(per_grass_data->center - *camera_p) < 10000)
+
+    // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
+    // Also, we can make the stride smaller based on the facing direction
+    // These pad values are not well thought out, just throwing those in
+    float3 stride = 0.001f*float3(per_grass_data->stride, per_grass_data->stride, 0.0f);
+    float3 min = per_grass_data->center - stride;
+    float3 max = per_grass_data->center + stride;
+    max.z += per_grass_data->height + 0.0001f;
+
+    // TODO(gh) Don't think per-grass frustum culling is worth it,
+    // as long as we use small sized threadgroup
+    if(is_inside_frustum(game_proj_view, min, max))
     {
         // these if statements are needed, as we are firing more threads than the grass vertex count.
-        if (thread_index < grass_low_lod_vertex_count)
+        if (thread_index < grass_high_lod_vertex_count)
         {
-            output_mesh.set_vertex(thread_index, calculate_grass_vertex(per_grass_data, thread_index, proj_view, light_proj_view));
+            output_mesh.set_vertex(thread_index, calculate_grass_vertex(per_grass_data, thread_index, main_proj_view, light_proj_view));
         }
-        if (thread_index < grass_low_lod_index_count)
+        if (thread_index < grass_high_lod_index_count)
         {
             // For now, we are launching the same amount of threads as the grass index count.
-            output_mesh.set_index(thread_index, grass_low_lod_indices[thread_index]);
+            output_mesh.set_index(thread_index, grass_high_lod_indices[thread_index]);
         }
         if (thread_index == 0)
         {
             // NOTE(gh) Only this can fire up the rasterizer and fragment shader
-            output_mesh.set_primitive_count(grass_low_lod_triangle_count);
+            output_mesh.set_primitive_count(grass_high_lod_triangle_count);
         }
     }
 }
@@ -559,7 +566,7 @@ forward_show_frustum_vert(uint vertexID [[vertex_id]],
 fragment float4
 forward_show_frustum_frag(ShowFrustumVetexOutput vertex_output [[stage_in]])
 {
-    float4 result = float4(0, 0, 1, 1);
+    float4 result = float4(0, 0, 1, 0.2f);
     return result;
 }
 

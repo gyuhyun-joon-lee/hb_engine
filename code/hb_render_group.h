@@ -5,33 +5,9 @@
 #ifndef HB_RENDER_GROUP_H
 #define HB_RENDER_GROUP_H
 
-// TODO(gh) To seperate the 'asset' thing completely from the game code
-// whenever we need some kind of mesh, retrieve from the platform layer
-// that already has the handle to the vertexbuffer, texture... etc?
-
-// NOTE(gh) : This forces us to copy these datas again to the actual 'usable' vertex buffer,
-// but even with more than 100000 vertices, the size of it isn't too big 
-
-struct RawMesh
-{
-    v3 *positions;
-    u32 position_count;
-
-    v3 *normals;
-    u32 normal_count;
-
-    v2 *texcoords;
-    u32 texcoord_count;
-
-    u32 *indices;
-    u32 index_count;
-
-    u32 *normal_indices;
-    u32 normal_index_count;
-
-    u32 *texcoord_indices;
-    u32 texcoord_index_count;
-};
+/*
+   Later down the road, we might wanna thing about this, if there are a lot of things to render.
+*/
 
 struct CommonVertex
 {
@@ -171,6 +147,7 @@ enum RenderEntryType
     RenderEntryType_Line,
     RenderEntryType_Cube,
     RenderEntryType_Grass,
+    RenderEntryType_Frustum,
 };
 
 // TODO(gh) Do we have enough reason to keep this header?
@@ -178,6 +155,9 @@ struct RenderEntryHeader
 {
     // NOTE(gh) This should _always_ come first
     RenderEntryType type;
+    // We store this to automatically advance inside the render entry buffer
+    // This can be much smaller than 4 bytes to save space
+    u32 size;
 };
 
 struct RenderEntryAABB
@@ -238,6 +218,18 @@ struct RenderEntryGrass
     u32 index_buffer_offset;
     u32 index_count;
 };
+
+struct RenderEntryFrustum
+{
+    RenderEntryHeader header;
+    v3 color;
+
+    // NOTE(gh) offset to the combined vertex & index buffer
+    u32 vertex_buffer_offset;
+    u32 index_buffer_offset;
+    u32 index_count;
+};
+
 
 
 #endif

@@ -299,7 +299,8 @@ metal_draw_non_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTL
 }
 
 inline void
-metal_draw_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, id<MTLBuffer> index_buffer, u64 index_offset, u64 index_count)
+metal_draw_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type, 
+                    id<MTLBuffer> index_buffer, u64 index_offset, u64 index_count)
 {
     [render_encoder drawIndexedPrimitives : primitive_type
                    indexCount : index_count 

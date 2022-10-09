@@ -120,16 +120,15 @@ add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 
 // NOTE(gh) creates 512 x 512 grid
 internal Entity *
-add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count)
+add_floor_entity(GameState *game_state, MemoryArena *arena, v3 left_bottom_p, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count)
 {
     Entity *result = add_entity(game_state, EntityType_Floor, Entity_Flag_Collides);
-    result->p = center;
+    result->p = left_bottom_p + V3(0.5f*dim, 0);
     result->dim = V3(dim, 0);
     result->color = color;
     result->x_quad_count = x_quad_count;
     result->y_quad_count = y_quad_count;
 
-    // TODO(gh) Also make this configurable?
     f32 quad_width = dim.x / (f32)x_quad_count;
     f32 quad_height = dim.y / (f32)y_quad_count;
 
@@ -140,23 +139,28 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v
     result->vertex_count = total_vertex_count;
     result->vertices = push_array(arena, CommonVertex, result->vertex_count);
 
-    v3 left_bottom_p = center - V3(dim.x/2, dim.y/2, 0);
-
     u32 populated_vertex_count = 0;
     for(u32 y = 0;
             y < y_vertex_count;
             ++y)
     {
         f32 py = left_bottom_p.y + y * quad_height;
-        f32 yf = (f32)y/(f32)y_vertex_count;
+        f32 yf = (f32)y/(f32)(y_vertex_count-1); // -1 so that xf range from 0 to 1
 
         for(u32 x = 0;
                 x < x_vertex_count;
                 ++x)
         {
+            if(x == x_vertex_count-1)
+            {
+                int a = 1;
+            }
             f32 px = left_bottom_p.x + x * quad_width;
-            f32 xf = (f32)x/(f32)x_vertex_count;
+            f32 xf = (f32)x/((f32)x_vertex_count - 1); // -1 so that xf range from 0 to 1
             u32 factor = 4;
+
+            f32 txf = factor * xf;
+            f32 tyf = factor * yf;
 
             f32 pz = 10.0f * perlin_noise01(factor * xf, factor * yf, 0, factor);
 

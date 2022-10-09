@@ -488,12 +488,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         switch(header->type)
         {
-            case RenderEntryType_Line:
-            {
-                RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
-                consumed += sizeof(*entry);
-            }break;
-
             case RenderEntryType_AABB:
             {
                 RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
@@ -540,16 +534,10 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                 }
             }break;
 
-            case RenderEntryType_Grass:
-            {
-                RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
-                consumed += sizeof(*entry);
-            }break;
-
             default: 
             {
-                invalid_code_path;
-            }
+                consumed += header->size;
+            };
         }
     }
 
@@ -577,9 +565,9 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         // NOTE(gh) When we create a render_encoder, we cannot create another render encoder until we call endEncoding on the current one.
         id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->single_renderpass];
 
-        m4x4 main_proj = perspective_projection(render_push_buffer->main_camera_fov, render_push_buffer->main_camera_near, render_push_buffer->main_camera_far,
+        m4x4 main_proj = perspective_projection(render_push_buffer->render_camera_fov, render_push_buffer->render_camera_near, render_push_buffer->render_camera_far,
                                            render_push_buffer->width_over_height);
-        m4x4 main_proj_view = transpose(main_proj * render_push_buffer->main_camera_view);
+        m4x4 main_proj_view = transpose(main_proj * render_push_buffer->render_camera_view);
 
         m4x4 game_proj = perspective_projection(render_push_buffer->game_camera_fov, render_push_buffer->game_camera_near, render_push_buffer->game_camera_far,
                                            render_push_buffer->width_over_height);
@@ -625,9 +613,10 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 3);
                     metal_set_object_bytes(render_encoder, &game_proj_view, sizeof(game_proj_view), 4);
 
-                    metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
-                    metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
-                    metal_set_mesh_bytes(render_encoder, &render_push_buffer->main_camera_p, sizeof(render_push_buffer->main_camera_p), 2);
+                    metal_set_mesh_bytes(render_encoder, &game_proj_view, sizeof(game_proj_view), 0);
+                    metal_set_mesh_bytes(render_encoder, &main_proj_view, sizeof(main_proj_view), 1);
+                    metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
+                    metal_set_mesh_bytes(render_encoder, &render_push_buffer->render_camera_p, sizeof(render_push_buffer->render_camera_p), 3);
 
                     metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
@@ -637,7 +626,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
                             object_thread_per_threadgroup_count_y, 
                             1);
-                    v3u mesh_thread_per_threadgroup_count = V3u(grass_low_lod_index_count, 1, 1); // same as index count for the grass blade
+                    v3u mesh_thread_per_threadgroup_count = V3u(grass_high_lod_index_count, 1, 1); // same as index count for the grass blade
 
                     metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
                             object_thread_per_threadgroup_count, 
@@ -653,7 +642,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
         metal_set_cull_mode(render_encoder, MTLCullModeBack); 
 
-        u32 voxel_instance_count = 0;
         for(u32 consumed = 0;
                 consumed < render_push_buffer->used;
                 )
@@ -662,23 +650,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
             switch(header->type)
             {
-                // TODO(gh) we can also do the similar thing as the voxels,
-                // which is allocating the managed buffer and instance-drawing the lines
-                case RenderEntryType_Line:
-                {
-                    RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += sizeof(*entry);
-#if 0
-                    metal_set_render_pipeline(render_encoder, render_context->line_pipeline);
-                    f32 start_and_end[6] = {entry->start.x, entry->start.y, entry->start.z, entry->end.x, entry->end.y, entry->end.z};
-
-                    metal_set_vertex_bytes(render_encoder, start_and_end, sizeof(f32) * array_count(start_and_end), 1);
-                    metal_set_vertex_bytes(render_encoder, &entry->color, sizeof(entry->color), 2);
-
-                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeLine, 0, 2);
-#endif
-                }break;
-
                 case RenderEntryType_AABB:
                 {
                     RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
@@ -769,7 +740,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
                 default:
                 {
-                    invalid_code_path;
+                    consumed += header->size;
                 }
             }
         }
@@ -801,37 +772,13 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         metal_set_viewport(forward_render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(forward_render_encoder, 0, 0, window_width, window_height);
-        // NOTE(gh) draw axis lines
         metal_set_detph_stencil_state(forward_render_encoder, render_context->depth_state);
         metal_set_triangle_fill_mode(forward_render_encoder, MTLTriangleFillModeFill);
         metal_set_front_facing_winding(forward_render_encoder, MTLWindingCounterClockwise);
         metal_set_cull_mode(forward_render_encoder, MTLCullModeBack); 
 
-        metal_set_render_pipeline(forward_render_encoder, render_context->forward_line_pipeline);
-        metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
 
-        f32 x_axis[] = {0.0f, 0.0f, 0.0f, 100.0f, 0.0f, 0.0f};
-        v3 x_axis_color = V3(1, 0, 0);
-        f32 y_axis[] = {0.0f, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f};
-        v3 y_axis_color = V3(0, 1, 0);
-        f32 z_axis[] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f};
-        v3 z_axis_color = V3(0, 0, 1);
-
-        // x axis
-        metal_set_vertex_bytes(forward_render_encoder, x_axis, sizeof(f32) * array_count(x_axis), 1);
-        metal_set_vertex_bytes(forward_render_encoder, &x_axis_color, sizeof(v3), 2);
-        metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeLine, 0, 2);
-
-        // y axis
-        metal_set_vertex_bytes(forward_render_encoder, y_axis, sizeof(f32) * array_count(y_axis), 1);
-        metal_set_vertex_bytes(forward_render_encoder, &y_axis_color, sizeof(v3), 2);
-        metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeLine, 0, 2);
-
-        // z axis
-        metal_set_vertex_bytes(forward_render_encoder, z_axis, sizeof(f32) * array_count(z_axis), 1);
-        metal_set_vertex_bytes(forward_render_encoder, &z_axis_color, sizeof(v3), 2);
-        metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeLine, 0, 2);
-
+        // TODO(gh) Also put this inside the game code, and make it as a render entry(with instance count support?)
         if(render_push_buffer->enable_show_perlin_noise_grid)
         {
 #if 1 
@@ -877,14 +824,52 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 #endif
         }
 
-#if 0
-            metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_game_camera_frustum);
+         for(u32 consumed = 0;
+                consumed < render_push_buffer->used;
+                )
+        {
+            RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_push_buffer->base + consumed);       
 
-            metal_set_vertex_bytes(forward_render_encoder, frustum_vertices, array_size(frustum_vertices), 0);
-            metal_set_vertex_bytes(forward_render_encoder, &main_proj_view, sizeof(main_proj_view), 1);
-            metal_draw_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle,
-                    0, 6, 0, grid->grass_count_x * grid->grass_count_y);
-#endif
+            switch(header->type)
+            {
+                case RenderEntryType_Line :
+                {
+                    RenderEntryLine *entry = (RenderEntryLine *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += header->size;
+
+                    metal_set_render_pipeline(forward_render_encoder, render_context->forward_line_pipeline);
+                    metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
+
+                    v3 vertices[] =
+                    {
+                        entry->start,
+                        entry->end
+                    };
+
+                    metal_set_vertex_bytes(forward_render_encoder, vertices, array_size(vertices), 1);
+                    metal_set_vertex_bytes(forward_render_encoder, &entry->color, sizeof(entry->color), 2);
+                    metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeLine, 0, 2);
+                }break;
+                case RenderEntryType_Frustum :
+                {
+                    RenderEntryFrustum *entry = (RenderEntryFrustum *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += header->size;
+
+                    metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_game_camera_frustum);
+                    metal_set_vertex_buffer(forward_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
+                    metal_set_vertex_bytes(forward_render_encoder, &main_proj_view, sizeof(main_proj_view), 1);
+
+                    metal_draw_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 
+                                    render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+
+                }break;
+
+                default:
+                {
+                    consumed += header->size;
+                };
+            }
+        }
 
 #if 0
 
@@ -1261,7 +1246,7 @@ int main(void)
         object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
     u32 max_mesh_threadgroup_count_per_mesh_grid = 
         max_object_thread_count_per_object_threadgroup; // Each mesh thread group is one grass blade
-    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_low_lod_index_count;  // TODO(gh) Fix this as multiple of simd width? 
+    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_high_lod_index_count;  // TODO(gh) Fix this as multiple of simd width? 
     metal_render_context.grass_mesh_render_pipeline = 
         metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
                                         "grass_object_function", 

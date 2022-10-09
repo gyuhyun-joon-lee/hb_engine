@@ -51,8 +51,9 @@ struct Entity
     CommonVertex *vertices;
     u32 vertex_count;
 
-    // TODO(gh) We don't really need to hold the indices, as long as we have the index buffer.
-    // or maybe we do? For example, to ray cast upon this entity?
+    // TODO(gh) We don't really need to hold the indices, 
+    // as long as we have the cpu-visible index buffer and the offset.
+    // For the ray cast, we can use the same buffer.
     u32 *indices; 
     u32 index_count;
 

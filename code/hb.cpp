@@ -54,8 +54,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         srand(time(0));
         game_state->random_series = start_random_series(rand());
 
-        game_state->game_camera = init_fps_camera(V3(100, 100, 22), 1.0f, 135, 0.01f, 10000.0f);
-        game_state->debug_camera = init_fps_camera(V3(100, 100, 22), 1.0f, 135, 0.01f, 10000.0f);
+        game_state->game_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 1.0f, 1000.0f);
+        game_state->game_camera.pitch += 1.5f;
+        game_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
         // Close camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 135, 0.01f, 10000.0f);
         // Far away camera
@@ -69,7 +70,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
         v2 sub_floor_dim = V2(combined_floor_dim.x/game_state->grass_grid_count_x, combined_floor_dim.y/game_state->grass_grid_count_y); // Floor is only consisted of the flat triangles
 
-        v2 floor_left_bottom_p = 0.5f*combined_floor_dim;
+        v2 floor_left_bottom_p = V2(-100, -100);
         for(u32 y = 0;
                 y < game_state->grass_grid_count_y;
                 ++y)
@@ -83,10 +84,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 v2 min = floor_left_bottom_p + hadamard(sub_floor_dim, V2(x, y));
                 v2 max = min + sub_floor_dim;
-                v2 center = 0.5f*(min + max);
 
                 Entity *floor_entity = 
-                    add_floor_entity(game_state, &game_state->transient_arena, V3(center, 0), sub_floor_dim, V3(1, 1, 1), grass_on_floor_count_x, grass_on_floor_count_y);
+                    add_floor_entity(game_state, &game_state->transient_arena, V3(min, 0), sub_floor_dim, V3(1, 1, 1), grass_on_floor_count_x, grass_on_floor_count_y);
 
                 GrassGrid *grid = game_state->grass_grids + y*game_state->grass_grid_count_x + x;
                 init_grass_grid(platform_render_push_buffer, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
@@ -112,45 +112,46 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *game_camera = &game_state->game_camera;
     Camera *debug_camera = &game_state->debug_camera;
 
-    Camera *main_camera = debug_camera;
+    Camera *render_camera = game_camera;
+    render_camera = debug_camera;
 
     f32 camera_rotation_speed = 2.7f * platform_input->dt_per_frame;
 
     if(platform_input->action_up)
     {
-        main_camera->pitch += camera_rotation_speed;
+        render_camera->pitch += camera_rotation_speed;
     }
     if(platform_input->action_down)
     {
-        main_camera->pitch -= camera_rotation_speed;
+        render_camera->pitch -= camera_rotation_speed;
     }
     if(platform_input->action_left)
     {
-        main_camera->roll += camera_rotation_speed;
+        render_camera->roll += camera_rotation_speed;
     }
     if(platform_input->action_right)
     {
-        main_camera->roll -= camera_rotation_speed;
+        render_camera->roll -= camera_rotation_speed;
     }
 
-    v3 camera_dir = get_camera_lookat(main_camera);
-    v3 camera_right_dir = get_camera_right(main_camera);
+    v3 camera_dir = get_camera_lookat(render_camera);
+    v3 camera_right_dir = get_camera_right(render_camera);
     f32 camera_speed = 20.0f * platform_input->dt_per_frame;
     if(platform_input->move_up)
     {
-        main_camera->p += camera_speed*camera_dir;
+        render_camera->p += camera_speed*camera_dir;
     }
     if(platform_input->move_down)
     {
-        main_camera->p -= camera_speed*camera_dir;
+        render_camera->p -= camera_speed*camera_dir;
     }
     if(platform_input->move_right)
     {
-        main_camera->p += camera_speed*camera_right_dir;
+        render_camera->p += camera_speed*camera_right_dir;
     }
     if(platform_input->move_left)
     {
-        main_camera->p += -camera_speed*camera_right_dir;
+        render_camera->p += -camera_speed*camera_right_dir;
     }
     
     // NOTE(gh) update entity start
@@ -246,7 +247,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             V3(max.x, max.y, max.z),
         };
 
-        grid->should_draw = false;
+        // grid->should_draw = false;
+        grid->should_draw = true;
         for(u32 i = 0;
                 i < array_count(vertices) && !grid->should_draw;
                 ++i)
@@ -266,7 +268,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     // NOTE(gh) render entity start
-    init_render_push_buffer(platform_render_push_buffer, main_camera, game_camera,
+    init_render_push_buffer(platform_render_push_buffer, render_camera, game_camera,
                             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
                             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
@@ -314,6 +316,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         /*
            NOTE(gh)
+           When looked from the camera p
            near
            0     1
            -------
@@ -366,9 +369,30 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             3, 1, 0,
 
             //far
-            1, 6, 5,
+            7, 6, 5,
             6, 4, 5,
         };
+
+        push_frustum(platform_render_push_buffer, V3(0, 0.2f, 1), 
+                    frustum_vertices, array_count(frustum_vertices),
+                    frustum_indices, array_count(frustum_indices));
+
+        v3 line_color = V3(0, 1, 1);
+
+        push_line(platform_render_push_buffer, game_camera_frustum.near[0], game_camera_frustum.near[1], line_color);
+        push_line(platform_render_push_buffer, game_camera_frustum.near[1], game_camera_frustum.near[3], line_color);
+        push_line(platform_render_push_buffer, game_camera_frustum.near[2], game_camera_frustum.near[3], line_color);
+        push_line(platform_render_push_buffer, game_camera_frustum.near[2], game_camera_frustum.near[0], line_color);
+
+        push_line(platform_render_push_buffer, game_camera_frustum.far[0], game_camera_frustum.far[1], line_color);
+        push_line(platform_render_push_buffer, game_camera_frustum.far[1], game_camera_frustum.far[3], line_color);
+        push_line(platform_render_push_buffer, game_camera_frustum.far[3], game_camera_frustum.far[2], line_color);
+        push_line(platform_render_push_buffer, game_camera_frustum.far[2], game_camera_frustum.far[0], line_color);
+
+        push_line(platform_render_push_buffer, game_camera_frustum.near[0], game_camera_frustum.far[0], line_color);
+        push_line(platform_render_push_buffer, game_camera_frustum.near[1], game_camera_frustum.far[1], line_color);
+        push_line(platform_render_push_buffer, game_camera_frustum.near[2], game_camera_frustum.far[2], line_color);
+        push_line(platform_render_push_buffer, game_camera_frustum.near[3], game_camera_frustum.far[3], line_color);
     }
 
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue);
