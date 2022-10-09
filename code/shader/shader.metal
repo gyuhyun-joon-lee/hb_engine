@@ -290,7 +290,7 @@ struct PerGrassData
     float wiggliness;
     packed_float3 color;
     float time_elasped_from_start; // TODO(gh) Do we even need to pass this?
-    float pad; // TODO(gh) Replace this with the 'clumping' values
+    float noise;
 };
 
 // NOTE(gh) each payload should be less than 16kb
@@ -348,6 +348,7 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
                           const device float *floor_z_values [[buffer (2)]],
                           const device float *time_elasped_from_start [[buffer (3)]],
                           constant float4x4 *proj_view [[buffer (4)]],
+                          const device float *perlin_noise_values [[buffer (5)]],
                           uint thread_index [[thread_index_in_threadgroup]], // thread index in object threadgroup 
                           uint2 thread_count_per_threadgroup [[threads_per_threadgroup]],
                           uint2 thread_count_per_grid [[threads_per_grid]],
@@ -392,6 +393,9 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
         payloadOutput->per_grass_data[thread_index].wiggliness = 1.6f;
         payloadOutput->per_grass_data[thread_index].time_elasped_from_start = *time_elasped_from_start;
         payloadOutput->per_grass_data[thread_index].color = packed_float3(random01, 0.6f, 0.2f);
+        payloadOutput->per_grass_data[thread_index].noise = 1.0f + clamp(perlin_noise_values[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x],
+                                                                    0.5f,
+                                                                    1.0f);
         // Hashes got all the values for the grid
         payloadOutput->per_grass_data[thread_index].hash = hash;
 
@@ -433,13 +437,13 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     packed_float3 center = per_grass_data->center;
     float blade_width = per_grass_data->blade_width;
     float stride = per_grass_data->stride;
-    float height = per_grass_data->height;
+    float height = per_grass_data->height - 0.1f*per_grass_data->noise;
     packed_float2 facing_direction = normalize(per_grass_data->facing_direction);
     float bend = per_grass_data->bend;
     float wiggliness = per_grass_data->wiggliness;
     packed_float3 color = per_grass_data->color;
     uint hash = per_grass_data->hash;
-    float time_elasped_from_start = 1.3f * per_grass_data->time_elasped_from_start;
+    float time_elasped_from_start = per_grass_data->noise * per_grass_data->time_elasped_from_start;
 
     float3 p0 = center;
 
@@ -473,7 +477,7 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
         // TODO(gh) Original method do it in view angle, any reason to do that
         // (grass possibly facing the direction other than z)?
         bool should_shift_thread_mod_1 = (dot(orthogonal_normal, *camera_p - center) < 0);
-        float shift = 0.0f;
+        float shift = 0.08f;
         if(thread_index%2 == 1)
         {
             world_p += blade_width * orthogonal_normal;

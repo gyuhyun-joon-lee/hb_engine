@@ -612,6 +612,7 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     metal_set_object_buffer(render_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 2);
                     metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 3);
                     metal_set_object_bytes(render_encoder, &game_proj_view, sizeof(game_proj_view), 4);
+                    metal_set_object_buffer(render_encoder, render_context->giant_buffer.buffer, grid->perlin_noise_buffer_offset, 5);
 
                     metal_set_mesh_bytes(render_encoder, &game_proj_view, sizeof(game_proj_view), 0);
                     metal_set_mesh_bytes(render_encoder, &main_proj_view, sizeof(main_proj_view), 1);
