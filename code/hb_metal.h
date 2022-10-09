@@ -66,6 +66,7 @@ struct MetalRenderContext
     id<MTLRenderPipelineState> forward_line_pipeline;
     id<MTLRenderPipelineState> screen_space_triangle_pipeline;
     id<MTLRenderPipelineState> forward_show_perlin_noise_grid_pipeline;
+    id<MTLRenderPipelineState> forward_show_game_camera_frustum;
 
     // Compute Pipelines
     id<MTLComputePipelineState> add_compute_pipeline;

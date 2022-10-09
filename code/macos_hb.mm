@@ -22,12 +22,12 @@
 // TODO(gh) shared.h file for files that are shared across platforms?
 #include "hb_types.h"
 #include "hb_intrinsic.h"
-#include "hb_platform.h"
 #include "hb_math.h"
 #include "hb_random.h"
 #include "hb_simd.h"
 #include "hb_render_group.h"
 #include "hb_shared_with_shader.h"
+#include "hb_platform.h"
 
 #include "hb_metal.cpp"
 
@@ -577,10 +577,16 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
         // NOTE(gh) When we create a render_encoder, we cannot create another render encoder until we call endEncoding on the current one.
         id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->single_renderpass];
 
-        PerFrameData per_frame_data = {};
-        m4x4 proj = perspective_projection(render_push_buffer->camera_fov, render_push_buffer->camera_near, render_push_buffer->camera_far,
+        m4x4 main_proj = perspective_projection(render_push_buffer->main_camera_fov, render_push_buffer->main_camera_near, render_push_buffer->main_camera_far,
                                            render_push_buffer->width_over_height);
-        per_frame_data.proj_view = transpose(proj * render_push_buffer->view);
+        m4x4 main_proj_view = transpose(main_proj * render_push_buffer->main_camera_view);
+
+        m4x4 game_proj = perspective_projection(render_push_buffer->game_camera_fov, render_push_buffer->game_camera_near, render_push_buffer->game_camera_far,
+                                           render_push_buffer->width_over_height);
+        m4x4 game_proj_view = transpose(game_proj * render_push_buffer->game_camera_view);
+
+        PerFrameData per_frame_data = {};
+        per_frame_data.proj_view = main_proj_view;
 
         // NOTE(gh) first, render all the grasses with mesh render pipeline
         metal_set_render_pipeline(render_encoder, render_context->grass_mesh_render_pipeline);
@@ -599,39 +605,44 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
             {
                 GrassGrid *grid = render_push_buffer->grass_grids + grass_grid_index;
 
-                assert(grid->grass_count_x % object_thread_per_threadgroup_count_x == 0);
-                assert(grid->grass_count_y % object_thread_per_threadgroup_count_y == 0);
-                u32 object_threadgroup_per_grid_count_x = grid->grass_count_x / object_thread_per_threadgroup_count_x;
-                u32 object_threadgroup_per_grid_count_y = grid->grass_count_y / object_thread_per_threadgroup_count_y;
-                
-                v2 grid_dim = grid->max - grid->min;
+                if(grid->should_draw)
+                {
+                    assert(grid->grass_count_x % object_thread_per_threadgroup_count_x == 0);
+                    assert(grid->grass_count_y % object_thread_per_threadgroup_count_y == 0);
+                    u32 object_threadgroup_per_grid_count_x = grid->grass_count_x / object_thread_per_threadgroup_count_x;
+                    u32 object_threadgroup_per_grid_count_y = grid->grass_count_y / object_thread_per_threadgroup_count_y;
+                    
+                    v2 grid_dim = grid->max - grid->min;
 
-                GrassObjectFunctionInput grass_object_input = {};
-                grass_object_input.floor_left_bottom_p = grid->min;
-                grass_object_input.one_thread_worth_dim = V2(grid_dim.x/grid->grass_count_x, grid_dim.y/grid->grass_count_y);
+                    GrassObjectFunctionInput grass_object_input = {};
+                    grass_object_input.min = grid->min;
+                    grass_object_input.max = grid->max;
+                    grass_object_input.one_thread_worth_dim = V2(grid_dim.x/grid->grass_count_x, grid_dim.y/grid->grass_count_y);
 
-                metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
-                metal_set_object_buffer(render_encoder, render_context->giant_buffer.buffer, grid->hash_buffer_offset, 1);
-                metal_set_object_buffer(render_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 2);
-                metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 3);
+                    metal_set_object_bytes(render_encoder, &grass_object_input, sizeof(grass_object_input), 0);
+                    metal_set_object_buffer(render_encoder, render_context->giant_buffer.buffer, grid->hash_buffer_offset, 1);
+                    metal_set_object_buffer(render_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 2);
+                    metal_set_object_bytes(render_encoder, &time_elapsed_from_start, sizeof(time_elapsed_from_start), 3);
+                    metal_set_object_bytes(render_encoder, &game_proj_view, sizeof(game_proj_view), 4);
 
-                metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
-                metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
-                metal_set_mesh_bytes(render_encoder, &render_push_buffer->camera_p, sizeof(render_push_buffer->camera_p), 2);
+                    metal_set_mesh_bytes(render_encoder, &per_frame_data.proj_view, sizeof(per_frame_data.proj_view), 0);
+                    metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 1);
+                    metal_set_mesh_bytes(render_encoder, &render_push_buffer->main_camera_p, sizeof(render_push_buffer->main_camera_p), 2);
 
-                metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
-                metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-                v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
-                        object_threadgroup_per_grid_count_y, 
-                        1);
-                v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
-                        object_thread_per_threadgroup_count_y, 
-                        1);
-                v3u mesh_thread_per_threadgroup_count = V3u(grass_low_lod_index_count, 1, 1); // same as index count for the grass blade
+                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
+                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+                    v3u object_threadgroup_per_grid_count = V3u(object_threadgroup_per_grid_count_x, 
+                            object_threadgroup_per_grid_count_y, 
+                            1);
+                    v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
+                            object_thread_per_threadgroup_count_y, 
+                            1);
+                    v3u mesh_thread_per_threadgroup_count = V3u(grass_low_lod_index_count, 1, 1); // same as index count for the grass blade
 
-                metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
-                        object_thread_per_threadgroup_count, 
-                        mesh_thread_per_threadgroup_count);
+                    metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
+                            object_thread_per_threadgroup_count, 
+                            mesh_thread_per_threadgroup_count);
+                }
             }
         }
 
@@ -851,7 +862,6 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                 // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
                 // indierct draw method?
                 // NOTE(gh) z value will come from the floor z buffer
-
                 metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_perlin_noise_grid_pipeline);
 
                 metal_set_vertex_bytes(forward_render_encoder, square_vertices, array_size(square_vertices), 0);
@@ -866,6 +876,15 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
 #endif
         }
+
+#if 0
+            metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_game_camera_frustum);
+
+            metal_set_vertex_bytes(forward_render_encoder, frustum_vertices, array_size(frustum_vertices), 0);
+            metal_set_vertex_bytes(forward_render_encoder, &main_proj_view, sizeof(main_proj_view), 1);
+            metal_draw_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle,
+                    0, 6, 0, grid->grass_count_x * grid->grass_count_y);
+#endif
 
 #if 0
 
@@ -1189,6 +1208,7 @@ int main(void)
     // NOTE(gh) forward pipelines
     // Not every forward pipelines use the blending
     b32 forward_blending_enabled[] = {true};
+    b32 forward_blending_disabled[] = {false};
 
     MTLPixelFormat forward_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm}; // This is the default pixel format for displaying
     MTLColorWriteMask forward_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll};
@@ -1207,11 +1227,20 @@ int main(void)
                             MTLPrimitiveTopologyClassTriangle,
                             forward_pipeline_color_attachment_pixel_formats, array_count(forward_pipeline_color_attachment_pixel_formats),
                             forward_pipeline_color_attachment_write_masks, array_count(forward_pipeline_color_attachment_write_masks),
-                            view.depthStencilPixelFormat, forward_blending_enabled);
+                            view.depthStencilPixelFormat, forward_blending_disabled);
 
     metal_render_context.forward_show_perlin_noise_grid_pipeline = 
         metal_make_render_pipeline(device, "Forward Show Perlin Noise Grid Pipeline", 
                             "forward_show_perlin_noise_grid_vert", "forward_show_perlin_noise_grid_frag",
+                            shader_library,
+                            MTLPrimitiveTopologyClassTriangle,
+                            forward_pipeline_color_attachment_pixel_formats, array_count(forward_pipeline_color_attachment_pixel_formats),
+                            forward_pipeline_color_attachment_write_masks, array_count(forward_pipeline_color_attachment_write_masks),
+                            view.depthStencilPixelFormat, forward_blending_enabled);
+
+    metal_render_context.forward_show_game_camera_frustum = 
+        metal_make_render_pipeline(device, "Forward Show Game Camera Frustum Pipeline", 
+                            "forward_show_frustum_vert", "forward_show_frustum_frag",
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
                             forward_pipeline_color_attachment_pixel_formats, array_count(forward_pipeline_color_attachment_pixel_formats),

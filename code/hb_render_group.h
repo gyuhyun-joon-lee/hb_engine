@@ -33,6 +33,49 @@ struct RawMesh
     u32 texcoord_index_count;
 };
 
+struct CommonVertex
+{
+    v3 p;
+    v3 normal;
+};
+
+struct GrassGrid
+{
+    b32 should_draw;
+
+    u32 grass_count_x;
+    u32 grass_count_y;
+
+    // NOTE(gh) Platform layer should give enough memory to each of the buffer to 
+    // hold grass_count_x*grass_count_y amount of elements. 
+    u32 *hash_buffer;
+    u32 hash_buffer_size;
+    u32 hash_buffer_offset; // offset to the giant buffer, game code should not care about this
+    b32 updated_hash_buffer;
+
+    f32 *floor_z_buffer;
+    u32 floor_z_buffer_size;
+    u32 floor_z_buffer_offset; // offset to the giant buffer, game code should not care about this
+    b32 updated_floor_z_buffer;
+
+    // TODO(gh) Also store offset x and y for smooth transition between grids, 
+    // or maybe make perlin noise to be seperate from the grid?
+    // For now, it is given free because of the fact that every grid is 256 x 256
+    f32 *perlin_noise_buffer;
+    u32 perlin_noise_buffer_size;
+    u32 perlin_noise_buffer_offset; // offset to the giant buffer, game code should not care about this
+
+    v2 min;
+    v2 max;
+};
+
+struct CameraFrustum
+{
+    // morten z order
+    v3 near[4];
+    v3 far[4];
+};
+
 /* 
    TODO(gh) we would want these functionalities for the camera
    - Initialize camera with the 'position' and the 'look at' position.

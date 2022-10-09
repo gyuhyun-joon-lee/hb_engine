@@ -53,10 +53,9 @@ orthogonal_projection(f32 n, f32 f, f32 width, f32 width_over_height)
     Think as 2D plane(x and z OR y and z), use triangle similarity to get projected Xp and Yp
     For Z, as x and y don't have any effect on Z, we can say (A * Ze + b) / -Ze = Zp (diving by -Ze because homogeneous coords)
 
-    Based on what NDC we are using, -n should produce 0 or -1 value, while -f should produce 1.
+    -n should produce 0 or -1 value(based on what NDC system we use), 
+    while -f should produce 1.
 */
-// TODO(gh) Make this to be dependent to the FOV, not the actual width
-// because it becomes irrelevant when we change the near plane. 
 inline m4x4
 perspective_projection(f32 fov, f32 n, f32 f, f32 width_over_height)
 {

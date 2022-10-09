@@ -458,13 +458,91 @@ camera_transform(CircleCamera *camera)
     return camera_transform(camera->p, camera_x_axis, camera_y_axis, camera_z_axis);
 }
 
+// NOTE(gh) persepctive projection matrix for (-1, -1, 0) to (1, 1, 1) NDC like Metal
+/*
+    Little tip in how we get the persepctive projection matrix
+    Think as 2D plane(x and z OR y and z), use triangle similarity to get projected Xp and Yp
+    For Z, as x and y don't have any effect on Z, we can say (A * Ze + b) / -Ze = Zp (diving by -Ze because homogeneous coords)
+
+    -n should produce 0 or -1 value(based on what NDC system we use), 
+    while -f should produce 1.
+*/
+inline m4x4
+perspective_projection_near_is_01(f32 fov, f32 n, f32 f, f32 width_over_height)
+{
+    assert(fov < 180);
+
+    f32 half_near_plane_width = n*tanf(0.5f*fov)*0.5f;
+    f32 half_near_plane_height = half_near_plane_width / width_over_height;
+
+    m4x4 result = {};
+
+    // TODO(gh) Even though the resulting coordinates should be same, 
+    // it seems like in Metal w value should be positive.
+    // Maybe that's how they are doing the frustum culling..?
+    result.rows[0] = V4(n / half_near_plane_width, 0, 0, 0);
+    result.rows[1] = V4(0, n / half_near_plane_height, 0, 0);
+    result.rows[2] = V4(0, 0, f/(n-f), (n*f)/(n-f)); // X and Y values don't effect the z value
+    result.rows[3] = V4(0, 0, -1, 0); // As Xp and Yp are dependant to Z value, this is the only way to divide Xp and Yp by -Ze
+
+    return result;
+}
+
+
 internal v3
 get_camera_lookat(Camera *camera)
 {
+    // TODO(gh) I don't think the math here is correct, shouldn't we do this in backwards 
+    // to go from camera space to world space, considering that (0, 0, -1) is the camera lookat in
+    // camera space??
     m3x3 camera_local_rotation = z_rotate(camera->roll) * x_rotate(camera->pitch);
     v3 result = camera_local_rotation * V3(0, 0, -1); 
 
     return result;
+}
+
+// TODO(gh) Does not work when camera is directly looking up or down
+internal v3
+get_camera_right(Camera *camera)
+{
+    // TODO(gh) Up vector might be same as the camera direction
+    v3 camera_dir = get_camera_lookat(camera);
+    v3 result = normalize(cross(camera_dir, V3(0, 0, 1)));
+
+    return result;
+}
+
+// TODO(gh) This operation is quite expensive, find out to optimize it
+internal void
+get_camera_frustum(Camera *camera, CameraFrustum *frustum, f32 width_over_height)
+{
+    v3 camera_dir = get_camera_lookat(camera);
+    v3 camera_right = get_camera_right(camera);
+    v3 camera_up = normalize(cross(camera_right, camera_dir));
+
+    v3 near_plane_center = camera->p + camera->near * camera_dir;
+    v3 far_plane_center = camera->p + camera->far * camera_dir;
+
+    f32 half_near_plane_width = camera->near*tanf(0.5f*camera->fov)*0.5f;
+    f32 half_near_plane_height = half_near_plane_width / width_over_height;
+    v3 half_near_plane_right = half_near_plane_width * camera_right;
+    v3 half_near_plane_up = half_near_plane_height * camera_up;
+
+    f32 half_far_plane_width = camera->far*tanf(0.5f*camera->fov)*0.5f;
+    f32 half_far_plane_height = half_far_plane_width / width_over_height;
+    v3 half_far_plane_right = half_far_plane_width * camera_right;
+    v3 half_far_plane_up = half_far_plane_height * camera_up;
+
+    // morten z order
+    frustum->near[0] = near_plane_center - half_near_plane_right + half_near_plane_up;
+    frustum->near[1] = near_plane_center + half_near_plane_right + half_near_plane_up;
+    frustum->near[2] = near_plane_center - half_near_plane_right - half_near_plane_up;
+    frustum->near[3] = near_plane_center + half_near_plane_right - half_near_plane_up;
+
+    frustum->far[0] = far_plane_center - half_far_plane_right + half_far_plane_up;
+    frustum->far[1] = far_plane_center + half_far_plane_right + half_far_plane_up;
+    frustum->far[2] = far_plane_center - half_far_plane_right - half_far_plane_up;
+    frustum->far[3] = far_plane_center + half_far_plane_right - half_far_plane_up;
 }
 
 internal m4x4
@@ -475,42 +553,6 @@ rhs_to_lhs(m4x4 m)
 
     return result;
 }
-
-#if 0
-// NOTE/gh : This assumes that the window width is always 1m
-inline m4x4
-project(f32 focal_length, f32 aspect_ratio, f32 near, f32 far)
-{
-    m4x4 result = {};
-
-    f32 c = clip_space_top_is_one() ? 1.f : 0.f; 
-
-    result.rows[0] = V4(focal_length, 0, 0, 0);
-    result.rows[1] = V4(0, focal_length*aspect_ratio, 0, 0);
-    result.rows[2] = V4(0, 0, c*(near+far)/(far-near), (-2.0f*far*near)/(far-near));
-    result.rows[3] = V4(0, 0, 1, 0);
-
-    return result;
-}
-#endif
-
-// NOTE(gh) This is for (-1, -1, -1) to (1, 1, 1) NDC like openGL
-#if 0
-inline m4x4
-perspective_projection(f32 near, f32 far, f32 width, f32 width_over_height)
-{
-    f32 height = width / width_over_height;
-
-    m4x4 result = {};
-
-    result.rows[0] = V4(-near / (2 * width), 0, 0, 0);
-    result.rows[1] = V4(0, -near / (2 * height), 0, 0);
-    result.rows[2] = V4(0, 0, (near + far) / (far - near), 2*near*far / (far - near)); // X and Y value does not effect the z value
-    result.rows[3] = V4(0, 0, 1, 0);
-
-    return result;
-}
-#endif
 
 // TODO(gh) Later we would want to minimize passing the platform buffer here
 // TODO(gh) Make the grass count more configurable?
@@ -571,43 +613,24 @@ init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, Entity *floor, Ran
 }
 
 internal void
-init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, CircleCamera *camera, 
-                        GrassGrid *grass_grids, u32 grass_grid_count_x, u32 grass_grid_count_y,
-                        v3 clear_color, 
-                        b32 enable_shadow)
-{
-    assert(render_push_buffer->base);
-
-    render_push_buffer->view = camera_transform(camera);
-    render_push_buffer->camera_near = camera->near;
-    render_push_buffer->camera_far = camera->far;
-    render_push_buffer->camera_fov = camera->fov;
-    render_push_buffer->clear_color = clear_color;
-    render_push_buffer->camera_p = camera->p;
-    render_push_buffer->grass_grids = grass_grids;
-    render_push_buffer->grass_grid_count_x = grass_grid_count_x;
-    render_push_buffer->grass_grid_count_y = grass_grid_count_y;
-
-    render_push_buffer->enable_shadow = enable_shadow;
-    
-    render_push_buffer->combined_vertex_buffer_used = 0;
-    render_push_buffer->combined_index_buffer_used = 0;
-
-    render_push_buffer->used = 0;
-}
-
-internal void
-init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *camera,  
+init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *main_camera, Camera *game_camera,  
                         GrassGrid *grass_grids, u32 grass_grid_count_x, u32 grass_grid_count_y,
                         v3 clear_color, b32 enable_shadow)
 {
     assert(render_push_buffer->base);
 
-    render_push_buffer->view = camera_transform(camera);
-    render_push_buffer->camera_near = camera->near;
-    render_push_buffer->camera_far = camera->far;
-    render_push_buffer->camera_fov = camera->fov;
-    render_push_buffer->camera_p = camera->p;
+    render_push_buffer->main_camera_view = camera_transform(main_camera);
+    render_push_buffer->main_camera_near = main_camera->near;
+    render_push_buffer->main_camera_far = main_camera->far;
+    render_push_buffer->main_camera_fov = main_camera->fov;
+    render_push_buffer->main_camera_p = main_camera->p;
+
+    render_push_buffer->game_camera_view = camera_transform(game_camera);
+    render_push_buffer->game_camera_near = game_camera->near;
+    render_push_buffer->game_camera_far = game_camera->far;
+    render_push_buffer->game_camera_fov = game_camera->fov;
+    render_push_buffer->game_camera_p = game_camera->p;
+
     render_push_buffer->clear_color = clear_color;
     render_push_buffer->grass_grids = grass_grids;
     render_push_buffer->grass_grid_count_x = grass_grid_count_x;
@@ -734,6 +757,11 @@ push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color,
     entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);
     entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);
     entry->index_count = index_count;
+}
+
+internal void
+push_quad(PlatformRenderPushBuffer *render_push_buffer, v3 min, v3 max, v3 color)
+{
 }
 
 

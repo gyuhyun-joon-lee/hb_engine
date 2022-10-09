@@ -14,7 +14,8 @@ struct GameState
     u32 max_entity_count;
 
     // NOTE(gh) rendering related stuffs
-    Camera camera;
+    Camera game_camera;
+    Camera debug_camera;
     CircleCamera circle_camera;
 
     MemoryArena render_arena;

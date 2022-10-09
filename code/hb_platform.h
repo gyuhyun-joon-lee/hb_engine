@@ -11,38 +11,6 @@ extern "C" {
 
 #include "hb_types.h" 
 
-#define assert(expression) if(!(expression)) {int *a = 0; *a = 0;}
-#define array_count(array) (sizeof(array) / sizeof(array[0]))
-#define array_size(array) (sizeof(array))
-#define invalid_code_path assert(0)
-
-#define global static
-#define global_variable global
-#define local_persist static
-#define internal static
-
-#define kilobytes(value) value*1024LL
-#define megabytes(value) 1024LL*kilobytes(value)
-#define gigabytes(value) 1024LL*megabytes(value)
-#define terabytes(value) 1024LL*gigabytes(value)
-
-#define sec_to_nanosec 1.0e+9f
-#define sec_to_millisec 1000.0f
-//#define nano_sec_to_micro_sec 0.0001f // TODO(gh): Find the correct value :(
-
-#define maximum(a, b) ((a>b)? a:b) 
-#define minimum(a, b) ((a<b)? a:b) 
-
-// NOTE(gh): *(u32 *)c == "stri" does not work because of the endianess issues
-#define four_cc(string) (((string[0] & 0xff) << 0) | ((string[1] & 0xff) << 8) | ((string[2] & 0xff) << 16) | ((string[3] & 0xff) << 24))
-
-#define tau_32 6.283185307179586476925286766559005768394338798750211641949889f
-
-#define pi_32 3.14159265358979323846264338327950288419716939937510582097494459230f
-#define half_pi_32 (pi_32/2.0f)
-#define euler_contant 2.7182818284590452353602874713526624977572470936999595749f
-#define degree_to_radian(degree) ((degree / 180.0f)*pi_32)
-
 #include <math.h>
 
 struct PlatformReadFileResult
@@ -298,47 +266,11 @@ struct ThreadWorkQueue
     platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
 };
 
-// TODO(gh) Should move these to another file
-struct CommonVertex
-{
-    v3 p;
-    v3 normal;
-};
-
-// TODO(gh) Only a temporary thing, should move this to the game code?
-struct GrassGrid
-{
-    u32 grass_count_x;
-    u32 grass_count_y;
-
-    // NOTE(gh) Platform layer should give enough memory to each of the buffer to 
-    // hold grass_count_x*grass_count_y amount of elements. 
-    u32 *hash_buffer;
-    u32 hash_buffer_size;
-    u32 hash_buffer_offset; // offset to the giant buffer, game code should not care about this
-    b32 updated_hash_buffer;
-
-    f32 *floor_z_buffer;
-    u32 floor_z_buffer_size;
-    u32 floor_z_buffer_offset; // offset to the giant buffer, game code should not care about this
-    b32 updated_floor_z_buffer;
-
-    // TODO(gh) Also store offset x and y for smooth transition between grids, 
-    // or maybe make perlin noise to be seperate from the grid?
-    // For now, it is given free because of the fact that every grid is 256 x 256
-    f32 *perlin_noise_buffer;
-    u32 perlin_noise_buffer_size;
-    u32 perlin_noise_buffer_offset; // offset to the giant buffer, game code should not care about this
-
-    v2 min;
-    v2 max;
-};
 
 // TODO(gh) Request(game code) - Give(platform layer) system?
 struct PlatformRenderPushBuffer
 {
     // NOTE(gh) provided by the platform layer
-    void *device;
     f32 width_over_height; 
 
     // TODO(gh) Rename this into command buffer or something
@@ -356,6 +288,10 @@ struct PlatformRenderPushBuffer
     u32 combined_index_buffer_size;
     u32 combined_index_buffer_used;
 
+    void *giant_transient_buffer;
+    u64 giant_transient_buffer_size;
+    u64 giant_transient_buffer_used;
+
     // MTLHeap?
     void *giant_buffer;
     u64 giant_buffer_size;
@@ -366,16 +302,23 @@ struct PlatformRenderPushBuffer
     u32 grass_grid_count_x;
     u32 grass_grid_count_y;
 
-    m4x4 view;
-    v3 camera_p;
-    f32 camera_near;
-    f32 camera_far;
-    f32 camera_fov;
+    // This is what the game 'thinks' the camera is
+    m4x4 game_camera_view;
+    v3 game_camera_p;
+    f32 game_camera_near;
+    f32 game_camera_far;
+    f32 game_camera_fov;
+
+    // This is camera that we are looking into
+    m4x4 main_camera_view;
+    v3 main_camera_p;
+    f32 main_camera_near;
+    f32 main_camera_far;
+    f32 main_camera_fov;
+
     v3 clear_color;
 
     // Configurations
-    // TODO(gh) Make configuration as struct
-    b32 enable_complex_lighting; // when disabled, only use ambient value
     b32 enable_shadow;
     b32 enable_show_perlin_noise_grid; // show perlin noise on top of the floor
     b32 enable_grass_mesh_rendering;

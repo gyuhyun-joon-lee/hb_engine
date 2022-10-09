@@ -4,13 +4,13 @@
 #include "hb_types.h"
 #include "hb_simd.h"
 #include "hb_intrinsic.h"
-#include "hb_platform.h"
 #include "hb_math.h"
 #include "hb_random.h"
 #include "hb_font.h"
+#include "hb_render_group.h"
 #include "hb_simulation.h"
 #include "hb_entity.h"
-#include "hb_render_group.h"
+#include "hb_platform.h"
 #include "hb.h"
 
 #include "hb_mesh_loader.cpp"
@@ -54,15 +54,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         srand(time(0));
         game_state->random_series = start_random_series(rand());
 
-        game_state->camera = init_fps_camera(V3(100, 100, 22), 1.0f, 135, 0.01f, 10000.0f);
+        game_state->game_camera = init_fps_camera(V3(100, 100, 22), 1.0f, 135, 0.01f, 10000.0f);
+        game_state->debug_camera = init_fps_camera(V3(100, 100, 22), 1.0f, 135, 0.01f, 10000.0f);
         // Close camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 135, 0.01f, 10000.0f);
         // Far away camera
         game_state->circle_camera = init_circle_camera(V3(0, 0, 20), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
         // Really far away camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
-
-        // add_cube_entity(game_state, V3(0, 0, 15), V3(7, 7, 7), V3(1, 1, 1));
 
         v2 combined_floor_dim = V2(200, 200); // TODO(gh) just temporary, need to 'gather' the floors later
         game_state->grass_grid_count_x = 2;
@@ -110,53 +109,49 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->is_initialized = true;
     }
 
-    Camera *camera= &game_state->camera;
-    f32 camera_rotation_speed = 2.0f * platform_input->dt_per_frame;
+    Camera *game_camera = &game_state->game_camera;
+    Camera *debug_camera = &game_state->debug_camera;
+
+    Camera *main_camera = debug_camera;
+
+    f32 camera_rotation_speed = 2.7f * platform_input->dt_per_frame;
 
     if(platform_input->action_up)
     {
-        camera->pitch += camera_rotation_speed;
+        main_camera->pitch += camera_rotation_speed;
     }
     if(platform_input->action_down)
     {
-        camera->pitch -= camera_rotation_speed;
+        main_camera->pitch -= camera_rotation_speed;
     }
     if(platform_input->action_left)
     {
-        camera->roll += camera_rotation_speed;
-        game_state->circle_camera.rad -= 0.6f * platform_input->dt_per_frame;
+        main_camera->roll += camera_rotation_speed;
     }
     if(platform_input->action_right)
     {
-        camera->roll -= camera_rotation_speed;
-        game_state->circle_camera.rad += 0.6f * platform_input->dt_per_frame;
+        main_camera->roll -= camera_rotation_speed;
     }
 
-    v3 camera_dir = get_camera_lookat(camera);
-        // TODO(gh) Up vector might be same as the camera direction
-    v3 camera_right_dir = normalize(cross(camera_dir, V3(1, 0, 0)));
+    v3 camera_dir = get_camera_lookat(main_camera);
+    v3 camera_right_dir = get_camera_right(main_camera);
     f32 camera_speed = 20.0f * platform_input->dt_per_frame;
     if(platform_input->move_up)
     {
-        camera->p += camera_speed*camera_dir;
+        main_camera->p += camera_speed*camera_dir;
     }
     if(platform_input->move_down)
     {
-        camera->p -= camera_speed*camera_dir;
+        main_camera->p -= camera_speed*camera_dir;
     }
     if(platform_input->move_right)
     {
-        camera->p += camera_speed*camera_right_dir;
+        main_camera->p += camera_speed*camera_right_dir;
     }
     if(platform_input->move_left)
     {
-        camera->p += -camera_speed*camera_right_dir;
+        main_camera->p += -camera_speed*camera_right_dir;
     }
-
-    game_state->circle_camera.p.x = game_state->circle_camera.distance_from_axis * 
-                                    cosf(game_state->circle_camera.rad);
-    game_state->circle_camera.p.y = game_state->circle_camera.distance_from_axis * 
-                                    sinf(game_state->circle_camera.rad);
     
     // NOTE(gh) update entity start
     for(u32 entity_index = 0;
@@ -212,14 +207,71 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
     }
 
+
+    // NOTE(gh) Frustum cull the grids
+    // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
+    m4x4 view = camera_transform(game_camera);
+    m4x4 proj = perspective_projection_near_is_01(game_camera->fov, 
+                                                game_camera->near, 
+                                                game_camera->far, 
+                                                platform_render_push_buffer->width_over_height);
+
+    m4x4 proj_view = proj * view;
+
+    // TODO(gh) Grid z is assumed to be 15(z+floor), and we need to be more conservative on these
+    for(u32 grass_grid_index = 0;
+            grass_grid_index < game_state->grass_grid_count_x*game_state->grass_grid_count_y;
+            ++grass_grid_index)
+    {
+        GrassGrid *grid = game_state->grass_grids + grass_grid_index;
+
+        f32 z = 15.0f;
+        // TODO(gh) This will not work if the grid was big enough to contain the frustum
+        // more concrete way would be the seperating axis test
+        v3 min = V3(grid->min, 0);
+        v3 max = V3(grid->max, z);
+
+        v3 vertices[] = 
+        {
+            // bottom
+            V3(min.x, min.y, min.z),
+            V3(min.x, max.y, min.z),
+            V3(max.x, min.y, min.z),
+            V3(max.x, max.y, min.z),
+
+            // top
+            V3(min.x, min.y, max.z),
+            V3(min.x, max.y, max.z),
+            V3(max.x, min.y, max.z),
+            V3(max.x, max.y, max.z),
+        };
+
+        grid->should_draw = false;
+        for(u32 i = 0;
+                i < array_count(vertices) && !grid->should_draw;
+                ++i)
+        {
+            // homogeneous p
+            v4 hp = proj_view * V4(vertices[i], 1.0f);
+
+            // We are using projection matrix which puts z to 0 to 1
+            if((hp.x >= -hp.w && hp.x <= hp.w) &&
+                (hp.y >= -hp.w && hp.y <= hp.w) &&
+                (hp.z >= 0 && hp.z <= hp.w))
+            {
+                grid->should_draw = true;
+                break;
+            }
+        }
+    }
+
     // NOTE(gh) render entity start
-    // init_render_push_buffer(platform_render_push_buffer, &game_state->circle_camera, V3(0, 0, 0), true);
-    init_render_push_buffer(platform_render_push_buffer, &game_state->camera, 
+    init_render_push_buffer(platform_render_push_buffer, main_camera, game_camera,
                             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
                             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
     platform_render_push_buffer->enable_grass_mesh_rendering = true;
-    platform_render_push_buffer->enable_show_perlin_noise_grid = true;
+    platform_render_push_buffer->enable_show_perlin_noise_grid = false;
 
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;
@@ -251,6 +303,72 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
             }break;
         }
+    }
+
+    // NOTE(gh) push forward rendering elements
+    b32 enable_show_game_camera_frustum = true;
+    if(enable_show_game_camera_frustum)
+    {
+        CameraFrustum game_camera_frustum = {};
+        get_camera_frustum(game_camera, &game_camera_frustum, platform_render_push_buffer->width_over_height);
+
+        /*
+           NOTE(gh)
+           near
+           0     1
+           -------
+           |     |
+           |     |
+           -------
+           2     3
+
+           far
+           4     5
+           -------
+           |     |
+           |     |
+           -------
+           6     7
+        */
+        v3 frustum_vertices[] = 
+        {
+            game_camera_frustum.near[0],
+            game_camera_frustum.near[1],
+            game_camera_frustum.near[2],
+            game_camera_frustum.near[3],
+
+            game_camera_frustum.far[0],
+            game_camera_frustum.far[1],
+            game_camera_frustum.far[2],
+            game_camera_frustum.far[3],
+        };
+
+        u32 frustum_indices[] =
+        {
+            // top
+            0, 1, 4,
+            1, 5, 4,
+
+            // right
+            1, 3, 5,
+            3, 7, 5,
+
+            // left
+            2, 0, 6,
+            0, 4, 6,
+
+            // bottom
+            6, 7, 2,
+            7, 3, 2,
+
+            // near
+            2, 3, 0,
+            3, 1, 0,
+
+            //far
+            1, 6, 5,
+            6, 4, 5,
+        };
     }
 
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue);

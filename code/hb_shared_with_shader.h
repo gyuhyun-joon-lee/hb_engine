@@ -55,21 +55,23 @@ struct PerObjectData
 // is based on the payload size limit(16kb) and the simd group width(32).
 // The threadgruop count per grid will be determined by the thread count, and it's up to the platform layer
 // to decide the size of one wavefront.
-// TODO(gh) It seems like the minimum thread count should be at least 128, wonder if there's something 
-// to do with the command buffer size inside the GPU?, or maybe because
+// TODO(gh) It seems like we cannot increase this value too much because of the command buffer overflow,
+// figure something out(or should we?)?
 #define object_thread_per_threadgroup_count_x 8
-#define object_thread_per_threadgroup_count_y 4
+#define object_thread_per_threadgroup_count_y 8
 
 struct GrassObjectFunctionInput
 {
 #if INSIDE_METAL_SHADER
-    packed_float2 floor_left_bottom_p; // in world unit
+    packed_float2 min; // in world unit
+    packed_float2 max; // in world unit
     packed_float2 one_thread_worth_dim; // In world unit
     // packed_float2 floor_center;
     // packed_float2 floor_half_dim;
 #elif INSIDE_VULKAN_SHADER
 #else
-    alignas(8) v2 floor_left_bottom_p; // in world unit
+    alignas(8) v2 min; // in world unit
+    alignas(8) v2 max; // in world unit
     alignas(8) v2 one_thread_worth_dim; // in world unit
     // alignas(8) v2 floor_center;
     //alignas(8) v2 floor_half_dim;

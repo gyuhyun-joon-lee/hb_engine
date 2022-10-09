@@ -313,44 +313,108 @@ struct Payload
     PerGrassData per_grass_data[object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y];
 };
 
+// TODO(gh) Should be more conservative with the value,
+// and also change this to seperating axis test 
+bool 
+is_inside_frustum(constant float4x4 *proj_view, float2 aabb_min, float2 aabb_max, float z)
+{
+    bool result = false;
+
+    float3 min = float3(aabb_min, 0);
+    float3 max = float3(aabb_max, z);
+
+    float4 vertices[8] = 
+    {
+        // bottom
+        float4(min.x, min.y, min.z, 1.0f),
+        float4(min.x, max.y, min.z, 1.0f),
+        float4(max.x, min.y, min.z, 1.0f),
+        float4(max.x, max.y, min.z, 1.0f),
+
+        // top
+        float4(min.x, min.y, max.z, 1.0f),
+        float4(min.x, max.y, max.z, 1.0f),
+        float4(max.x, min.y, max.z, 1.0f),
+        float4(max.x, max.y, max.z, 1.0f),
+    };
+
+    for(uint i = 0;
+            i < 8 && !result;
+            ++i)
+    {
+        // homogeneous p
+        float4 hp = (*proj_view) * vertices[i];
+
+        // We are using projection matrix which puts z to 0 to 1
+        if((hp.x >= -hp.w && hp.x <= hp.w) &&
+            (hp.y >= -hp.w && hp.y <= hp.w) &&
+            (hp.z >= 0 && hp.z <= hp.w))
+        {
+            result = true;
+            break;
+        }
+    }
+
+    return result;
+}
+
 [[object]]
 void grass_object_function(object_data Payload *payloadOutput [[payload]],
-                          const device GrassObjectFunctionInput *object_function_input[[buffer (0)]],
-                          const device uint *hashes[[buffer (1)]],
-                          const device float *floor_z_values[[buffer (2)]],
-                          const device float *time_elasped_from_start[[buffer (3)]],
+                          const device GrassObjectFunctionInput *object_function_input [[buffer (0)]],
+                          const device uint *hashes [[buffer (1)]],
+                          const device float *floor_z_values [[buffer (2)]],
+                          const device float *time_elasped_from_start [[buffer (3)]],
+                          constant float4x4 *proj_view [[buffer (4)]],
                           uint thread_index [[thread_index_in_threadgroup]], // thread index in object threadgroup 
                           uint2 thread_count_per_threadgroup [[threads_per_threadgroup]],
                           uint2 thread_count_per_grid [[threads_per_grid]],
                           uint2 thread_position_in_grid [[thread_position_in_grid]], 
+                          uint2 threadgroup_position_in_grid [[threadgroup_position_in_grid]], 
                           mesh_grid_properties mgp)
 {
-    // NOTE(gh) These cannot be thread_index, because the buffer we are passing has all the data for the 'grid' 
-    uint hash = hashes[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
-    float z = floor_z_values[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
+    // Frustum cull
+    float stride = 2.2f;
+    float2 pad = float2(stride, stride);
 
-    float center_x = object_function_input->floor_left_bottom_p.x + object_function_input->one_thread_worth_dim.x * ((float)thread_position_in_grid.x + 0.5f);
-    float center_y = object_function_input->floor_left_bottom_p.y + object_function_input->one_thread_worth_dim.y * ((float)thread_position_in_grid.y + 0.5f);
+    float2 threadgroup_dim = float2(thread_count_per_threadgroup.x * object_function_input->one_thread_worth_dim.x, 
+                                    thread_count_per_threadgroup.y * object_function_input->one_thread_worth_dim.y);
 
-    payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, z);
-    payloadOutput->per_grass_data[thread_index].blade_width = 0.15f;
-    payloadOutput->per_grass_data[thread_index].stride = 2.2f;
-    payloadOutput->per_grass_data[thread_index].height = 2.5f + random_between_0_1(hash, 0, 0);
-    // payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos(0.0f), sin(0.0f));
-    payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
-    payloadOutput->per_grass_data[thread_index].bend = 0.5f;
-    payloadOutput->per_grass_data[thread_index].wiggliness = 2.1f;
-    payloadOutput->per_grass_data[thread_index].time_elasped_from_start = *time_elasped_from_start;
-    payloadOutput->per_grass_data[thread_index].color = packed_float3(1.0f, 0.8f, 0.2f);
-    // Hashes got all the values for the grid
-    payloadOutput->per_grass_data[thread_index].hash = hash;
+    float2 min = object_function_input->min + 
+                          float2(threadgroup_position_in_grid.x * threadgroup_dim.x, threadgroup_position_in_grid.y * threadgroup_dim.y);
+    float2 max = min + threadgroup_dim;
 
-    if(thread_index == 0)
+    // TODO(gh) Should watch out for diverging, but because the min & max value does not differ per thread,
+    // I think this will be fine.
+    // TODO(gh) Also need to think carefully about the z value
+    if(is_inside_frustum(proj_view, min - pad, max + pad, 10.0f))
     {
-        // TODO(gh) How does GPU know when it should fire up the mesh grid? 
-        // Does it do it when all threads in object threadgroup finishes?
-        // NOTE(gh) Each object thread _should_ spawn one mesh threadgroup
-        mgp.set_threadgroups_per_grid(uint3(object_thread_per_threadgroup_count_x, object_thread_per_threadgroup_count_y, 1));
+        // NOTE(gh) These cannot be thread_index, because the buffer we are passing has all the data for the 'grid' 
+        uint hash = hashes[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
+        float z = floor_z_values[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
+
+        float center_x = object_function_input->min.x + object_function_input->one_thread_worth_dim.x * ((float)thread_position_in_grid.x + 0.5f);
+        float center_y = object_function_input->min.y + object_function_input->one_thread_worth_dim.y * ((float)thread_position_in_grid.y + 0.5f);
+
+        payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, z);
+        payloadOutput->per_grass_data[thread_index].blade_width = 0.15f;
+        payloadOutput->per_grass_data[thread_index].stride = 2.2f;
+        payloadOutput->per_grass_data[thread_index].height = 2.5f + random_between_0_1(hash, 0, 0);
+        // payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos(0.0f), sin(0.0f));
+        payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
+        payloadOutput->per_grass_data[thread_index].bend = 0.5f;
+        payloadOutput->per_grass_data[thread_index].wiggliness = 2.1f;
+        payloadOutput->per_grass_data[thread_index].time_elasped_from_start = *time_elasped_from_start;
+        payloadOutput->per_grass_data[thread_index].color = packed_float3(1.0f, 0.8f, 0.2f);
+        // Hashes got all the values for the grid
+        payloadOutput->per_grass_data[thread_index].hash = hash;
+
+        if(thread_index == 0)
+        {
+            // TODO(gh) How does GPU know when it should fire up the mesh grid? 
+            // Does it do it when all threads in object threadgroup finishes?
+            // NOTE(gh) Each object thread _should_ spawn one mesh threadgroup
+            mgp.set_threadgroups_per_grid(uint3(object_thread_per_threadgroup_count_x, object_thread_per_threadgroup_count_y, 1));
+        }
     }
 }
 
@@ -371,33 +435,6 @@ quadratic_bezier_first_derivative(float3 p0, float3 p1, float3 p2, float t)
 
     return result;
 }
-
-#if 0
-bool
-IsInsideFrustum(const object_data PerGrassData *per_grass_data, 
-                constant float4x4 *proj_view)
-{
-    packed_float3 center = per_grass_data->center;
-    float blade_width = per_grass_data->blade_width;
-    float stride = per_grass_data->stride;
-    float height = per_grass_data->height;
-    packed_float2 facing_direction = normalize(per_grass_data->facing_direction);
-    float bend = per_grass_data->bend;
-    float wiggliness = per_grass_data->wiggliness;
-
-    float3 p0 = center;
-
-    float3 p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, height);  
-    float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade
-
-    float3 blade_normal = normalize(cross(p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
-
-    float3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
-
-    bool result = false;
-    return result;
-}
-#endif
 
 GBufferVertexOutput
 calculate_grass_vertex(const object_data PerGrassData *per_grass_data, 
@@ -501,6 +538,29 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
             output_mesh.set_primitive_count(grass_low_lod_triangle_count);
         }
     }
+}
+
+struct ShowFrustumVetexOutput
+{
+    float4 clip_p [[position]];
+};
+
+vertex ShowFrustumVetexOutput
+forward_show_frustum_vert(uint vertexID [[vertex_id]], 
+                  constant packed_float3 *vertices [[buffer(0)]],
+                  constant float4x4 *proj_view [[buffer(1)]])
+{
+    ShowFrustumVetexOutput result = {};
+    result.clip_p = (*proj_view) * float4(vertices[vertexID], 1.0f);
+
+    return result;
+}
+
+fragment float4
+forward_show_frustum_frag(ShowFrustumVetexOutput vertex_output [[stage_in]])
+{
+    float4 result = float4(0, 0, 1, 1);
+    return result;
 }
 
 

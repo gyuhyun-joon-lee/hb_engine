@@ -50,6 +50,38 @@ typedef double r64;
 #define i8_min INT8_MIN
 #define i8_max INT8_MAX
 
+#define assert(expression) if(!(expression)) {int *a = 0; *a = 0;}
+#define array_count(array) (sizeof(array) / sizeof(array[0]))
+#define array_size(array) (sizeof(array))
+#define invalid_code_path assert(0)
+
+#define global static
+#define global_variable global
+#define local_persist static
+#define internal static
+
+#define kilobytes(value) value*1024LL
+#define megabytes(value) 1024LL*kilobytes(value)
+#define gigabytes(value) 1024LL*megabytes(value)
+#define terabytes(value) 1024LL*gigabytes(value)
+
+#define sec_to_nanosec 1.0e+9f
+#define sec_to_millisec 1000.0f
+//#define nano_sec_to_micro_sec 0.0001f // TODO(gh): Find the correct value :(
+
+#define maximum(a, b) ((a>b)? a:b) 
+#define minimum(a, b) ((a<b)? a:b) 
+
+// NOTE(gh): *(u32 *)c == "stri" does not work because of the endianess issues
+#define four_cc(string) (((string[0] & 0xff) << 0) | ((string[1] & 0xff) << 8) | ((string[2] & 0xff) << 16) | ((string[3] & 0xff) << 24))
+
+#define tau_32 6.283185307179586476925286766559005768394338798750211641949889f
+
+#define pi_32 3.14159265358979323846264338327950288419716939937510582097494459230f
+#define half_pi_32 (pi_32/2.0f)
+#define euler_contant 2.7182818284590452353602874713526624977572470936999595749f
+#define degree_to_radian(degree) ((degree / 180.0f)*pi_32)
+
 // NOTE(joon) As you may have noticed, structs that are in this file start with lower case,
 // compared to other structs in the codebase.
 
