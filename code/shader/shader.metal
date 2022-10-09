@@ -469,7 +469,9 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     }
     else
     {
-        // TODO(gh) Clean this up!
+        // TODO(gh) Clean this up! 
+        // TODO(gh) Original method do it in view angle, any reason to do that
+        // (grass possibly facing the direction other than z)?
         bool should_shift_thread_mod_1 = (dot(orthogonal_normal, *camera_p - center) < 0);
         float shift = 0.0f;
         if(thread_index%2 == 1)
