@@ -10,25 +10,9 @@ v3 gradient_vectors[] =
     {0,1,1}, {0,-1,1}, {0,1,-1}, {0,-1,-1}
 };
 
-
 // NOTE(gh) original 256 random numbers used by Ken Perlin, ranging from 0 to 255
-global_variable u32 permutations255[256] = 
-{ 
-    151,160,137,91,90,15,                 
-    131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,    
-    190, 6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,
-    88,237,149,56,87,174,20,125,136,171,168, 68,175,74,165,71,134,139,48,27,166,
-    77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,
-    102,143,54, 65,25,63,161, 1,216,80,73,209,76,132,187,208, 89,18,169,200,196,
-    135,130,116,188,159,86,164,100,109,198,173,186, 3,64,52,217,226,250,124,123,
-    5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,
-    223,183,170,213,119,248,152, 2,44,154,163, 70,221,153,101,155,167, 43,172,9,
-    129,22,39,253, 19,98,108,110,79,113,224,232,178,185, 112,104,218,246,97,228,
-    251,34,242,193,238,210,144,12,191,179,162,241, 81,51,145,235,249,14,239,107,
-    49,192,214, 31,181,199,106,157,184, 84,204,176,115,121,50,45,127, 4,150,254,
-    138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180
-};
-    
+
+
 /*
    NOTE(gh) This essentially picks a random vector from
     {1,1,0}, {-1,1,0}, {1,-1,0}, {-1,-1,0},
@@ -75,14 +59,14 @@ fade(f32 t)
 }
 
 internal f32 
-perlin_noise01(f32 x, f32 y, f32 z, u32 factor)
+perlin_noise01(u32 *permutations255, f32 x, f32 y, f32 z, u32 frequency)
 {
     u32 xi = (u32)x;
     u32 yi = (u32)y;
     u32 zi = (u32)z;
-    u32 x255 = xi % factor; // used for hashing from the random numbers
-    u32 y255 = yi % factor; // used for hashing from the random numbers
-    u32 z255 = zi % factor;
+    u32 x255 = xi % frequency; // used for hashing from the random numbers
+    u32 y255 = yi % frequency; // used for hashing from the random numbers
+    u32 z255 = zi % frequency;
 
     f32 xf = x - (f32)xi; // fraction part of x, should be in 0 to 1 range
     f32 yf = y - (f32)yi; // fraction part of y, should be in 0 to 1 range
@@ -117,19 +101,21 @@ perlin_noise01(f32 x, f32 y, f32 z, u32 factor)
        are important as we need to interpolate in x, y, (and possibly z or w) directions.
     */
 
-    u32 x255_inc = (x255+1)%factor;
-    u32 y255_inc = (y255+1)%factor;
-    u32 z255_inc = (z255+1)%factor;
+    // TODO(gh) We need to do this for now, because the perlin noise is per grid basis,
+    // which means the edge of grid 0 should be using the same value as the start of grid 1.
+    u32 x255_inc = (x255+1)%frequency;
+    u32 y255_inc = (y255+1)%frequency;
+    u32 z255_inc = (z255+1)%frequency;
 
-    i32 random_value0 = permutations255[permutations255[permutations255[x255]+y255]+z255];
-    i32 random_value1 = permutations255[permutations255[permutations255[x255_inc]+y255]+z255];
-    i32 random_value2 = permutations255[permutations255[permutations255[x255]+y255_inc]+z255];
-    i32 random_value3 = permutations255[permutations255[permutations255[x255_inc]+y255_inc]+z255];
+    i32 random_value0 = permutations255[(permutations255[(permutations255[x255]+y255)%256]+z255)%256];
+    i32 random_value1 = permutations255[(permutations255[(permutations255[x255_inc]+y255)%256]+z255)%256];
+    i32 random_value2 = permutations255[(permutations255[(permutations255[x255]+y255_inc)%256]+z255)%256];
+    i32 random_value3 = permutations255[(permutations255[(permutations255[x255_inc]+y255_inc)%256]+z255)%256];
 
-    i32 random_value4 = permutations255[permutations255[permutations255[x255]+y255]+z255_inc];
-    i32 random_value5 = permutations255[permutations255[permutations255[x255_inc]+y255]+z255_inc];
-    i32 random_value6 = permutations255[permutations255[permutations255[x255]+y255_inc]+z255_inc];
-    i32 random_value7 = permutations255[permutations255[permutations255[x255_inc]+y255_inc]+z255_inc];
+    i32 random_value4 = permutations255[(permutations255[(permutations255[x255]+y255)%256]+z255_inc)%256];
+    i32 random_value5 = permutations255[(permutations255[(permutations255[x255_inc]+y255)%256]+z255_inc)%256];
+    i32 random_value6 = permutations255[(permutations255[(permutations255[x255]+y255_inc)%256]+z255_inc)%256];
+    i32 random_value7 = permutations255[(permutations255[(permutations255[x255_inc]+y255_inc)%256]+z255_inc)%256];
 
     // NOTE(gh) -1 are for getting the distance vector
     f32 gradient0 = get_gradient_value(random_value0, xf, yf, zf);
@@ -170,10 +156,12 @@ struct ThreadUpdatePerlinNoiseBufferData
     u32 one_past_end_y;
 
     u32 offset_x;
+    u32 *permutations255;
 
     f32 time_elapsed_from_start;
 
-    void *perlin_noise_buffer_memory;
+    void *hash_buffer;
+    void *perlin_noise_buffer;
 };
 
 internal
@@ -182,11 +170,13 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
     ThreadUpdatePerlinNoiseBufferData *d = (ThreadUpdatePerlinNoiseBufferData *)data;
 
     // TODO(gh) Put this inside the game code, or maybe do this in compute shader
-    f32 *row = (f32 *)d->perlin_noise_buffer_memory + d->start_y * d->total_x_count + d->start_x;
+    u32 *hash_row = (u32 *)d->hash_buffer + d->start_y * d->total_x_count + d->start_x;
+    f32 *row = (f32 *)d->perlin_noise_buffer + d->start_y * d->total_x_count + d->start_x;
     for(u32 y = d->start_y;
             y < d->one_past_end_y;
             ++y)
     {
+        u32 *hash_column = (u32 *)hash_row;
         f32 *column = (f32 *)row;
         for(u32 x = d->start_x;
                 x < d->one_past_end_x;
@@ -194,14 +184,17 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
         {
             f32 xf = (x+d->offset_x) / (f32)d->total_x_count;
             f32 yf = y / (f32)d->total_y_count;
-            u32 factor = 16;
 
-            f32 noise01 = perlin_noise01(factor*xf, factor * yf, d->time_elapsed_from_start, factor);
-            f32 noise = 0.2f*(noise01 - 0.5f);
+            u32 frequency = 16;
+
+            f32 noise01 = perlin_noise01(d->permutations255, frequency*xf, frequency*yf, d->time_elapsed_from_start, frequency);
+            f32 wind_strength = 0.8f;
+            f32 noise = wind_strength * (noise01 - 0.5f);
 
             *column++ = noise;
         }
 
+        hash_row += d->total_x_count;
         row += d->total_x_count;
     }
 }

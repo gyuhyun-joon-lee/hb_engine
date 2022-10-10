@@ -13,6 +13,7 @@ extern "C" {
 
 #include <math.h>
 
+
 struct PlatformReadFileResult
 {
     u8 *memory;
@@ -261,6 +262,9 @@ struct ThreadWorkQueue
     // NOTE(gh) These two just increments, and the function is responsible for doing the modular 
     int volatile work_index; // index to the queue that is currently under work
     int volatile add_index; // Only the main thread should increment this, as this is not barriered!!!
+
+    int volatile completion_goal;
+    int volatile completion_count;
 
     ThreadWorkItem items[1024];
 

@@ -157,12 +157,9 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 left_bottom_p, v2
             }
             f32 px = left_bottom_p.x + x * quad_width;
             f32 xf = (f32)x/((f32)x_vertex_count - 1); // -1 so that xf range from 0 to 1
-            u32 factor = 4;
+            u32 frequency = 4;
 
-            f32 txf = factor * xf;
-            f32 tyf = factor * yf;
-
-            f32 pz = 10.0f * perlin_noise01(factor * xf, factor * yf, 0, factor);
+            f32 pz = 10.0f * perlin_noise01(game_state->permutations255, frequency*xf, frequency*yf, 0, frequency);
 
             result->vertices[populated_vertex_count].p = V3(px, py, pz);
             result->vertices[populated_vertex_count].normal = V3(0, 0, 0);

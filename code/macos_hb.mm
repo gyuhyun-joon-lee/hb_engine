@@ -363,16 +363,17 @@ THREAD_WORK_CALLBACK(print_string)
 internal
 PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(macos_add_thread_work_item) 
 {
-    // TODO(gh) instead of just grabbing the next item, check if next item is available first 
-    u32 next_item_index = (queue->add_index+1) % array_count(queue->items);
+    u32 next_add_item_index = (queue->add_index+1) % array_count(queue->items);
+    assert(queue->work_index != next_add_item_index);
 
     assert(data); // TODO(gh) : There might be a work that does not need any data?
-    ThreadWorkItem *item = queue->items + next_item_index;
+    ThreadWorkItem *item = queue->items + queue->add_index;
     item->callback = thread_work_callback;
     item->data = data;
     item->written = true;
 
-    queue->add_index = next_item_index;
+    queue->add_index = next_add_item_index;
+    queue->completion_goal++;
     write_barrier();
 
     // increment the semaphore value by 1
@@ -383,18 +384,17 @@ internal b32
 macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
 {
     b32 did_work = false;
-    if(queue->work_index != queue->add_index)
-    {
-        int original_work_index = queue->work_index;
-        int desired_work_index = (original_work_index + 1) % array_count(queue->items);
+    int original_work_index = queue->work_index;
+    int desired_work_index = (original_work_index + 1) % array_count(queue->items);
 
+    // Should check this for later, because some other thread might have figgled with work_index
+    if(original_work_index != queue->add_index)
+    {
         if(OSAtomicCompareAndSwapIntBarrier(original_work_index, desired_work_index, &queue->work_index)) // old, new, ptr
         {
             ThreadWorkItem *item = queue->items + original_work_index;
-            if(item->callback)
-            {
-                item->callback(item->data);
-            }
+            item->callback(item->data);
+            OSAtomicIncrement32Barrier(&queue->completion_count);
 
             //printf("Thread %u: Finished working\n", thread_index);
             did_work = true;
@@ -407,14 +407,13 @@ macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
 internal 
 PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_queue_items)
 {
-    // TODO(gh): If there was a last thread that was working on the item,
-    // this does not guarantee that the last work will be finished.
-    // Maybe add some flag inside the thread? (sleep / working / ...)
-    while(queue->work_index != queue->add_index) 
+    while(queue->completion_count != queue->completion_goal)
     {
-        // printf("waiting... %d, %d\n", queue->work_index, queue->add_index);
         macos_do_thread_work_item(queue, 0);
     }
+
+    queue->completion_count = 0;
+    queue->completion_goal = 0;
 }
 
 internal void*
@@ -1048,7 +1047,6 @@ int main(void)
     char *game_code_path = "/Volumes/meka/HB_engine/build/PUL.app/Contents/MacOS/pul.dylib";
     MacOSGameCode macos_game_code = {};
     macos_load_game_code(&macos_game_code, game_code_path);
- 
 
     //TODO : writefile?
     PlatformAPI platform_api = {};
@@ -1440,6 +1438,8 @@ int main(void)
         {
             if(macos_get_last_modified_time(game_code_path) != macos_game_code.last_modified_time)
             {
+                // TODO(gh)Do we need to do this?
+                macos_complete_all_thread_work_queue_items(&thread_work_queue);
                 macos_load_game_code(&macos_game_code, game_code_path);
             }
         }
