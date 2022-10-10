@@ -328,19 +328,6 @@ metal_end_encoding(id<MTLRenderCommandEncoder> render_encoder)
 }
 
 inline void
-metal_present_drawable(id<MTLCommandBuffer> command_buffer, MTKView *view)
-{
-    if(view.currentDrawable)
-    {
-        [command_buffer presentDrawable: view.currentDrawable];
-    }
-    else
-    {
-        invalid_code_path;
-    }
-}
-
-inline void
 metal_commit_command_buffer(id<MTLCommandBuffer> command_buffer)
 {
     // NOTE(gh) also enqueues the command buffer into command queue

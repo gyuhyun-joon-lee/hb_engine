@@ -895,12 +895,17 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         metal_end_encoding(forward_render_encoder);
 
+        // TODO(gh) My understading is metal will automatically sync with the display when I request presenting,
+        // but double check
+        [command_buffer presentDrawable: render_context->view.currentDrawable];
+
         metal_commit_command_buffer(command_buffer);
-        // TODO(gh) Don't wait, use fence?
+
         metal_wait_until_command_buffer_completed(command_buffer);
     }
 }
 
+#if 0
 internal void
 metal_display(MetalRenderContext *render_context)
 {
@@ -909,6 +914,7 @@ metal_display(MetalRenderContext *render_context)
     metal_present_drawable(command_buffer, render_context->view);
     metal_commit_command_buffer(command_buffer);
 }
+#endif
  
 
 // NOTE(gh): returns the base path where all the folders(code, misc, data) are located
@@ -1525,8 +1531,6 @@ int main(void)
 
             time_elapsed_from_start += target_seconds_per_frame;
             printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
-
-            metal_display(&metal_render_context);
         }
 
 #if 0
