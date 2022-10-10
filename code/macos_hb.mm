@@ -356,8 +356,6 @@ THREAD_WORK_CALLBACK(print_string)
     printf("%s\n", stringToPrint);
 }
 
-
-
 // NOTE(gh): This is single producer multiple consumer - 
 // meaning, it _does not_ provide any thread safety
 // For example, if the two threads try to add the work item,
@@ -366,7 +364,7 @@ internal
 PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(macos_add_thread_work_item) 
 {
     // TODO(gh) instead of just grabbing the next item, check if next item is available first 
-    u32 next_item_index = queue->add_index % array_count(queue->items);
+    u32 next_item_index = (queue->add_index+1) % array_count(queue->items);
 
     assert(data); // TODO(gh) : There might be a work that does not need any data?
     ThreadWorkItem *item = queue->items + next_item_index;
@@ -374,7 +372,7 @@ PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(macos_add_thread_work_item)
     item->data = data;
     item->written = true;
 
-    queue->add_index = (queue->add_index+1) % array_count(queue->items);
+    queue->add_index = next_item_index;
     write_barrier();
 
     // increment the semaphore value by 1
@@ -390,10 +388,13 @@ macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
         int original_work_index = queue->work_index;
         int desired_work_index = (original_work_index + 1) % array_count(queue->items);
 
-        if(OSAtomicCompareAndSwapIntBarrier(original_work_index, desired_work_index, &queue->work_index))
+        if(OSAtomicCompareAndSwapIntBarrier(original_work_index, desired_work_index, &queue->work_index)) // old, new, ptr
         {
             ThreadWorkItem *item = queue->items + original_work_index;
-            item->callback(item->data);
+            if(item->callback)
+            {
+                item->callback(item->data);
+            }
 
             //printf("Thread %u: Finished working\n", thread_index);
             did_work = true;
@@ -627,7 +628,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     v3u object_thread_per_threadgroup_count = V3u(object_thread_per_threadgroup_count_x, 
                                                                 object_thread_per_threadgroup_count_y, 
                                                                 1);
-                    v3u mesh_thread_per_threadgroup_count = V3u(grass_index_count, 1, 1); // same as index count for the grass blade
+                    // TODO(gh) use low lod index count for grids further away
+                    v3u mesh_thread_per_threadgroup_count = V3u(grass_high_lod_index_count, 1, 1); // same as index count for the grass blade
 
                     metal_draw_mesh_thread_groups(render_encoder, object_threadgroup_per_grid_count, 
                             object_thread_per_threadgroup_count, 
@@ -1238,7 +1240,7 @@ int main(void)
         object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
     u32 max_mesh_threadgroup_count_per_mesh_grid = 
         max_object_thread_count_per_object_threadgroup; // Each mesh thread group is one grass blade
-    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_index_count;  // TODO(gh) Fix this as multiple of simd width? 
+    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_high_lod_index_count;  // TODO(gh) Fix this as multiple of simd width? 
     metal_render_context.grass_mesh_render_pipeline = 
         metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
                                         "grass_object_function", 
@@ -1520,7 +1522,6 @@ int main(void)
                 // TODO(gh) : Whenever we miss the frame re-sync with the display link
                 // printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
             }
-
 
             time_elapsed_from_start += target_seconds_per_frame;
             printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);

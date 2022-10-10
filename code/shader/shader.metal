@@ -223,8 +223,10 @@ forward_show_perlin_noise_grid_vert(uint vertexID [[vertex_id]],
 
     result.clip_p = per_frame_data->proj_view * world_p;
 
-    // TODO(gh) Handle the case where the buffer is smaller than the grass grid
-    float perlin_value = perlin_values[instanceID];
+    // TODO(gh) Because perlin noise does not range from 0 to 1, 
+    // we need to manually change the value again here - which is another reason
+    // why we want the seperation 
+    float perlin_value = 2.0f * (perlin_values[instanceID] + 0.25f);
     result.color = float3(perlin_value, perlin_value, perlin_value);
 
     return result;
@@ -361,7 +363,7 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
     float random01 = random_between_0_1(hash, 0, 0);
 
     // Frustum cull
-    float length = 3.13f + (1-random01);
+    float length = 2.7f + (1-random01);
     float3 pad = float3(length, length, 0.0f);
 
     float2 threadgroup_dim = float2(thread_count_per_threadgroup.x * object_function_input->one_thread_worth_dim.x, 
@@ -383,13 +385,12 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
         float center_x = object_function_input->min.x + object_function_input->one_thread_worth_dim.x * ((float)thread_position_in_grid.x + 0.5f);
         float center_y = object_function_input->min.y + object_function_input->one_thread_worth_dim.y * ((float)thread_position_in_grid.y + 0.5f);
 
-
         payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, z);
         payloadOutput->per_grass_data[thread_index].blade_width = 0.15f;
         payloadOutput->per_grass_data[thread_index].length = length;
 
         float noise = perlin_noise_values[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
-        payloadOutput->per_grass_data[thread_index].tilt = clamp(2.0f + 0.4f*random01 + noise, 0.0f, length - 0.01f);
+        payloadOutput->per_grass_data[thread_index].tilt = clamp(2.0f + 0.3f*random01 + noise, 0.0f, length - 0.01f);
 
         // payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos(0.0f), sin(0.0f));
         payloadOutput->per_grass_data[thread_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
@@ -434,7 +435,9 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
                         uint thread_index, 
                         constant float4x4 *proj_view,
                         constant float4x4 *light_proj_view,
-                        constant packed_float3 *camera_p)
+                        constant packed_float3 *camera_p,
+                        uint grass_vertex_count,
+                        uint grass_divide_count)
 {
     packed_float3 center = per_grass_data->center;
     float blade_width = per_grass_data->blade_width;
@@ -518,8 +521,8 @@ struct StubPerPrimitiveData
 
 using SingleGrassTriangleMesh = metal::mesh<GBufferVertexOutput, // per vertex 
                                             StubPerPrimitiveData, // per primitive
-                                            grass_vertex_count, // max vertex count 
-                                            grass_triangle_count, // max primitive count
+                                            grass_high_lod_vertex_count, // max vertex count 
+                                            grass_high_lod_triangle_count, // max primitive count
                                             metal::topology::triangle>;
 
 // For the grass, we should launch at least triange count * 3 threads per one mesh threadgroup(which represents one grass blade),
@@ -550,18 +553,35 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
 
     // TODO(gh) Check there is an actual performance gain by doing this, because it seems like
     // when we become too conservative, there isn't much culling going on in per-grass basis anyway.
+    // Maybe it becomes important when we have great z difference?
     if(is_inside_frustum(game_proj_view, min, max))
+    {}
 #endif
+    
+    
+    // TODO(gh) We can also do this in object shader, per threadgroup
+    uint grass_divide_count = grass_high_lod_divide_count;
+    uint grass_vertex_count = grass_high_lod_vertex_count;
+    uint grass_index_count = grass_high_lod_index_count;
+    uint grass_triangle_count = grass_high_lod_triangle_count;
+    if(length_squared(*camera_p - per_grass_data->center) > 1000)
+    {
+        grass_divide_count = grass_low_lod_divide_count;
+        grass_vertex_count = grass_low_lod_vertex_count;
+        grass_index_count = grass_low_lod_index_count;
+        grass_triangle_count = grass_low_lod_triangle_count;
+    }
+
     {
         // these if statements are needed, as we are firing more threads than the grass vertex count.
         if (thread_index < grass_vertex_count)
         {
-            output_mesh.set_vertex(thread_index, calculate_grass_vertex(per_grass_data, thread_index, main_proj_view, light_proj_view, camera_p));
+            output_mesh.set_vertex(thread_index, calculate_grass_vertex(per_grass_data, thread_index, main_proj_view, light_proj_view, camera_p, grass_vertex_count, grass_divide_count));
         }
         if (thread_index < grass_index_count)
         {
             // For now, we are launching the same amount of threads as the grass index count.
-            if(grass_divide_count == 7)
+            if(grass_divide_count == grass_high_lod_divide_count)
             {
                 output_mesh.set_index(thread_index, grass_high_lod_indices[thread_index]);
             }

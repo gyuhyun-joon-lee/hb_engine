@@ -36,6 +36,9 @@ struct PlatformAPI
     platform_read_file *read_file;
     platform_write_entire_file *write_entire_file;
     platform_free_file_memory *free_file_memory;
+
+    // platform_atomic_compare_and_exchange32() *atomic_compare_and_exchange32;
+    // platform_atomic_compare_and_exchange64() *atomic_compare_and_exchange64;
 };
 
 struct PlatformInput
@@ -224,6 +227,7 @@ u64 rdtsc(void)
 
 global debug_cycle_counter debug_cycle_counters[debug_cycle_counter_count];
 
+// TODO(gh) multi thread this!
 #define begin_cycle_counter(ID) u64 begin_cycle_count_##ID = rdtsc();
 #define end_cycle_counter(ID) debug_cycle_counters[debug_cycle_counter_##ID].cycle_count += rdtsc() - begin_cycle_count_##ID; \
         debug_cycle_counters[debug_cycle_counter_##ID].hit_count++; \

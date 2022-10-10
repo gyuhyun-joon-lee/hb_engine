@@ -23,6 +23,7 @@
 
 // TODO(gh) not a great idea
 #include <time.h>
+#include "stb_truetype.h"
 
 /*
     TODO(gh)
@@ -86,7 +87,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 v2 max = min + sub_floor_dim;
 
                 Entity *floor_entity = 
-                    add_floor_entity(game_state, &game_state->transient_arena, V3(min, 0), sub_floor_dim, V3(1, 1, 1), grass_on_floor_count_x, grass_on_floor_count_y);
+                    add_floor_entity(game_state, &game_state->transient_arena, V3(min, 0), sub_floor_dim, V3(0.25f, 0.1f, 0.04f), grass_on_floor_count_x, grass_on_floor_count_y);
 
                 GrassGrid *grid = game_state->grass_grids + y*game_state->grass_grid_count_x + x;
                 init_grass_grid(platform_render_push_buffer, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
@@ -113,7 +114,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *debug_camera = &game_state->debug_camera;
 
     Camera *render_camera = game_camera;
-    render_camera = debug_camera;
+    // render_camera = debug_camera;
 
     f32 camera_rotation_speed = 2.7f * platform_input->dt_per_frame;
 
@@ -166,14 +167,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_AABB:
             {
             }break;
-
-            case EntityType_Grass:
-            {
-                f32 wiggliness = 3.1f;
-                // so this is more like where I test some configurations with a small number of grasses 
-                populate_grass_vertices(entity->p, entity->blade_width, entity->stride, entity->height, entity->tilt_direction, entity->tilt, entity->bend, entity->grass_divided_count, 
-                                        entity->vertices, entity->vertex_count, entity->hash, platform_input->time_elapsed_from_start, wiggliness);
-            }break;
         }
     }
 
@@ -209,7 +202,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
     }
 #endif
-
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
@@ -297,14 +289,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 push_cube(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count, true);
-            }break;
-
-            case EntityType_Grass:
-            {
-                v3 color = entity->color;
-
-                push_grass(platform_render_push_buffer, entity->p, entity->dim, color, 
-                            entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
             }break;
         }
     }
