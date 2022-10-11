@@ -546,7 +546,7 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
     // Also, we can make the length smaller based on the facing direction
     // These pad values are not well thought out, just throwing those in
-    float3 length = 1.f*float3(per_grass_data->length, per_grass_data->length, 0.0f);
+    float3 length = 0.6f*float3(per_grass_data->length, per_grass_data->length, 0.0f);
     float3 min = per_grass_data->center - length;
     float3 max = per_grass_data->center + length;
     max.z += per_grass_data->tilt + 1.0f;
@@ -570,7 +570,7 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     // TODO(gh) Check there is an actual performance gain by doing this, because it seems like
     // when we become too conservative, there isn't much culling going on in per-grass basis anyway.
     // Maybe it becomes important when we have great z difference?
-    // if(is_inside_frustum(game_proj_view, min, max))
+    if(is_inside_frustum(game_proj_view, min, max))
     {
         // these if statements are needed, as we are firing more threads than the grass vertex count.
         if (thread_index < grass_vertex_count)
