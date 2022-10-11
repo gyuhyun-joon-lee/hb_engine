@@ -185,11 +185,12 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
             f32 xf = (x+d->offset_x) / (f32)d->total_x_count;
             f32 yf = y / (f32)d->total_y_count;
 
-            // 
             u32 frequency = 25;
+            f32 wind_strength = 0.7f;
+            // u32 frequency = 32;
+            // f32 wind_strength = 1.6f;
 
             f32 noise01 = perlin_noise01(d->permutations255, frequency*xf, frequency*yf, 2*d->time_elapsed_from_start, frequency);
-            f32 wind_strength = 0.7f;
             f32 noise = wind_strength * (noise01 - 0.5f);
 
             *column++ = noise;

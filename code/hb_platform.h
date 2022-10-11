@@ -202,19 +202,6 @@ end_temp_memory(TempMemory *temp_memory)
     memory_arena->used -= temp_memory->total_size;
 }
 
-enum debug_cycle_counter_id
-{
-    debug_cycle_counter_generate_vertex_normals,
-    debug_cycle_counter_update_perlin_noise,
-    debug_cycle_counter_count
-};
-
-struct debug_cycle_counter
-{
-    u64 cycle_count;
-    u32 hit_count;
-};
-
 u64 rdtsc(void)
 {
 	u64 val;
@@ -226,12 +213,8 @@ u64 rdtsc(void)
 	return val;
 }
 
-global debug_cycle_counter debug_cycle_counters[debug_cycle_counter_count];
 
 // TODO(gh) multi thread this!
-#define begin_cycle_counter(ID) u64 begin_cycle_count_##ID = rdtsc();
-#define end_cycle_counter(ID) debug_cycle_counters[debug_cycle_counter_##ID].cycle_count += rdtsc() - begin_cycle_count_##ID; \
-        debug_cycle_counters[debug_cycle_counter_##ID].hit_count++; \
 
 #define PLATFORM_DEBUG_PRINT_CYCLE_COUNTERS(name) void (name)(debug_cycle_counter *debug_cycle_counters)
 

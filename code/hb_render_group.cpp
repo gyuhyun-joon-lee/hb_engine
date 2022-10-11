@@ -370,6 +370,7 @@ internal void
 push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
           CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
+    TIMED_BLOCK(10);
     RenderEntryAABB *entry = (RenderEntryAABB *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
     assert(render_push_buffer->used <= render_push_buffer->total_size);

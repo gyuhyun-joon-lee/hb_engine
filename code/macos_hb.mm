@@ -1482,16 +1482,6 @@ int main(void)
             close(lock_file);
         }
 
-        // TODO(gh) Put this inside the game code?
-        // Initialize counters
-        for(u32 counter_index = 0;
-                counter_index < array_count(debug_cycle_counters);
-                ++counter_index)
-        {
-            debug_cycle_counters[counter_index].cycle_count = 0;
-            debug_cycle_counters[counter_index].hit_count = 0;
-        }
-
         if(macos_game_code.update_and_render)
         {
             macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer, &thread_work_queue);

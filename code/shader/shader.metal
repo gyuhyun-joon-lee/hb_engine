@@ -447,7 +447,6 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     packed_float2 facing_direction = normalize(per_grass_data->facing_direction);
     float bend = per_grass_data->bend;
     float wiggliness = per_grass_data->wiggliness;
-    packed_float3 color = per_grass_data->color;
     uint hash = per_grass_data->hash;
     float time_elasped_from_start = per_grass_data->time_elasped_from_start;
 
@@ -506,7 +505,7 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     result.clip_p = (*proj_view) * float4(world_p, 1.0f);
     result.p = world_p;
     result.N = normalize(cross(quadratic_bezier_first_derivative(p0, modified_p1, modified_p2, t), orthogonal_normal));
-    result.color = color;
+    result.color = per_grass_data->color;
     result.depth = result.clip_p.z / result.clip_p.w;
     float4 p_in_light_coordinate = (*light_proj_view) * float4(world_p, 1.0f);
     result.p_in_light_coordinate = p_in_light_coordinate.xyz / p_in_light_coordinate.w;
@@ -551,9 +550,7 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     float3 min = per_grass_data->center - length;
     float3 max = per_grass_data->center + length;
     max.z += per_grass_data->tilt + 1.0f;
-
 #endif
-    
     
     float low_lod_distance_square = 3000;
     // float low_lod_distance_square = 300000000;

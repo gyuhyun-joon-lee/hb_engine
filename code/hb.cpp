@@ -11,6 +11,7 @@
 #include "hb_simulation.h"
 #include "hb_entity.h"
 #include "hb_platform.h"
+#include "hb_debug.h"
 #include "hb.h"
 
 #include "hb_mesh_loader.cpp"
@@ -143,8 +144,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     Camera *render_camera = game_camera;
     // render_camera = debug_camera;
+    b32 show_perlin_noise_grid = false;
 
-    f32 camera_rotation_speed = 2.7f * platform_input->dt_per_frame;
+    f32 camera_rotation_speed = 3.0f * platform_input->dt_per_frame;
 
     if(platform_input->action_up)
     {
@@ -165,7 +167,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     v3 camera_dir = get_camera_lookat(render_camera);
     v3 camera_right_dir = get_camera_right(render_camera);
-    f32 camera_speed = 20.0f * platform_input->dt_per_frame;
+    f32 camera_speed = 30.0f * platform_input->dt_per_frame;
     if(platform_input->move_up)
     {
         render_camera->p += camera_speed*camera_dir;
@@ -299,7 +301,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
     platform_render_push_buffer->enable_grass_mesh_rendering = true;
-    platform_render_push_buffer->enable_show_perlin_noise_grid = false;
+    platform_render_push_buffer->enable_show_perlin_noise_grid = show_perlin_noise_grid;
 
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;
@@ -426,4 +428,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->time_until_offset_x_inc = 0;
     }
 }
+
+DebugRecord game_debug_records[__COUNTER__];
 
