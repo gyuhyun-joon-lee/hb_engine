@@ -1485,89 +1485,58 @@ int main(void)
             close(lock_file);
         }
 
-        if(macos_game_code.update_and_render)
+        if(is_game_running)
         {
-            macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer, &thread_work_queue);
-        }
-
-        // TODO(gh) Priority queue?
-
-        @autoreleasepool
-        {
-            metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height, time_elapsed_from_start);
-
-#if 0
-            // NOTE(gh) Testing compute pipeline
-            id<MTLCommandBuffer> compute_command_buffer = [metal_render_context.command_queue commandBuffer];
-            id<MTLComputeCommandEncoder> compute_encoder = [compute_command_buffer computeCommandEncoder];
-            metal_set_compute_pipeline(compute_encoder, metal_render_context.add_compute_pipeline);
-            metal_set_compute_buffer(compute_encoder, random_float_buffer.buffer, 0, 0);
-
-            metal_dispatch_threads(compute_encoder, V3u(float_x_count, float_y_count, 1), V3u(float_x_count / 2, float_y_count / 2, 1));
-            metal_end_encoding(compute_encoder);
-            metal_commit_command_buffer(compute_command_buffer);
-            metal_wait_until_command_buffer_completed(compute_command_buffer);
-
-            for(u32 i = 0;
-                    i < total_float_count;
-                    i += 3)
+            if(macos_game_code.update_and_render)
             {
-                f32 *c = (f32 *)random_float_buffer.memory + i;
-
-                printf("%dth : x:%.6f, y:%.6f, z:%.6f\n", i/3, *c, *(c+1), *(c+2));
+                macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer, &thread_work_queue);
             }
-#endif
 
-            u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
-            u32 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
-            f32 time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
-            if(time_passed_in_nsec < target_nano_seconds_per_frame)
+            // TODO(gh) Priority queue?
+
+            @autoreleasepool
             {
-                // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
-                // we need to undersleep and spend time in a loop
-                u64 undersleep_nano_seconds = target_nano_seconds_per_frame / 5;
-                if(time_passed_in_nsec + undersleep_nano_seconds < target_nano_seconds_per_frame)
-                {
-                    timespec time_spec = {};
-                    time_spec.tv_nsec = target_nano_seconds_per_frame - time_passed_in_nsec -  undersleep_nano_seconds;
+                metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height, time_elapsed_from_start);
 
-                    nanosleep(&time_spec, 0);
-                }
-
-                // For a short period of time, loop
-                time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
-                while(time_passed_in_nsec < target_nano_seconds_per_frame)
+                u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+                u32 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
+                f32 time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
+                if(time_passed_in_nsec < target_nano_seconds_per_frame)
                 {
+                    // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
+                    // we need to undersleep and spend time in a loop
+                    u64 undersleep_nano_seconds = target_nano_seconds_per_frame / 5;
+                    if(time_passed_in_nsec + undersleep_nano_seconds < target_nano_seconds_per_frame)
+                    {
+                        timespec time_spec = {};
+                        time_spec.tv_nsec = target_nano_seconds_per_frame - time_passed_in_nsec -  undersleep_nano_seconds;
+
+                        nanosleep(&time_spec, 0);
+                    }
+
+                    // For a short period of time, loop
                     time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+                    while(time_passed_in_nsec < target_nano_seconds_per_frame)
+                    {
+                        time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+                    }
+                    time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
+                    time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
                 }
-                time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
-                time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
-            }
-            else
-            {
-                // TODO : Missed Frame!
-                // TODO(gh) : Whenever we miss the frame re-sync with the display link
-                // printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
+                else
+                {
+                    // TODO : Missed Frame!
+                    // TODO(gh) : Whenever we miss the frame re-sync with the display link
+                    // printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
+                }
+
+                time_elapsed_from_start += target_seconds_per_frame;
+                printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
             }
 
-            time_elapsed_from_start += target_seconds_per_frame;
-            printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
+            // update the time stamp
+            last_time = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
         }
-
-#if 0
-        // NOTE(gh) : debug_printf_all_cycle_counters
-        for(u32 cycle_counter_index = 0;
-                cycle_counter_index < debug_cycle_counter_count;
-                cycle_counter_index++)
-        {
-            printf("ID:%u  Total Cycles: %llu Hit Count: %u, CyclesPerHit: %u\n", cycle_counter_index, 
-                                                                             debug_cycle_counters[cycle_counter_index].cycle_count,
-                                                                            debug_cycle_counters[cycle_counter_index].hit_count, 
-                                                                            (u32)(debug_cycle_counters[cycle_counter_index].cycle_count/debug_cycle_counters[cycle_counter_index].hit_count));
-        }
-#endif
-        // update the time stamp
-        last_time = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
     }
 
     return 0;
