@@ -61,6 +61,8 @@ fade(f32 t)
 internal f32 
 perlin_noise01(u32 *permutations255, f32 x, f32 y, f32 z, u32 frequency)
 {
+    TIMED_BLOCK();
+
     u32 xi = (u32)x;
     u32 yi = (u32)y;
     u32 zi = (u32)z;
@@ -169,7 +171,8 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
 {
     ThreadUpdatePerlinNoiseBufferData *d = (ThreadUpdatePerlinNoiseBufferData *)data;
 
-    // TODO(gh) Put this inside the game code, or maybe do this in compute shader
+    TIMED_BLOCK();
+
     u32 *hash_row = (u32 *)d->hash_buffer + d->start_y * d->total_x_count + d->start_x;
     f32 *row = (f32 *)d->perlin_noise_buffer + d->start_y * d->total_x_count + d->start_x;
     for(u32 y = d->start_y;

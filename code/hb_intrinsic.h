@@ -5,46 +5,33 @@
 #ifndef HB_INTRINSIC_H
 #define HB_INTRINSIC_H
 
-// NOTE(joon) intrinsic functions are those that the provided by the compiler based on the language(some are non_portable).
+// NOTE(gh) intrinsic functions are those that the provided by the compiler based on the language(some are non_portable).
 // Most of the bit operations are included in this case, including sin, cos functions, too.
 // To know more, check https://en.wikipedia.org/wiki/Intrinsic_function
 
-// TODO(joon) Remove this!!!
+// TODO(gh) Remove this!!!
 #include <math.h>
 
-// TODO(joon) add functionality for other compilers(gcc, msvc)
-// NOTE(joon) kinda interesting that they do not have compare exchange for floating point numbers
+// TODO(gh) add functionality for other compilers(gcc, msvc)
+// NOTE(gh) kinda interesting that they do not have compare exchange for floating point numbers
+
 #if HB_LLVM
-
-#if HB_MACOS
-#include <libkern/OSAtomic.h>
-// NOTE(joon) : Check https://opensource.apple.com/source/Libc/Libc-594.1.4/i386/sys/OSAtomic.s
-
-// TODO(joon) macos has two different versions of this - with and without 'barrier'.
-// Find out whether we acutally need the barrier(for now, we use the version with barrier)
-#define atomic_compare_exchange(ptr, expected, desired) OSAtomicCompareAndSwapIntBarrier(ptr, expected, desired)
-#define atomic_compare_exchange_64(ptr, expected, desired) OSAtomicCompareAndSwap64Barrier(ptr, expected, desired)
-
-#define atomic_increment(ptr) OSAtomicIncrement32Barrier(ptr)
-#define atomic_increment_64(ptr) OSAtomicIncrement64Barrier(ptr)
-
-#define atomic_add(ptr, value_to_add) OSAtomicAdd32Barrier(ptr, value_to_add)
-#define atomic_add_64(ptr, value_to_add) OSAtomicAdd64Barrier(ptr, value_to_add)
-
-#elif HB_LLVM
-// TODO(joon) Can also be used for GCC, because this is a GCC extension of Clang?
+// TODO(gh) Can also be used for GCC, because this is a GCC extension of Clang?
 //#elif HB_GCC
 
-// NOTE(joon) These functions do not care whether it's 32bit or 64bit
+// NOTE(gh) These functions do not care whether it's 32bit or 64bit
 #define atomic_compare_exchange(ptr, expected, desired) __sync_bool_compare_and_swap(ptr, expected, desired)
 #define atomic_compare_exchange_64(ptr, expected, desired) __sync_bool_compare_and_swap(ptr, expected, desired)
 
-// TODO(joon) Do we really need increment intrinsics?
+// TODO(gh) Do we really need increment intrinsics?
 #define atomic_increment(ptr) __sync_add_and_fetch(ptr, 1)
 #define atomic_increment_64(ptr) __sync_add_and_fetch(ptr, 1)
 
 #define atomic_add(ptr, value_to_add) __sync_add_and_fetch(ptr, value_to_add)
 #define atomic_add_64(ptr, value_to_add) __sync_add_and_fetch(ptr, value_to_add)
+
+// TODO(gh) mem order  
+#define atomic_exchange(ptr, value) __atomic_exchange_n(ptr, value, __ATOMIC_SEQ_CST)
 #endif
 
 #elif HB_MSVC
@@ -98,14 +85,14 @@ find_most_significant_bit(u8 value)
 inline r32
 sin_(r32 rad)
 {
-    // TODO(joon) : intrinsic?
+    // TODO(gh) : intrinsic?
     return sinf(rad);
 }
 
 inline r32
 cos_(r32 rad)
 {
-    // TODO(joon) : intrinsic?
+    // TODO(gh) : intrinsic?
     return cosf(rad);
 }
 
@@ -124,14 +111,14 @@ atan2_(r32 y, r32 x)
 inline i32
 round_r32_to_i32(r32 value)
 {
-    // TODO(joon) : intrinsic?
+    // TODO(gh) : intrinsic?
     return (i32)roundf(value);
 }
 
 inline u32
 round_r32_to_u32(r32 value)
 {
-    // TODO(joon) : intrinsic?
+    // TODO(gh) : intrinsic?
     return (u32)roundf(value);
 }
 
@@ -159,7 +146,7 @@ power(u32 base, u32 exponent)
     return result; 
 }
 
-// TODO(joon) this function can go wrong so easily...
+// TODO(gh) this function can go wrong so easily...
 inline u64
 pointer_diff(void *start, void *end)
 {
@@ -170,12 +157,12 @@ pointer_diff(void *start, void *end)
 }
 
 #include <string.h>
-// TODO/Joon: intrinsic zero memory?
-// TODO(joon): can be faster using wider vectors
+// TODO/gh: intrinsic zero memory?
+// TODO(gh): can be faster using wider vectors
 inline void
 zero_memory(void *memory, u64 size)
 {
-    // TODO/joon: What if there's no neon support
+    // TODO/gh: What if there's no neon support
 #if HB_ARM
     u8 *byte = (u8 *)memory;
     uint8x16_t zero_128 = vdupq_n_u8(0);
@@ -196,12 +183,12 @@ zero_memory(void *memory, u64 size)
         }
     }
 #else
-    // TODO(joon): support for intel simd, too!
+    // TODO(gh): support for intel simd, too!
     memset (memory, 0, size);
 #endif
 }
 
-// TODO(joon): Intrinsic?
+// TODO(gh): Intrinsic?
 inline u8
 reverse_bits(u8 value)
 {
@@ -220,4 +207,3 @@ reverse_bits(u8 value)
     return result;
 }
 
-#endif

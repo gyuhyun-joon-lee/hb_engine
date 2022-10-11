@@ -1,22 +1,27 @@
 #ifndef HB_DEBUG_H
 #define HB_DEBUG_H
 
-// 8 * 4 = 32 bytes
 struct DebugRecord
 {
-    u64 cycle_count;
-    const char *file_name;
+    const char *file;
     const char *function;
+    u32 line;
 
-    u32 line_number;
-    u32 hit_count;
+    // NOTE(gh) (hit_count << 32) | (cycle_count), we can decrease the size of hit_count for more cycle_count
+    // This helps us to use only one atomic operation to modify this value
+    volatile u64 hit_count_cycle_count;
 };
 
+#if HB_DEBUG
 // C++ nonsense, __LINE__ will not be correctly pasted when we only use one macro
 // ##__VA_ARGS__ will be the hit count, which is 1 by default
-#define TIMED_BLOCK__(line, ...) TimedBlock timed_block_##line(__COUNTER__, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);
-#define TIMED_BLOCK_(line, ...) TIMED_BLOCK__(line, ##__VA_ARGS__)
-#define TIMED_BLOCK(...) TIMED_BLOCK_(__LINE__, ##__VA_ARGS__)
+#define __TIMED_BLOCK(line, ...) TimedBlock timed_block_##line(__COUNTER__, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);
+#define _TIMED_BLOCK(line, ...) __TIMED_BLOCK(line, ##__VA_ARGS__)
+#define TIMED_BLOCK(...) _TIMED_BLOCK(__LINE__, ##__VA_ARGS__)
+#else
+
+#define TIMED_BLOCK(...) 
+#endif
 
 // NOTE(gh) Pre-declaration, makefile or build batch file has pre-declared name for each translation unit
 // which will be pasted instead of this name by the compiler, 
@@ -25,24 +30,27 @@ extern DebugRecord debug_records[];
 
 struct TimedBlock
 {
-    u32 start_cycle_count;
+    u64 start_cycle_count;
+    u32 hit_count;
     DebugRecord *record;
 
-    TimedBlock(int ID, const char *file_name, const char *function_name, int line_number, u32 hit_count = 1)
+    TimedBlock(int ID, const char *file, const char *function, int line, u32 hit_count_init = 1)
     {
         // Retrieving record with __COUNTER__ only works per single compilation unit
         record = debug_records + ID;
-        record->file_name = file_name;
-        record->function = function_name;
-        record->line_number = line_number;
-        record->hit_count += hit_count;
+        record->file = file;
+        record->function = function;
+        record->line = line;
+        hit_count = hit_count_init;
 
         start_cycle_count = rdtsc();
     }
 
     ~TimedBlock()
     {
-        record->cycle_count += start_cycle_count - rdtsc();
+        // TODO(gh) double check if this is working properly
+        u64 hit_count_cycle_count = ((u64)hit_count << 32) | (rdtsc() - start_cycle_count);
+        atomic_add(&record->hit_count_cycle_count, hit_count_cycle_count);
     }
 };
 

@@ -440,7 +440,7 @@ thread_proc(void *data)
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
 // and put them inside the render mesh so that the graphics API can render them.
 internal void
-metal_render_and_wait_until_completion(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 time_elapsed_from_start)
+metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 time_elapsed_from_start)
 {
     id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
@@ -902,7 +902,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
 
         metal_commit_command_buffer(command_buffer);
 
-        metal_wait_until_command_buffer_completed(command_buffer);
+        // TODO(gh) properly sync with the frame!
+        // metal_wait_until_command_buffer_completed(command_buffer);
     }
 }
 
@@ -1072,13 +1073,15 @@ int main(void)
                 VM_FLAGS_ANYWHERE);
     platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
 
+#if 1
+    // 2.5k -ish
+    i32 window_width = 3200;
+    i32 window_height = 1800;
+#else
     // 1080p
-    // i32 window_width = 1920;
-    // i32 window_height = 1080;
-
-    // 2.5k
-    i32 window_width = 3456;
-    i32 window_height = 2234;
+    i32 window_width = 1920;
+    i32 window_height = 1080;
+#endif
 
     u32 target_frames_per_second = 60;
     f32 target_seconds_per_frame = 1.0f/(f32)target_frames_per_second;
@@ -1491,7 +1494,7 @@ int main(void)
 
         @autoreleasepool
         {
-            metal_render_and_wait_until_completion(&metal_render_context, &platform_render_push_buffer, window_width, window_height, time_elapsed_from_start);
+            metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height, time_elapsed_from_start);
 
 #if 0
             // NOTE(gh) Testing compute pipeline
@@ -1522,7 +1525,7 @@ int main(void)
             {
                 // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
                 // we need to undersleep and spend time in a loop
-                u64 undersleep_nano_seconds = target_nano_seconds_per_frame / 10;
+                u64 undersleep_nano_seconds = target_nano_seconds_per_frame / 5;
                 if(time_passed_in_nsec + undersleep_nano_seconds < target_nano_seconds_per_frame)
                 {
                     timespec time_spec = {};

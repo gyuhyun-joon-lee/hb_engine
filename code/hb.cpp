@@ -26,6 +26,8 @@
 #include <time.h>
 #include "stb_truetype.h"
 
+internal void output_debug_records();
+
 /*
     TODO(gh)
     - Render Font using one of the graphics API
@@ -143,7 +145,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *debug_camera = &game_state->debug_camera;
 
     Camera *render_camera = game_camera;
-    // render_camera = debug_camera;
+    render_camera = debug_camera;
     b32 show_perlin_noise_grid = false;
 
     f32 camera_rotation_speed = 3.0f * platform_input->dt_per_frame;
@@ -427,7 +429,32 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->offset_x++;
         game_state->time_until_offset_x_inc = 0;
     }
+
+    output_debug_records();
 }
 
 DebugRecord game_debug_records[__COUNTER__];
+
+internal void
+output_debug_records()
+{
+#if HB_DEBUG
+    for(u32 record_index = 0;
+            record_index < array_count(game_debug_records);
+            ++record_index)
+    {
+        DebugRecord *record = game_debug_records + record_index;
+        const char *function = record->function;
+        u32 line = record->line;
+        u32 hit_count = record->hit_count_cycle_count >> 32;
+        u32 cycle_count = (u32)(record->hit_count_cycle_count & 0xffffffff);
+
+        printf("%s(%u): %ucy, %uh, %ucy/h ", function, line, cycle_count, hit_count, cycle_count/hit_count);
+
+        atomic_exchange(&record->hit_count_cycle_count, 0);
+    }
+#endif
+}
+
+
 
