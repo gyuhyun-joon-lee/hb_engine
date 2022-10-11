@@ -617,7 +617,8 @@ metal_render_and_wait_until_completion(MetalRenderContext *render_context, Platf
                     metal_set_mesh_bytes(render_encoder, &game_proj_view, sizeof(game_proj_view), 0);
                     metal_set_mesh_bytes(render_encoder, &main_proj_view, sizeof(main_proj_view), 1);
                     metal_set_mesh_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
-                    metal_set_mesh_bytes(render_encoder, &render_push_buffer->render_camera_p, sizeof(render_push_buffer->render_camera_p), 3);
+                    metal_set_mesh_bytes(render_encoder, &render_push_buffer->game_camera_p, sizeof(render_push_buffer->game_camera_p), 3);
+                    metal_set_mesh_bytes(render_encoder, &render_push_buffer->render_camera_p, sizeof(render_push_buffer->render_camera_p), 4);
 
                     metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
                     metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
@@ -1071,8 +1072,13 @@ int main(void)
                 VM_FLAGS_ANYWHERE);
     platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
 
-    i32 window_width = 1920;
-    i32 window_height = 1080;
+    // 1080p
+    // i32 window_width = 1920;
+    // i32 window_height = 1080;
+
+    // 2.5k
+    i32 window_width = 3456;
+    i32 window_height = 2234;
 
     u32 target_frames_per_second = 60;
     f32 target_seconds_per_frame = 1.0f/(f32)target_frames_per_second;
@@ -1138,6 +1144,28 @@ int main(void)
 
     metal_render_context.depth_state = metal_make_depth_state(device, MTLCompareFunctionLess, true);
     metal_render_context.disabled_depth_state = metal_make_depth_state(device, MTLCompareFunctionAlways, false);
+
+    NSString *app_path_string = [[NSBundle mainBundle] bundlePath];
+    u32 length = [app_path_string lengthOfBytesUsingEncoding: NSUTF8StringEncoding];
+    char app_path_without_app_name[512] = {};
+    unsafe_string_append(app_path_without_app_name, 
+                [app_path_string cStringUsingEncoding: NSUTF8StringEncoding],
+                length);
+
+    for(u32 index = length-1;
+            index >= 0;
+            --index)
+    {
+        if(app_path_without_app_name[index] == '/')
+        {
+            break;
+        }
+        else
+        {
+            app_path_without_app_name[index] = 0;
+        }
+    }
+
 
     NSError *error;
     // TODO(gh) : Put the metallib file inside the app

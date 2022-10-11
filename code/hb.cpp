@@ -92,6 +92,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
 
         v2 combined_floor_dim = V2(200, 200); // TODO(gh) just temporary, need to 'gather' the floors later
+        u32 total_grass_count_x = 512;
+        u32 total_grass_count_y = 512;
         game_state->grass_grid_count_x = 2;
         game_state->grass_grid_count_y = 2;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
@@ -106,8 +108,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     x < game_state->grass_grid_count_x;
                     ++x)
             {
-                u32 grass_on_floor_count_x = 256;
-                u32 grass_on_floor_count_y = 256;
+                u32 grass_on_floor_count_x = total_grass_count_x / game_state->grass_grid_count_x;
+                u32 grass_on_floor_count_y =  total_grass_count_y / game_state->grass_grid_count_y;
 
                 v2 min = floor_left_bottom_p + hadamard(sub_floor_dim, V2(x, y));
                 v2 max = min + sub_floor_dim;

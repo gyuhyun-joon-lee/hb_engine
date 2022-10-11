@@ -178,7 +178,8 @@ singlepass_deferred_lighting_frag(DeferredLightingVertexOutput vertex_output [[s
     {
         shadow_factor = N.w; // shadow factor is secretly baked with the normal texture
     }
-    float diffuse = shadow_factor * max(dot(N.xyz, L), 0.0f);
+    shadow_factor = 1.0f;
+    float diffuse = shadow_factor * max(dot(N.xyz, L), 0.5f);
 
     float4 result = float4(color * (ambient + diffuse), 1.0f);
 
