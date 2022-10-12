@@ -570,7 +570,7 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     // TODO(gh) Check there is an actual performance gain by doing this, because it seems like
     // when we become too conservative, there isn't much culling going on in per-grass basis anyway.
     // Maybe it becomes important when we have great z difference?
-    if(is_inside_frustum(game_proj_view, min, max))
+    // if(is_inside_frustum(game_proj_view, min, max))
     {
         // these if statements are needed, as we are firing more threads than the grass vertex count.
         if (thread_index < grass_vertex_count)

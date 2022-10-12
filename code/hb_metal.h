@@ -41,6 +41,12 @@ struct MetalTexture2D
     i32 height;
 };
 
+struct MetalTimestamp
+{
+    u64 cpu;
+    u64 gpu;
+};
+
 struct MetalRenderContext
 {
     id<MTLDevice> device;
@@ -104,8 +110,14 @@ struct MetalRenderContext
     MetalSharedBuffer combined_vertex_buffer;
     MetalSharedBuffer combined_index_buffer;
 
-    // will be passed on to the game code
-    MetalSharedBuffer giant_buffer;
+    MetalSharedBuffer giant_buffer; // will be passed on to the game code
+
+    // Timestamps
+    // MetalTimestamp shadowmap_rendering_start_timestamp;
+    // MetalTimestamp shadowmap_rendering_end_timestamp;
+
+    MetalTimestamp grass_rendering_start_timestamp;
+    MetalTimestamp grass_rendering_end_timestamp;
 };
 
 #endif

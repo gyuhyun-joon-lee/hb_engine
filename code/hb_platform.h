@@ -174,6 +174,8 @@ internal TempMemory
 start_temp_memory(MemoryArena *memory_arena, size_t size, b32 should_be_zero = true)
 {
     TempMemory result = {};
+    if(memory_arena)
+    {
     result.base = (u8 *)memory_arena->base + memory_arena->used;
     result.total_size = size;
     result.memory_arena = memory_arena;
@@ -184,6 +186,7 @@ start_temp_memory(MemoryArena *memory_arena, size_t size, b32 should_be_zero = t
     if(should_be_zero)
     {
         zero_memory(result.base, result.total_size);
+    }
     }
 
     return result;

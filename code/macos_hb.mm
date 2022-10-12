@@ -576,17 +576,19 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         PerFrameData per_frame_data = {};
         per_frame_data.proj_view = main_proj_view;
 
-        // NOTE(gh) first, render all the grasses with mesh render pipeline
-        metal_set_render_pipeline(render_encoder, render_context->grass_mesh_render_pipeline);
-        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
-        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
-        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
-        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-        metal_set_cull_mode(render_encoder, MTLCullModeNone); 
-        metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
-
         if(render_push_buffer->enable_grass_mesh_rendering)
         {
+            metal_get_timestamp(&render_context->grass_rendering_start_timestamp, command_buffer, render_context->device);
+
+            // NOTE(gh) first, render all the grasses with mesh render pipeline
+            metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
+            metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
+            metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
+            metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
+            metal_set_cull_mode(render_encoder, MTLCullModeNone); 
+            metal_set_detph_stencil_state(render_encoder, render_context->depth_state);
+            metal_set_render_pipeline(render_encoder, render_context->grass_mesh_render_pipeline);
+
             for(u32 grass_grid_index = 0;
                     grass_grid_index < render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y;
                     ++grass_grid_index)
@@ -636,8 +638,11 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                             mesh_thread_per_threadgroup_count);
                 }
             }
+
+            metal_get_timestamp(&render_context->grass_rendering_end_timestamp, command_buffer, render_context->device);
         }
 
+#if 0
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
@@ -748,6 +753,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
             }
         }
 
+#endif
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
         metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
@@ -765,9 +771,9 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
         // TODO(gh) Should this be tile stage or fragment stage?
         metal_update_fence(render_encoder, render_context->forwardRenderFence, MTLRenderStageTile);
-
         metal_end_encoding(render_encoder);
 
+#if 0
 //////// NOTE(gh) Forward rendering start
         render_context->forward_renderpass.colorAttachments[0].texture = drawable_texture;
         id<MTLRenderCommandEncoder> forward_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->forward_renderpass];
@@ -784,7 +790,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         // TODO(gh) Also put this inside the game code, and make it as a render entry(with instance count support?)
         if(render_push_buffer->enable_show_perlin_noise_grid)
         {
-#if 1 
             for(u32 grass_grid_index = 0;
                     grass_grid_index < render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y;
                     ++grass_grid_index)
@@ -823,8 +828,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
                         0, 6, 0, grid->grass_count_x * grid->grass_count_y);
             }
-
-#endif
         }
 
          for(u32 consumed = 0;
@@ -895,6 +898,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 #endif
 
         metal_end_encoding(forward_render_encoder);
+#endif
 
         // TODO(gh) My understading is metal will automatically sync with the display when I request presenting,
         // but double check
@@ -1130,7 +1134,10 @@ int main(void)
     bool has_unified_memory = device.hasUnifiedMemory;
     u64 max_allocation_size = device.recommendedMaxWorkingSetSize;
 
-    assert(metal_does_support_gpu_family(device, MTLGPUFamilyApple7));
+#if HB_DEBUG
+    assert(metal_does_support_gpu_timestamp(device));
+#endif
+    assert(metal_does_support_gpu_family(device, MTLGPUFamilyApple7)); // Required for mesh shading
     // TODO(gh) MTLGPUFamilyApple8 not defined?
     // assert(metal_does_support_gpu_family(device, MTLGPUFamilyApple8));
 
@@ -1533,6 +1540,8 @@ int main(void)
 
                 time_elapsed_from_start += target_seconds_per_frame;
                 // printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
+                printf("CPU:%llu, GPU:%llu\n", metal_render_context.grass_rendering_end_timestamp.cpu - metal_render_context.grass_rendering_start_timestamp.cpu,
+                                             metal_render_context.grass_rendering_end_timestamp.gpu - metal_render_context.grass_rendering_start_timestamp.gpu);
             }
 
             // update the time stamp

@@ -43,7 +43,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         assert(platform_render_push_buffer->combined_vertex_buffer && 
                 platform_render_push_buffer->combined_index_buffer);
 
-        game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(256));
+        game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(512));
 
         // TODO(gh) entity arena?
         game_state->max_entity_count = 8192;
@@ -52,7 +52,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
                                                     game_state->transient_arena.total_size + 
                                                     game_state->mass_agg_arena.total_size,
-                                                    megabytes(128));
+                                                    megabytes(16));
 
         // TODO(gh) get rid of rand(), or get the time and rand information from platform layer?
         // srand(time(0));

@@ -57,8 +57,8 @@ struct PerObjectData
 // to decide the size of one wavefront.
 // TODO(gh) It seems like we cannot increase this value too much because of the command buffer overflow,
 // figure something out(or should we?)?
-#define object_thread_per_threadgroup_count_x 8
-#define object_thread_per_threadgroup_count_y 8
+#define object_thread_per_threadgroup_count_x 16
+#define object_thread_per_threadgroup_count_y 16
 
 struct GrassObjectFunctionInput
 {

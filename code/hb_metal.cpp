@@ -15,6 +15,56 @@
 }\
 
 internal b32
+metal_does_support_gpu_timestamp(id<MTLDevice> device)
+{
+    b32 result = false;
+    NSArray<id<MTLCounterSet>> *counter_sets = device.counterSets;
+
+    id< MTLCounterSet > timestamp_counter_set = 0;
+    
+    // Look at this nonsense...
+    for ( id< MTLCounterSet > counter_set in counter_sets )
+    {
+        NSString* counter_set_name = counter_set.name;
+        if ( [counter_set_name caseInsensitiveCompare:MTLCommonCounterSetTimestamp] == NSOrderedSame )
+        {
+            timestamp_counter_set = counter_set;
+            break;
+        }
+
+    }
+
+    NSArray<id<MTLCounter>>* counters_in_set = timestamp_counter_set.counters;
+    for ( id< MTLCounter > counter in counters_in_set )
+    {
+        if ( [counter.name caseInsensitiveCompare:MTLCommonCounterTimestamp] == NSOrderedSame )
+        {
+            result = true;
+            break;
+        }
+    }
+
+    return result;
+}
+
+// NOTE(gh) This function may trap to the kernel to read the GPU clock, so it's not free.
+internal void
+metal_get_timestamp(MetalTimestamp *timestamp, id<MTLCommandBuffer> command_buffer, id<MTLDevice> device)
+{
+    // MTLTimestamp == u64
+
+    // NOTE(gh) addCompletedHandler registers a block of code that Metal calls immediately 
+    // after the GPU finishes executing the commands in the command buffer.
+    [command_buffer addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull handler) 
+    {
+        // Save the timestamps as soon as the GPU finishes executing the command buffer.
+        [device sampleTimestamps:(MTLTimestamp *)&timestamp->cpu 
+                    gpuTimestamp:(MTLTimestamp *)&timestamp->gpu];
+    }
+    ];
+}
+
+internal b32
 metal_does_support_gpu_family(id<MTLDevice> device, MTLGPUFamily gpu_family)
 {
     b32 result = [device supportsFamily : gpu_family];
