@@ -189,7 +189,7 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
             f32 yf = y / (f32)d->total_y_count;
 
             u32 frequency = 25;
-            f32 wind_strength = 0.7f;
+            f32 wind_strength = 0.9f;
             // u32 frequency = 32;
             // f32 wind_strength = 1.6f;
 

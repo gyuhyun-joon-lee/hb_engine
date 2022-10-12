@@ -397,7 +397,7 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
         payloadOutput->per_grass_data[thread_index].bend = 0.8f;
         payloadOutput->per_grass_data[thread_index].wiggliness = 2.0f + 1.0f*(random01);
         payloadOutput->per_grass_data[thread_index].time_elasped_from_start = *time_elasped_from_start;
-        payloadOutput->per_grass_data[thread_index].color = packed_float3(random01, 0.6f, 0.2f);
+        payloadOutput->per_grass_data[thread_index].color = packed_float3(random01, 0.784f, 0.2f);
 
         // Hashes got all the values for the grid
         payloadOutput->per_grass_data[thread_index].hash = hash;

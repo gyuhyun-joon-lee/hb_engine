@@ -1073,7 +1073,8 @@ int main(void)
                 VM_FLAGS_ANYWHERE);
     platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
 
-#if 1
+    // TODO(gh) get monitor width and height and use that 
+#if 0
     // 2.5k -ish
     i32 window_width = 3200;
     i32 window_height = 1800;
@@ -1531,7 +1532,7 @@ int main(void)
                 }
 
                 time_elapsed_from_start += target_seconds_per_frame;
-                printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
+                // printf("%dms elapsed, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
             }
 
             // update the time stamp

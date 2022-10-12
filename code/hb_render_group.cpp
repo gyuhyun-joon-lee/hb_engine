@@ -78,6 +78,7 @@ init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 fov_in_degree,
 internal m4x4 
 camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_axis)
 {
+    TIMED_BLOCK();
     m4x4 result = {};
 
     // NOTE(gh) to pack the rotation & translation into one matrix(with an order of translation and the rotation),
@@ -181,6 +182,7 @@ get_camera_right(Camera *camera)
 internal void
 get_camera_frustum(Camera *camera, CameraFrustum *frustum, f32 width_over_height)
 {
+    TIMED_BLOCK();
     v3 camera_dir = get_camera_lookat(camera);
     v3 camera_right = get_camera_right(camera);
     v3 camera_up = normalize(cross(camera_right, camera_dir));
@@ -283,6 +285,7 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *re
                         GrassGrid *grass_grids, u32 grass_grid_count_x, u32 grass_grid_count_y,
                         v3 clear_color, b32 enable_shadow)
 {
+    TIMED_BLOCK();
     assert(render_push_buffer->base);
 
     render_push_buffer->render_camera_view = camera_transform(render_camera);
@@ -396,6 +399,7 @@ internal void
 push_cube(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
           CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
+    TIMED_BLOCK();
     RenderEntryCube *entry = (RenderEntryCube *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
     assert(render_push_buffer->used <= render_push_buffer->total_size);
