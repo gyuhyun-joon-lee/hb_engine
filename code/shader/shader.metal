@@ -660,11 +660,13 @@ encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
 {
     render_command command(arguments->cmd_buffer, 0);
 
+#if 1
     command.set_vertex_buffer(grass_instance_buffer, 0);
     command.set_vertex_buffer(render_proj_view, 1);
     command.set_vertex_buffer(light_proj_view, 2);
     command.set_vertex_buffer(game_camera_p, 3);
     command.set_vertex_buffer(time_elasped, 4);
+#endif
 
     command.draw_indexed_primitives(primitive_type::triangle, // primitive type
                                     39, // index count TODO(gh) We can also just pass those in, too?
