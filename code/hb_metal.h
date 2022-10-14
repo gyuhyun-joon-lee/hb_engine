@@ -67,6 +67,7 @@ struct MetalRenderContext
     // single renderpass & color attachments will be sharing single renderpass & color attachments
     id<MTLRenderPipelineState> singlepass_cube_pipeline;
     id<MTLRenderPipelineState> singlepass_deferred_lighting_pipeline;
+    id<MTLRenderPipelineState> instanced_grass_render_pipeline;
 
     // Forward Pipelines
     id<MTLRenderPipelineState> forward_line_pipeline;
@@ -76,6 +77,8 @@ struct MetalRenderContext
 
     // Compute Pipelines
     id<MTLComputePipelineState> add_compute_pipeline;
+    id<MTLComputePipelineState> fill_grass_instance_data_pipeline;
+    id<MTLComputePipelineState> encode_instanced_grass_render_commands_pipeline;
 
     // Mesh Pipelines(although the type is same as render pipeline)
     id<MTLRenderPipelineState> grass_mesh_render_pipeline;
@@ -107,10 +110,18 @@ struct MetalRenderContext
     id<MTLTexture> directional_light_shadowmap_depth_texture;
 
     // Buffers
+    u32 indirect_command_count;
+    id<MTLIndirectCommandBuffer> indirect_command_buffer; 
     MetalSharedBuffer combined_vertex_buffer;
     MetalSharedBuffer combined_index_buffer;
 
     MetalSharedBuffer giant_buffer; // will be passed on to the game code
+
+    MetalSharedBuffer grass_count_buffer;
+    MetalSharedBuffer grass_instance_buffer;
+    MetalSharedBuffer grass_index_buffer;
+
+    MetalSharedBuffer icb_argument_buffer;
 
     // Timestamps
     // MetalTimestamp shadowmap_rendering_start_timestamp;

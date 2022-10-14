@@ -145,7 +145,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *debug_camera = &game_state->debug_camera;
 
     Camera *render_camera = game_camera;
-    // render_camera = debug_camera;
+    render_camera = debug_camera;
     b32 show_perlin_noise_grid = false;
 
     f32 camera_rotation_speed = 3.0f * platform_input->dt_per_frame;
@@ -229,7 +229,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         data->offset_x = game_state->offset_x;
         data->one_past_end_x = grid->grass_count_x;
         data->one_past_end_y = grid->grass_count_x;
-        data->time_elapsed_from_start = platform_input->time_elapsed_from_start;
+        data->time_elasped_from_start = platform_input->time_elasped_from_start;
         data->perlin_noise_buffer = grid->perlin_noise_buffer;
         data->hash_buffer = grid->hash_buffer;
         data->permutations255 = game_state->permutations255;
