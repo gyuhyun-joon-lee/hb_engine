@@ -145,7 +145,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *debug_camera = &game_state->debug_camera;
 
     Camera *render_camera = game_camera;
-    render_camera = debug_camera;
+    // render_camera = debug_camera;
     b32 show_perlin_noise_grid = false;
 
     f32 camera_rotation_speed = 3.0f * platform_input->dt_per_frame;

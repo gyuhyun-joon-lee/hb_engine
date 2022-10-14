@@ -629,8 +629,8 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
     // TODO(gh) should check if this is really 'atomic'
     uint grass_index = atomic_fetch_add_explicit(grass_count, 1, memory_order_relaxed);
 
-    grass_instance_buffer[grass_index].center = 1.0f*packed_float3(thread_position_in_grid.x, thread_position_in_grid.y, 0);
-    grass_instance_buffer[grass_index].hash = grass_index; 
+    grass_instance_buffer[grass_index].center = 0.5f*packed_float3(thread_position_in_grid.x, thread_position_in_grid.y, 0);
+    grass_instance_buffer[grass_index].hash = 1; 
     grass_instance_buffer[grass_index].blade_width = 1;
     grass_instance_buffer[grass_index].length = 1;
     grass_instance_buffer[grass_index].tilt = 1;
@@ -648,19 +648,28 @@ struct Arguments
     command_buffer cmd_buffer [[id(0)]]; 
 };
 
-kernel void encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
-                                            device uint *grass_count [[buffer(1)]],
-                                            device GrassInstanceData *grass_instance_buffer [[buffer(2)]],
-                                            device uint *indices [[buffer(3)]]) 
+kernel void 
+encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
+                                            const device uint *grass_count [[buffer(1)]],
+                                            const device GrassInstanceData *grass_instance_buffer [[buffer(2)]],
+                                            const device uint *indices [[buffer(3)]],
+                                            constant float4x4 *render_proj_view [[buffer(4)]],
+                                            constant float4x4 *light_proj_view [[buffer(5)]],
+                                            constant packed_float3 *game_camera_p [[buffer(6)]],
+                                            constant float *time_elasped [[buffer(7)]])
 {
     render_command command(arguments->cmd_buffer, 0);
 
     command.set_vertex_buffer(grass_instance_buffer, 0);
+    command.set_vertex_buffer(render_proj_view, 1);
+    command.set_vertex_buffer(light_proj_view, 2);
+    command.set_vertex_buffer(game_camera_p, 3);
+    command.set_vertex_buffer(time_elasped, 4);
 
     command.draw_indexed_primitives(primitive_type::triangle, // primitive type
                                     39, // index count TODO(gh) We can also just pass those in, too?
                                     indices, // index buffer
-                                    *grass_count, // instance count
+                                    100, // instance count
                                     0, // base vertex
                                     0); //base instance
 }
@@ -762,8 +771,8 @@ instanced_grass_render_vertex(uint vertexID [[vertex_id]],
                                                         render_proj_view,
                                                         light_proj_view,
                                                         game_camera_p,
-                                                        grass_low_lod_vertex_count,
-                                                        grass_low_lod_divide_count,
+                                                        grass_high_lod_vertex_count,
+                                                        grass_high_lod_divide_count,
                                                         *time_elasped);
     
     return result;
