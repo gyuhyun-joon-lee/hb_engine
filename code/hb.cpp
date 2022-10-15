@@ -229,7 +229,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         data->offset_x = game_state->offset_x;
         data->one_past_end_x = grid->grass_count_x;
         data->one_past_end_y = grid->grass_count_x;
-        data->time_elapsed_from_start = platform_input->time_elapsed_from_start;
+        data->time_elasped_from_start = platform_input->time_elasped_from_start;
         data->perlin_noise_buffer = grid->perlin_noise_buffer;
         data->hash_buffer = grid->hash_buffer;
         data->permutations255 = game_state->permutations255;

@@ -78,5 +78,41 @@ struct GrassObjectFunctionInput
 #endif
 };
 
+// Original implementation : 16 floats
+struct GrassInstanceData
+{
+#if INSIDE_METAL_SHADER
+    // TODO(gh) This works, but only if we make the x and y values as constant 
+    // and define them somewhere, which is unfortunate.
+    packed_float3 center;
+
+    // TODO(gh) I would assume that I can also add per instance data here,
+    // but there might be a more efficient way to do this.
+    uint hash;
+    float blade_width;
+    float length;
+    float tilt;
+    packed_float2 facing_direction;
+    float bend;
+    float wiggliness;
+    packed_float3 color;
+    float pad[2];
+#elif INSIDE_VULKAN_SHADER
+#else
+    // TODO(gh) This might be a problem in the future due to padding,
+    // just replace these with dummy variables that has exact same size?
+    v3 center;
+    u32 hash;
+    f32 blade_width;
+    f32 length;
+    f32 tilt;
+    v2 facing_direction;
+    f32 bend;
+    f32 wiggliness;
+    v3 color;
+    f32 pad[2];
+#endif
+};
+
 
 #endif

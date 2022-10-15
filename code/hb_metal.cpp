@@ -128,7 +128,7 @@ perspective_projection(f32 fov, f32 n, f32 f, f32 width_over_height)
 }
 
 inline void
-metal_update_fence(id<MTLRenderCommandEncoder> encoder, id<MTLFence> fence, MTLRenderStages after_render_stage)
+metal_signal_fence_after(id<MTLRenderCommandEncoder> encoder, id<MTLFence> fence, MTLRenderStages after_render_stage)
 {
     // Make GPU signal the fence after executing the specified render stage
     [encoder updateFence : 
@@ -279,7 +279,7 @@ metal_set_cull_mode(id<MTLRenderCommandEncoder> render_encoder, MTLCullMode cull
 }
 
 inline void
-metal_set_detph_stencil_state(id<MTLRenderCommandEncoder> render_encoder, id<MTLDepthStencilState> depth_stencil_state)
+metal_set_depth_stencil_state(id<MTLRenderCommandEncoder> render_encoder, id<MTLDepthStencilState> depth_stencil_state)
 {
     [render_encoder setDepthStencilState: depth_stencil_state];
 }
@@ -398,7 +398,8 @@ metal_make_render_pipeline(id<MTLDevice> device,
                     MTLPixelFormat *pixel_formats, u32 pixel_format_count, 
                     MTLColorWriteMask *masks, u32 mask_count,
                     MTLPixelFormat depth_pixel_format,
-                    b32 *blending_enabled = 0)
+                    b32 *blending_enabled = 0,
+                    b32 can_be_encoded_in_icb = 0)
 {
     assert(pixel_format_count == mask_count);
 
@@ -422,6 +423,7 @@ metal_make_render_pipeline(id<MTLDevice> device,
     pipeline_descriptor.rasterSampleCount = pipeline_descriptor.sampleCount;
     pipeline_descriptor.rasterizationEnabled = true;
     pipeline_descriptor.inputPrimitiveTopology = topology;
+    pipeline_descriptor.supportIndirectCommandBuffers = can_be_encoded_in_icb;
 
     for(u32 color_attachment_index = 0;
             color_attachment_index < pixel_format_count;
@@ -576,8 +578,8 @@ metal_make_sampler(id<MTLDevice> device, b32 normalized_coordinates, MTLSamplerA
 inline id<MTLComputePipelineState>
 metal_make_compute_pipeline(id<MTLDevice> device, id<MTLLibrary> shader_library, const char *compute_function_name)
 {
-    id<MTLFunction> compute_function = 0;
-    compute_function = [shader_library newFunctionWithName:[NSString stringWithUTF8String:compute_function_name]];
+    id<MTLFunction> compute_function = 
+        [shader_library newFunctionWithName:[NSString stringWithUTF8String:compute_function_name]];
 
     NSError *error = 0;
     id<MTLComputePipelineState> result = [device newComputePipelineStateWithFunction: compute_function 
@@ -585,6 +587,38 @@ metal_make_compute_pipeline(id<MTLDevice> device, id<MTLLibrary> shader_library,
     check_ns_error(error);
 
     return result;
+}
+
+inline void
+metal_signal_fence_after(id<MTLComputeCommandEncoder> encoder, id<MTLFence> fence)
+{
+    // Make GPU signal the fence after executing the specified render stage
+    [encoder updateFence : fence];
+}
+
+inline void
+metal_wait_for_fence(id<MTLComputeCommandEncoder> encoder, id<MTLFence> fence)
+{
+    [encoder waitForFence:fence];
+}
+
+inline void
+metal_memory_barrier_with_scope(id<MTLComputeCommandEncoder> encoder, MTLBarrierScope scope)
+{
+    /*
+       NOTE(gh) possible barriers 
+
+       MTLBarrierScopeBuffers
+       The barrier affects any buffer objects.
+
+       MTLBarrierScopeRenderTargets
+       The barrier affects any render targets.
+
+       MTLBarrierScopeTextures
+       The barrier affects textures.
+    */
+
+    [encoder memoryBarrierWithScope : scope];
 }
 
 inline void
@@ -602,7 +636,15 @@ metal_set_compute_buffer(id<MTLComputeCommandEncoder> encoder, id<MTLBuffer> buf
 }
 
 inline void
-metal_dispatch_threads(id<MTLComputeCommandEncoder> encoder, v3u threads_per_grid, v3u threads_per_group)
+metal_set_compute_bytes(id<MTLComputeCommandEncoder> encoder, void *data, u64 length, u64 index)
+{
+    [encoder setBytes:data 
+        length:(NSUInteger)length 
+            atIndex:(NSUInteger)index];
+}
+
+inline void
+metal_dispatch_compute_threads(id<MTLComputeCommandEncoder> encoder, v3u threads_per_grid, v3u threads_per_group)
 {
     // NOTE(gh)
     /*
@@ -734,6 +776,16 @@ inline id<MTLFence>
 metal_make_fence(id<MTLDevice> device)
 {
     id<MTLFence> result = [device newFence];
+    return result;
+}
+
+inline id<MTLArgumentEncoder>
+metal_make_argument_encoder(id<MTLLibrary> shader_library, const char *function_name, u32 index_of_the_argument_in_shader)
+{
+    id<MTLFunction> function = [shader_library newFunctionWithName:[NSString stringWithUTF8String:function_name]];
+    id<MTLArgumentEncoder> result =
+        [function newArgumentEncoderWithBufferIndex:index_of_the_argument_in_shader];
+
     return result;
 }
 

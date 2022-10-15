@@ -75,12 +75,12 @@ singlepass_cube_vertex(uint vertexID [[vertex_id]],
 }
 
 fragment GBuffers 
-singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
-          depth2d<float> shadowmap [[texture(0)]],
-          sampler shadowmap_sampler[[sampler(0)]])
+singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]])
+          // depth2d<float> shadowmap [[texture(0)]]
 {
     GBuffers result = {};
 
+#if 0
 #if 1
     // multisampling shadow
     float shadow_factor = 0.0f;
@@ -111,6 +111,8 @@ singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
         // shadow_factor = vertex_output.p_in_light_coordinate.z;
     }
 #endif
+#endif
+    float shadow_factor = 1.0f;
 
     result.position = float4(vertex_output.p, 0.0f);
     result.normal = float4(vertex_output.N, shadow_factor); // also storing the shadow factor to the unused 4th component
