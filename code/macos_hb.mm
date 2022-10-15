@@ -435,8 +435,6 @@ thread_proc(void *data)
     return 0;
 }
 
-
-
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
 // and put them inside the render mesh so that the graphics API can render them.
 internal void
@@ -575,10 +573,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         PerFrameData per_frame_data = {};
         per_frame_data.proj_view = render_proj_view;
 
-        *(m4x4 *)render_context->render_proj_view_buffer.memory = render_proj_view;
-        *(m4x4 *)render_context->light_proj_view_buffer.memory = light_proj_view;
-        *(v3 *)render_context->game_camera_p_buffer.memory = render_push_buffer->game_camera_p;
-        *(f32 *)render_context->time_buffer.memory = time_elasped_from_start;
+        // init grass count
+        *((u32 *)render_context->grass_count_buffer.memory) = 0;
 
         if(render_push_buffer->enable_grass_mesh_rendering)
         {
@@ -651,9 +647,12 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     ++grass_grid_index)
             {
                 GrassGrid *grid = render_push_buffer->grass_grids + grass_grid_index;
+                v2 grid_dim = grid->max - grid->min;
+                v2 one_thread_worth_dim = V2(grid_dim.x/grid->grass_count_x, grid_dim.y/grid->grass_count_y);
 
                 if(grid->should_draw)
                 {
+
                     // Encode command to reset the indirect command buffer
                     id<MTLBlitCommandEncoder> icb_result_encoder = [command_buffer blitCommandEncoder];
                     icb_result_encoder.label = @"Reset ICB Blit Encoder";
@@ -668,13 +667,17 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_set_compute_pipeline(fill_grass_instance_compute_encoder, render_context->fill_grass_instance_data_pipeline);
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_count_buffer.buffer, 0, 0);
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_instance_buffer.buffer, 0, 1);
-                    metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(128, 128, 1), V3u(8, 4, 1));
-                    metal_memory_barrier_with_scope(fill_grass_instance_compute_encoder, MTLBarrierScopeBuffers);
+                    metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->perlin_noise_buffer_offset, 2);
+                    metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 3);
+                    metal_set_compute_bytes(fill_grass_instance_compute_encoder, &one_thread_worth_dim, sizeof(one_thread_worth_dim), 4);
+                    metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(8, 4, 1));
+                    metal_signal_fence_after(fill_grass_instance_compute_encoder, render_context->f);// use memory barrier instead?
                     metal_end_encoding(fill_grass_instance_compute_encoder);
 
 #if 1
                     id<MTLComputeCommandEncoder> encode_instanced_grass_encoder = [command_buffer computeCommandEncoder];
                     encode_instanced_grass_encoder.label = @"Encode Instanced Grass Render Commands";
+                    metal_wait_for_fence(encode_instanced_grass_encoder, render_context->f);
                     metal_set_compute_pipeline(encode_instanced_grass_encoder, render_context->encode_instanced_grass_render_commands_pipeline);
                     metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->icb_argument_buffer.buffer, 0, 0);
                     metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_count_buffer.buffer, 0, 1);
@@ -685,12 +688,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_set_compute_bytes(encode_instanced_grass_encoder, &light_proj_view, sizeof(light_proj_view), 5);
                     metal_set_compute_bytes(encode_instanced_grass_encoder, &render_push_buffer->game_camera_p, sizeof(render_push_buffer->game_camera_p), 6);
                     metal_set_compute_bytes(encode_instanced_grass_encoder, &time_elasped_from_start, sizeof(time_elasped_from_start), 7);
-#if 0
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->render_proj_view_buffer.buffer, 0, 4);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->light_proj_view_buffer.buffer, 0, 5);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->game_camera_p_buffer.buffer, 0, 6);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->time_buffer.buffer, 0, 7);
-#endif
 
                     // Tell Metal that we are going to write to the indirect command buffer
                     [encode_instanced_grass_encoder useResource:render_context->grass_count_buffer.buffer usage:MTLResourceUsageRead];
@@ -723,7 +720,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_set_depth_stencil_state(render_encoder, render_context->depth_state);
 
                     metal_set_render_pipeline(render_encoder, render_context->instanced_grass_render_pipeline);
-
 
                     // TODO(gh) This range thing is so error-prone
                     [render_encoder executeCommandsInBuffer:render_context->indirect_command_buffer withRange:NSMakeRange(0, render_context->indirect_command_count)];
@@ -1288,7 +1284,6 @@ int main(void)
         }
     }
 
-
     NSError *error;
     // TODO(gh) : Put the metallib file inside the app
     char metallib_path[256] = {};
@@ -1428,11 +1423,6 @@ int main(void)
     metal_render_context.grass_instance_buffer = metal_make_shared_buffer(device, sizeof(GrassInstanceData)*256*256);
 
     metal_render_context.grass_index_buffer = metal_make_shared_buffer(device, sizeof(u32)*39);
-
-    metal_render_context.render_proj_view_buffer = metal_make_shared_buffer(device, sizeof(m4x4));
-    metal_render_context.light_proj_view_buffer = metal_make_shared_buffer(device, sizeof(m4x4));
-    metal_render_context.game_camera_p_buffer = metal_make_shared_buffer(device, sizeof(v3));
-    metal_render_context.time_buffer = metal_make_shared_buffer(device, sizeof(f32));
 
     u32 grass_high_lod_indices[] = 
     {
@@ -1602,6 +1592,7 @@ int main(void)
                               1.0f);
 
     metal_render_context.forwardRenderFence = metal_make_fence(device);
+    metal_render_context.f = metal_make_fence(device);
     
     metal_render_context.combined_vertex_buffer = metal_make_shared_buffer(device, gigabytes(1));
     metal_render_context.combined_index_buffer = metal_make_shared_buffer(device, megabytes(256));

@@ -360,9 +360,9 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
 {
     // NOTE(gh) These cannot be thread_index, because the buffer we are passing has all the data for the 'grid' 
     uint hash = hashes[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
-    float random01 = random_between_0_1(hash, 0, 0);
 
     // Frustum cull
+    float random01 = random_between_0_1(hash, 0, 0);
     float length = 2.8f + random01;
     float3 pad = float3(length, length, 0.0f);
 
@@ -620,26 +620,37 @@ forward_show_frustum_frag(ShowFrustumVetexOutput vertex_output [[stage_in]])
     return result;
 }
 
+
 kernel void
 fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 device GrassInstanceData *grass_instance_buffer [[buffer(1)]],
+                                const device float *perlin_noise_values [[buffer (2)]],
+                                const device float *floor_z_values [[buffer (3)]],
+                                const device packed_float2 *one_thread_worth_dim [[buffer (4)]],
                                 uint2 thread_count_per_grid [[threads_per_grid]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {
     // TODO(gh) should check if this is really 'atomic'
     uint grass_index = atomic_fetch_add_explicit(grass_count, 1, memory_order_relaxed);
+    // TODO(gh) Might not work well when we frustum cull the grasses
+    uint y = grass_index/thread_count_per_grid.x; 
+    uint x = grass_index-thread_count_per_grid.x*y; 
 
-    grass_instance_buffer[grass_index].center = 0.5f*packed_float3(thread_position_in_grid.x, thread_position_in_grid.y, 0);
-    grass_instance_buffer[grass_index].hash = 1; 
-    grass_instance_buffer[grass_index].blade_width = 1;
-    grass_instance_buffer[grass_index].length = 1;
-    grass_instance_buffer[grass_index].tilt = 1;
-    grass_instance_buffer[grass_index].facing_direction = packed_float2(1, 0);
-    grass_instance_buffer[grass_index].bend = 1;
-    grass_instance_buffer[grass_index].wiggliness = 1;
-    grass_instance_buffer[grass_index].color = packed_float3(1, 0, 0);
-    grass_instance_buffer[grass_index].time_elasped_from_start = 0; // TODO(gh) Do we even need to pass this?
-    grass_instance_buffer[grass_index].pad = 1;
+    float noise = perlin_noise_values[grass_index];
+    float random01 = random_between_0_1(grass_index, 0, 0);
+    float length = 2.8f + random01;
+    float z = floor_z_values[grass_index];
+    uint hash = grass_index;
+
+    grass_instance_buffer[grass_index].center = packed_float3(one_thread_worth_dim->x*x, one_thread_worth_dim->y*y, z);
+    grass_instance_buffer[grass_index].hash = hash; 
+    grass_instance_buffer[grass_index].blade_width = 0.195f;
+    grass_instance_buffer[grass_index].length = length;
+    grass_instance_buffer[grass_index].tilt = clamp(1.9f + 0.7f*random01 + noise, 0.0f, length - 0.01f);
+    grass_instance_buffer[grass_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
+    grass_instance_buffer[grass_index].bend = 0.7f + 0.2f*random01;
+    grass_instance_buffer[grass_index].wiggliness = 2 + random01;
+    grass_instance_buffer[grass_index].color = packed_float3(random01, 0.784f, 0.2f);
 }
 
 struct Arguments 
@@ -671,13 +682,13 @@ encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
     command.draw_indexed_primitives(primitive_type::triangle, // primitive type
                                     39, // index count TODO(gh) We can also just pass those in, too?
                                     indices, // index buffer
-                                    100, // instance count
+                                    *grass_count, // instance count
                                     0, // base vertex
                                     0); //base instance
 }
 
 GBufferVertexOutput
-calculate_grass_vertex(float3 center, 
+calculate_grass_vertex(const device GrassInstanceData *grass_instance_data, 
                         uint thread_index, 
                         constant float4x4 *proj_view,
                         constant float4x4 *light_proj_view,
@@ -686,16 +697,16 @@ calculate_grass_vertex(float3 center,
                         uint grass_divide_count,
                         float time_elasped)
 {
-    float blade_width = 0.2f;
-    float length = 3.0f; // length of the blade
-    float tilt = 2.0f; // z value of the tip
+    float blade_width = grass_instance_data->blade_width;
+    float length = grass_instance_data->length; // length of the blade
+    float tilt = grass_instance_data->tilt; // z value of the tip
     float stride = sqrt(length*length - tilt*tilt); // only horizontal length of the blade
-    packed_float2 facing_direction = packed_float2(1, 0);
-    float bend = 0.5f;
-    float wiggliness = 2.1f;
-    uint hash = 2;
+    packed_float2 facing_direction = grass_instance_data->facing_direction;
+    float bend = grass_instance_data->bend;
+    float wiggliness = grass_instance_data->wiggliness;
+    uint hash = grass_instance_data->hash;
 
-    float3 p0 = center;
+    float3 p0 = grass_instance_data->center;
 
     float3 p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
     float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade, think it should be (y, -x)?
@@ -726,7 +737,7 @@ calculate_grass_vertex(float3 center,
         // TODO(gh) Clean this up! 
         // TODO(gh) Original method do it in view angle, any reason to do that
         // (grass possibly facing the direction other than z)?
-        bool should_shift_thread_mod_1 = (dot(orthogonal_normal, *camera_p - center) < 0);
+        bool should_shift_thread_mod_1 = (dot(orthogonal_normal, *camera_p - grass_instance_data->center) < 0);
         float shift = 0.08f;
         if(thread_index%2 == 1)
         {
@@ -750,7 +761,7 @@ calculate_grass_vertex(float3 center,
     result.clip_p = (*proj_view) * float4(world_p, 1.0f);
     result.p = world_p;
     result.N = normalize(cross(quadratic_bezier_first_derivative(p0, modified_p1, modified_p2, t), orthogonal_normal));
-    result.color = float3(1, 0, 0);
+    result.color = grass_instance_data->color;
     result.depth = result.clip_p.z / result.clip_p.w;
     float4 p_in_light_coordinate = (*light_proj_view) * float4(world_p, 1.0f);
     result.p_in_light_coordinate = p_in_light_coordinate.xyz / p_in_light_coordinate.w;
@@ -768,7 +779,7 @@ instanced_grass_render_vertex(uint vertexID [[vertex_id]],
                             constant float *time_elasped [[buffer(4)]])
                                             
 {
-    GBufferVertexOutput result = calculate_grass_vertex(grass_instance_buffer[instanceID].center, 
+    GBufferVertexOutput result = calculate_grass_vertex(grass_instance_buffer + instanceID, 
                                                         vertexID, 
                                                         render_proj_view,
                                                         light_proj_view,
@@ -779,7 +790,4 @@ instanced_grass_render_vertex(uint vertexID [[vertex_id]],
     
     return result;
 }
-
-
-
 

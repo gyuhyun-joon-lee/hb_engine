@@ -593,8 +593,13 @@ inline void
 metal_signal_fence_after(id<MTLComputeCommandEncoder> encoder, id<MTLFence> fence)
 {
     // Make GPU signal the fence after executing the specified render stage
-    [encoder updateFence : 
-            fence];
+    [encoder updateFence : fence];
+}
+
+inline void
+metal_wait_for_fence(id<MTLComputeCommandEncoder> encoder, id<MTLFence> fence)
+{
+    [encoder waitForFence:fence];
 }
 
 inline void

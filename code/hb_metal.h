@@ -98,6 +98,7 @@ struct MetalRenderContext
     // Fences
     // Fence to detect whether the deferred rendering has been finished beforedoing the foward rendering
     id<MTLFence> forwardRenderFence;
+    id<MTLFence> f;
 
     // Textures
     id<MTLTexture> g_buffer_position_texture;
@@ -120,11 +121,6 @@ struct MetalRenderContext
     MetalSharedBuffer grass_count_buffer;
     MetalSharedBuffer grass_instance_buffer;
     MetalSharedBuffer grass_index_buffer;
-
-    MetalSharedBuffer render_proj_view_buffer;
-    MetalSharedBuffer light_proj_view_buffer;
-    MetalSharedBuffer game_camera_p_buffer;
-    MetalSharedBuffer time_buffer;
 
     MetalSharedBuffer icb_argument_buffer;
 

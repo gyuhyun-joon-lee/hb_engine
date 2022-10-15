@@ -96,8 +96,7 @@ struct GrassInstanceData
     float bend;
     float wiggliness;
     packed_float3 color;
-    float time_elasped_from_start; // TODO(gh) Do we even need to pass this?
-    float pad;
+    float pad[2];
 #elif INSIDE_VULKAN_SHADER
 #else
     // TODO(gh) This might be a problem in the future due to padding,
@@ -111,8 +110,7 @@ struct GrassInstanceData
     f32 bend;
     f32 wiggliness;
     v3 color;
-    f32 time_elasped_from_start; // TODO(gh) Do we even need to pass this?
-    f32 pad;
+    f32 pad[2];
 #endif
 };
 
