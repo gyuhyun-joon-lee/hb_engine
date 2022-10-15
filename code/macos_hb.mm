@@ -652,6 +652,10 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                 if(grid->should_draw)
                 {
+                    u32 wavefront_x = 8;
+                    u32 wavefront_y = 4;
+                    assert(grid->grass_count_x % wavefront_x == 0);
+                    assert(grid->grass_count_y % wavefront_y == 0);
 
                     // Encode command to reset the indirect command buffer
                     id<MTLBlitCommandEncoder> icb_result_encoder = [command_buffer blitCommandEncoder];
@@ -670,7 +674,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->perlin_noise_buffer_offset, 2);
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 3);
                     metal_set_compute_bytes(fill_grass_instance_compute_encoder, &one_thread_worth_dim, sizeof(one_thread_worth_dim), 4);
-                    metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(8, 4, 1));
+                    metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
                     metal_signal_fence_after(fill_grass_instance_compute_encoder, render_context->f);// use memory barrier instead?
                     metal_end_encoding(fill_grass_instance_compute_encoder);
 
