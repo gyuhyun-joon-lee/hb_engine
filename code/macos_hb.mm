@@ -690,8 +690,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_set_compute_bytes(encode_instanced_grass_encoder, &time_elasped_from_start, sizeof(time_elasped_from_start), 7);
 
                     // Tell Metal that we are going to write to the indirect command buffer
-                    [encode_instanced_grass_encoder useResource:render_context->grass_count_buffer.buffer usage:MTLResourceUsageRead];
-                    [encode_instanced_grass_encoder useResource:render_context->grass_instance_buffer.buffer usage:MTLResourceUsageRead];
                     [encode_instanced_grass_encoder useResource:render_context->indirect_command_buffer usage:MTLResourceUsageWrite];
 
                     // TODO(gh) we can combine some of the grids to dispatch render commands, but does that make sense?
