@@ -64,9 +64,8 @@ struct MetalRenderContext
     // Render Pipelines
     id<MTLRenderPipelineState> directional_light_shadowmap_pipeline;
     // NOTE(gh) Those that are marked as 'singlepass' will be sharing 
-    // single renderpass & color attachments will be sharing single renderpass & color attachments
     id<MTLRenderPipelineState> singlepass_cube_pipeline;
-    id<MTLRenderPipelineState> singlepass_deferred_lighting_pipeline;
+    id<MTLRenderPipelineState> deferred_pipeline;
     id<MTLRenderPipelineState> instanced_grass_render_pipeline;
 
     // Forward Pipelines
@@ -91,14 +90,12 @@ struct MetalRenderContext
     // TODO(gh) Also, we can combine this with the singlepass pretty easily
     MTLRenderPassDescriptor *forward_renderpass;
 
-    // NOTE(gh) G buffer generation + lighting renderpass
-    // TODO(gh) One downside of this single pass is that we don't have access to depth buffer (wait, what?)
-    MTLRenderPassDescriptor *single_renderpass; 
+    MTLRenderPassDescriptor *g_buffer_renderpass; 
+    MTLRenderPassDescriptor *deferred_renderpass; 
 
     // Fences
-    // Fence to detect whether the deferred rendering has been finished beforedoing the foward rendering
+    // Fence to detect whether the deferred rendering has been finished before doing the foward rendering
     id<MTLFence> forwardRenderFence;
-    id<MTLFence> f;
 
     // Textures
     id<MTLTexture> g_buffer_position_texture;
@@ -111,18 +108,19 @@ struct MetalRenderContext
     id<MTLTexture> directional_light_shadowmap_depth_texture;
 
     // Buffers
-    u32 indirect_command_count;
-    id<MTLIndirectCommandBuffer> indirect_command_buffer; 
+    u32 next_icb_to_use;
+    id<MTLIndirectCommandBuffer> icb[2]; 
+    MetalSharedBuffer icb_argument_buffer[2];
     MetalSharedBuffer combined_vertex_buffer;
     MetalSharedBuffer combined_index_buffer;
 
     MetalSharedBuffer giant_buffer; // will be passed on to the game code
 
-    MetalSharedBuffer grass_count_buffer;
+    MetalSharedBuffer grass_start_count_buffer; // updated when we encode the render command
+    MetalSharedBuffer grass_count_buffer;// This one just accumulates
     MetalSharedBuffer grass_instance_buffer;
     MetalSharedBuffer grass_index_buffer;
 
-    MetalSharedBuffer icb_argument_buffer;
 
     // Timestamps
     // MetalTimestamp shadowmap_rendering_start_timestamp;

@@ -678,30 +678,32 @@ struct Arguments
 
 kernel void 
 encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
-                                            const device uint *grass_count [[buffer(1)]],
-                                            const device GrassInstanceData *grass_instance_buffer [[buffer(2)]],
-                                            const device uint *indices [[buffer(3)]],
-                                            constant float4x4 *render_proj_view [[buffer(4)]],
-                                            constant float4x4 *light_proj_view [[buffer(5)]],
-                                            constant packed_float3 *game_camera_p [[buffer(6)]],
-                                            constant float *time_elasped [[buffer(7)]])
+                                            device atomic_uint *grass_start_count [[buffer(1)]],
+                                            const device uint *grass_count [[buffer(2)]],
+                                            const device GrassInstanceData *grass_instance_buffer [[buffer(3)]],
+                                            const device uint *indices [[buffer(4)]],
+                                            constant float4x4 *render_proj_view [[buffer(5)]],
+                                            constant float4x4 *light_proj_view [[buffer(6)]],
+                                            constant packed_float3 *game_camera_p [[buffer(7)]],
+                                            constant float *time_elasped [[buffer(8)]])
 {
     render_command command(arguments->cmd_buffer, 0);
 
-#if 1
     command.set_vertex_buffer(grass_instance_buffer, 0);
     command.set_vertex_buffer(render_proj_view, 1);
     command.set_vertex_buffer(light_proj_view, 2);
     command.set_vertex_buffer(game_camera_p, 3);
     command.set_vertex_buffer(time_elasped, 4);
-#endif
+
+    uint grass_start_index = atomic_fetch_add_explicit(grass_start_count, *grass_count, memory_order_relaxed);
 
     command.draw_indexed_primitives(primitive_type::triangle, // primitive type
                                     39, // index count TODO(gh) We can also just pass those in, too?
                                     indices, // index buffer
-                                    *grass_count, // instance count
+                                    *grass_count-grass_start_index, // instance count
                                     0, // base vertex
-                                    0); //base instance
+                                    grass_start_index); //base instance
+
 }
 
 GBufferVertexOutput

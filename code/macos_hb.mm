@@ -552,19 +552,25 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
     id <MTLTexture> drawable_texture =  render_context->view.currentDrawable.texture;
     if(drawable_texture)
     {
-        render_context->single_renderpass.colorAttachments[0].texture = drawable_texture;
-        render_context->single_renderpass.colorAttachments[0].clearColor = {render_push_buffer->clear_color.r,
-                                                                                     render_push_buffer->clear_color.g,
-                                                                                     render_push_buffer->clear_color.b,
-                                                                                     1.0f};
+        render_context->deferred_renderpass.colorAttachments[0].texture = drawable_texture;
+        render_context->deferred_renderpass.colorAttachments[0].clearColor = 
+        {
+            render_push_buffer->clear_color.r,
+            render_push_buffer->clear_color.g,
+            render_push_buffer->clear_color.b,
+            1.0f
+        };
 
         // TODO(gh) double check whether this thing is freed automatically or not
         // if not, we can pull this outside, and put this inside the render context
         // NOTE(gh) When we create a render_encoder, we cannot create another render encoder until we call endEncoding on the current one.
 
-        m4x4 main_proj = perspective_projection(render_push_buffer->render_camera_fov, render_push_buffer->render_camera_near, render_push_buffer->render_camera_far,
-                                           render_push_buffer->width_over_height);
-        m4x4 render_proj_view = transpose(main_proj * render_push_buffer->render_camera_view);
+        m4x4 render_proj = perspective_projection(
+                render_push_buffer->render_camera_fov, 
+                render_push_buffer->render_camera_near, 
+                render_push_buffer->render_camera_far,
+                render_push_buffer->width_over_height);
+        m4x4 render_proj_view = transpose(render_proj * render_push_buffer->render_camera_view);
 
         m4x4 game_proj = perspective_projection(render_push_buffer->game_camera_fov, render_push_buffer->game_camera_near, render_push_buffer->game_camera_far,
                                            render_push_buffer->width_over_height);
@@ -575,8 +581,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
         // init grass count
         *((u32 *)render_context->grass_count_buffer.memory) = 0;
+        *((u32 *)render_context->grass_start_count_buffer.memory) = 0;
         u32 grid_to_render_count = 0;
-        assert(render_context->indirect_command_count >= render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y);
         if(render_push_buffer->enable_grass_mesh_rendering)
         {
 #if 0
@@ -645,15 +651,10 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
             assert(sizeof(GrassInstanceData)*render_push_buffer->grass_grid_count_x*render_push_buffer->grass_grid_count_y*grid->grass_count_x*grid->grass_count_y <= 
                     render_context->grass_instance_buffer.size);
 #endif
-            // Reset the indirect command buffer
-            id<MTLBlitCommandEncoder> icb_result_encoder = [command_buffer blitCommandEncoder];
-            icb_result_encoder.label = @"Reset ICB";
-            [icb_result_encoder resetCommandsInBuffer:render_context->indirect_command_buffer
-                withRange:NSMakeRange(0, render_context->indirect_command_count)];
-            [icb_result_encoder endEncoding];
             
+            u32 total_grid_count = 8;//render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y;
             for(u32 grass_grid_index = 0;
-                    grass_grid_index < render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y;
+                    grass_grid_index < total_grid_count;
                     ++grass_grid_index)
             {
                 /*
@@ -694,76 +695,86 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     metal_memory_barrier_with_scope(fill_grass_instance_compute_encoder, MTLBarrierScopeBuffers);
                     metal_end_encoding(fill_grass_instance_compute_encoder);
                      
+                    grid_to_render_count++;
+                }
+
+                // flush the command every 4 grids or when we ran out of grids
+                if(((grid_to_render_count % 4 == 0) || (grass_grid_index == total_grid_count-1)) && 
+                    (grid_to_render_count != 0))
+                {
+                    // Reset the indirect command buffer
+                    metal_reset_icb(command_buffer, render_context->icb[render_context->next_icb_to_use]); 
 
                     id<MTLComputeCommandEncoder> encode_instanced_grass_encoder = [command_buffer computeCommandEncoder];
                     encode_instanced_grass_encoder.label = @"Encode Instanced Grass Render Commands";
-                    //metal_wait_for_fence(encode_instanced_grass_encoder, render_context->f);
                     metal_set_compute_pipeline(encode_instanced_grass_encoder, render_context->encode_instanced_grass_render_commands_pipeline);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->icb_argument_buffer.buffer, 0, 0);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_count_buffer.buffer, 0, 1);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_instance_buffer.buffer, 0, 2);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_index_buffer.buffer, 0, 3);
-
-                    metal_set_compute_bytes(encode_instanced_grass_encoder, &render_proj_view, sizeof(render_proj_view), 4);
-                    metal_set_compute_bytes(encode_instanced_grass_encoder, &light_proj_view, sizeof(light_proj_view), 5);
-                    metal_set_compute_bytes(encode_instanced_grass_encoder, &render_push_buffer->game_camera_p, sizeof(render_push_buffer->game_camera_p), 6);
-                    metal_set_compute_bytes(encode_instanced_grass_encoder, &time_elasped_from_start, sizeof(time_elasped_from_start), 7);
+                    metal_set_compute_buffer(
+                            encode_instanced_grass_encoder, 
+                            render_context->icb_argument_buffer[render_context->next_icb_to_use].buffer, 
+                            0, 0);
+                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_start_count_buffer.buffer, 0, 1);
+                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_count_buffer.buffer, 0, 2);
+                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_instance_buffer.buffer, 0, 3);
+                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_index_buffer.buffer, 0, 4);
+                    metal_set_compute_bytes(encode_instanced_grass_encoder, &render_proj_view, sizeof(render_proj_view), 5);
+                    metal_set_compute_bytes(encode_instanced_grass_encoder, &light_proj_view, sizeof(light_proj_view), 6);
+                    metal_set_compute_bytes(encode_instanced_grass_encoder, &render_push_buffer->game_camera_p, sizeof(render_push_buffer->game_camera_p), 7);
+                    metal_set_compute_bytes(encode_instanced_grass_encoder, &time_elasped_from_start, sizeof(time_elasped_from_start), 8);
 
                     // Tell Metal that we are going to write to the indirect command buffer
-                    [encode_instanced_grass_encoder useResource:render_context->indirect_command_buffer usage:MTLResourceUsageWrite];
+                    [encode_instanced_grass_encoder useResource:render_context->icb[render_context->next_icb_to_use] usage:MTLResourceUsageWrite];
 
                     // TODO(gh) we can combine some of the grids to dispatch render commands, but does that make sense?
                     metal_dispatch_compute_threads(encode_instanced_grass_encoder, V3u(1, 1, 1), V3u(1, 1, 1));
                     metal_memory_barrier_with_scope(encode_instanced_grass_encoder, MTLBarrierScopeBuffers);
                     metal_end_encoding(encode_instanced_grass_encoder);
 
-                    grid_to_render_count++;
-                }
+                    // Optimize the indirect command buffer
+                    metal_optimize_icb(command_buffer, render_context->icb[render_context->next_icb_to_use]);
 
-                if(grid_to_render_count == 4)
-                {
-                    
-                    // grid_to_render_count == 0;
+                    id<MTLRenderCommandEncoder> g_buffer_render_encoder = 
+                        [command_buffer renderCommandEncoderWithDescriptor: render_context->g_buffer_renderpass];
+
+                    metal_set_viewport(g_buffer_render_encoder, 0, 0, window_width, window_height, 0, 1);
+                    metal_set_scissor_rect(g_buffer_render_encoder, 0, 0, window_width, window_height);
+                    metal_set_triangle_fill_mode(g_buffer_render_encoder, MTLTriangleFillModeFill);
+                    metal_set_front_facing_winding(g_buffer_render_encoder, MTLWindingCounterClockwise);
+                    metal_set_cull_mode(g_buffer_render_encoder, MTLCullModeNone); 
+                    metal_set_depth_stencil_state(g_buffer_render_encoder, render_context->depth_state);
+                    metal_set_render_pipeline(g_buffer_render_encoder, render_context->instanced_grass_render_pipeline);
+                    [g_buffer_render_encoder 
+                        executeCommandsInBuffer:render_context->icb[render_context->next_icb_to_use] 
+                            withRange:NSMakeRange(0, 1)
+                    ];
+                    metal_end_encoding(g_buffer_render_encoder);
+
+                    render_context->next_icb_to_use = (render_context->next_icb_to_use+1)%2;
                 }
             }
         }
-        printf("grid to render count : %d\n", grid_to_render_count);
-          
-        // Optimize the indirect command buffer
-        id<MTLBlitCommandEncoder> optimize_icb_encoder = [command_buffer blitCommandEncoder];
-        optimize_icb_encoder.label = @"Optimize ICB";
-        [optimize_icb_encoder optimizeIndirectCommandBuffer:render_context->indirect_command_buffer
-            withRange:NSMakeRange(0, grid_to_render_count)];
-        [optimize_icb_encoder endEncoding];
-         
-        id<MTLRenderCommandEncoder> render_encoder = 
-            [command_buffer renderCommandEncoderWithDescriptor: render_context->single_renderpass];
 
-        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
-        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
-        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
-        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-        metal_set_cull_mode(render_encoder, MTLCullModeNone); 
-        metal_set_depth_stencil_state(render_encoder, render_context->depth_state);
-        metal_set_render_pipeline(render_encoder, render_context->instanced_grass_render_pipeline);
-        [render_encoder executeCommandsInBuffer:render_context->indirect_command_buffer withRange:NSMakeRange(0, grid_to_render_count)];
+        id<MTLRenderCommandEncoder> deferred_render_encoder = 
+            [command_buffer renderCommandEncoderWithDescriptor: render_context->deferred_renderpass];
 
-        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
-        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
-        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
-        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-        metal_set_cull_mode(render_encoder, MTLCullModeBack);
+        metal_set_viewport(deferred_render_encoder, 0, 0, window_width, window_height, 0, 1);
+        metal_set_scissor_rect(deferred_render_encoder, 0, 0, window_width, window_height);
+        metal_set_triangle_fill_mode(deferred_render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(deferred_render_encoder, MTLWindingCounterClockwise);
+        metal_set_cull_mode(deferred_render_encoder, MTLCullModeBack);
         // NOTE(gh) disable depth testing & writing for deferred lighting
-        metal_set_depth_stencil_state(render_encoder, render_context->disabled_depth_state);
+        metal_set_depth_stencil_state(deferred_render_encoder, render_context->disabled_depth_state);
 
-        metal_set_render_pipeline(render_encoder, render_context->singlepass_deferred_lighting_pipeline);
+        metal_set_render_pipeline(deferred_render_encoder, render_context->deferred_pipeline);
 
-        metal_set_vertex_bytes(render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
-        metal_set_vertex_bytes(render_encoder, &render_push_buffer->enable_shadow, sizeof(render_push_buffer->enable_shadow), 1);
+        metal_set_vertex_bytes(deferred_render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
+        metal_set_vertex_bytes(deferred_render_encoder, &render_push_buffer->enable_shadow, sizeof(render_push_buffer->enable_shadow), 1);
+        metal_set_fragment_texture(deferred_render_encoder, render_context->g_buffer_position_texture, 0);
+        metal_set_fragment_texture(deferred_render_encoder, render_context->g_buffer_normal_texture, 1);
+        metal_set_fragment_texture(deferred_render_encoder, render_context->g_buffer_color_texture, 2);
 
-        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
+        metal_draw_non_indexed(deferred_render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
 
-        metal_end_encoding(render_encoder);
+        metal_end_encoding(deferred_render_encoder);
 
 #if 0
         id<MTLRenderCommandEncoder> render_encoder = 
@@ -1317,12 +1328,10 @@ int main(void)
 
     // NOTE(gh) Not entirely sure if this is the right way to do, but I'll just do this
     // because it seems like every pipeline in singlepass should share same color attachments
-    MTLPixelFormat singlepass_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm, // placeholder for single pass deferred rendering
-                                                                  MTLPixelFormatRGBA32Float, // position
+    MTLPixelFormat singlepass_color_attachment_pixel_formats[] = {MTLPixelFormatRGBA32Float, // position
                                                                   MTLPixelFormatRGBA32Float, // normal
                                                                   MTLPixelFormatRGBA8Unorm}; // color
-    MTLColorWriteMask singlepass_color_attachment_write_masks[] = {MTLColorWriteMaskNone,
-                                                                   MTLColorWriteMaskAll, 
+    MTLColorWriteMask singlepass_color_attachment_write_masks[] = {MTLColorWriteMaskAll, 
                                                                    MTLColorWriteMaskAll,
                                                                    MTLColorWriteMaskAll};
     metal_render_context.singlepass_cube_pipeline = 
@@ -1334,24 +1343,16 @@ int main(void)
                             singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
                             view.depthStencilPixelFormat);
 
-    MTLPixelFormat deferred_lighting_pipeline_color_attachment_pixel_formats[] = 
-        {MTLPixelFormatBGRA8Unorm, // This is the default pixel format for displaying
-         MTLPixelFormatRGBA32Float, 
-         MTLPixelFormatRGBA32Float,
-         MTLPixelFormatRGBA8Unorm};
-    MTLColorWriteMask deferred_lighting_pipeline_color_attachment_write_masks[] = 
-        {MTLColorWriteMaskAll,
-         MTLColorWriteMaskNone,
-         MTLColorWriteMaskNone,
-         MTLColorWriteMaskNone};
-    metal_render_context.singlepass_deferred_lighting_pipeline = 
+    MTLPixelFormat deferred_lighting_pipeline_color_attachment_pixel_formats[] = {MTLPixelFormatBGRA8Unorm};
+    MTLColorWriteMask deferred_lighting_pipeline_color_attachment_write_masks[] = {MTLColorWriteMaskAll};
+    metal_render_context.deferred_pipeline = 
         metal_make_render_pipeline(device, "Deferred Lighting Pipeline", 
                             "singlepass_deferred_lighting_vertex", "singlepass_deferred_lighting_frag", 
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
                             deferred_lighting_pipeline_color_attachment_pixel_formats, array_count(deferred_lighting_pipeline_color_attachment_pixel_formats),
                             deferred_lighting_pipeline_color_attachment_write_masks, array_count(deferred_lighting_pipeline_color_attachment_write_masks),
-                            MTLPixelFormatDepth32Float);
+                            MTLPixelFormatInvalid);
 
     metal_render_context.directional_light_shadowmap_pipeline = 
         metal_make_render_pipeline(device, "Directional Light Shadowmap Pipeline", 
@@ -1439,6 +1440,7 @@ int main(void)
                             singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
                             view.depthStencilPixelFormat, 0, true);
 
+    metal_render_context.grass_start_count_buffer = metal_make_shared_buffer(device, sizeof(u32));
     metal_render_context.grass_count_buffer = metal_make_shared_buffer(device, sizeof(u32));
     // TODO(gh) Should be able to change this based on the game code grass count
     metal_render_context.grass_instance_buffer = metal_make_shared_buffer(device, 32*sizeof(GrassInstanceData)*256*256);
@@ -1487,28 +1489,32 @@ int main(void)
     // Create indirect command buffer using private storage mode; since only the GPU will
     // write to and read from the indirect command buffer, the CPU never needs to access the
     // memory
-    // TODO(gh) This is manually incremented, and it seems like the command only includes the render commands,
-    // not the commands that set buffer.
-    metal_render_context.indirect_command_count = 32;// TODO(gh) Change this so that we can only encode 4 tiles at once
-    metal_render_context.indirect_command_buffer = [device newIndirectCommandBufferWithDescriptor:icbDescriptor
-                                                            maxCommandCount:metal_render_context.indirect_command_count
-                                                            options:MTLResourceStorageModePrivate];
-    id<MTLArgumentEncoder> argument_encoder = 
-        metal_make_argument_encoder(shader_library, "encode_instanced_grass_render_commands", 0);
-    metal_render_context.icb_argument_buffer = metal_make_shared_buffer(device, argument_encoder.encodedLength);
+    for(u32 icb_index = 0;
+            icb_index < array_count(metal_render_context.icb);
+            ++icb_index)
+    {
+        metal_render_context.icb[icb_index] = 
+        [
+            device newIndirectCommandBufferWithDescriptor:icbDescriptor
+            maxCommandCount:1
+            options:MTLResourceStorageModePrivate
+        ];
 
-    [argument_encoder setArgumentBuffer:metal_render_context.icb_argument_buffer.buffer offset:0]; 
+        id<MTLArgumentEncoder> argument_encoder = 
+            metal_make_argument_encoder(shader_library, "encode_instanced_grass_render_commands", 0);
+        metal_render_context.icb_argument_buffer[icb_index] = metal_make_shared_buffer(device, argument_encoder.encodedLength);
 
-    [argument_encoder setIndirectCommandBuffer:metal_render_context.indirect_command_buffer
-        atIndex:0];
-#endif
+        [argument_encoder setArgumentBuffer:metal_render_context.icb_argument_buffer[icb_index].buffer offset:0]; 
+
+        [argument_encoder setIndirectCommandBuffer:metal_render_context.icb[icb_index]
+            atIndex:0];
+
+    }
+    #endif
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
 
     // NOTE(gh) Create required textures
-
-    // NOTE(gh) For apple silicons, we can use single pass deferred rendering,
-    // which requires MTLStorageModeMemoryless(cannot use MTLLoadActionLoad & MTLStoreActionStore))
     metal_render_context.g_buffer_position_texture  = 
         metal_make_texture_2D(device, 
                               MTLPixelFormatRGBA32Float, 
@@ -1516,7 +1522,7 @@ int main(void)
                               window_height,
                               MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
-                              MTLStorageModeMemoryless);
+                              MTLStorageModePrivate);
 
     metal_render_context.g_buffer_normal_texture  = 
         metal_make_texture_2D(device, 
@@ -1525,7 +1531,7 @@ int main(void)
                               window_height,
                               MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
-                              MTLStorageModeMemoryless);
+                              MTLStorageModePrivate);
 
     metal_render_context.g_buffer_color_texture  = 
         metal_make_texture_2D(device, 
@@ -1534,10 +1540,8 @@ int main(void)
                               window_height,
                               MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
-                              MTLStorageModeMemoryless);
+                              MTLStorageModePrivate);
 
-    // NOTE(gh) only the depth texture is not memoryless, as we need the depth buffer
-    // in forward pass that is not part of singlepass(but we can make as one)
     metal_render_context.g_buffer_depth_texture  = 
         metal_make_texture_2D(device, 
                               MTLPixelFormatDepth32Float, 
@@ -1552,34 +1556,53 @@ int main(void)
         metal_make_sampler(device, true, MTLSamplerAddressModeClampToEdge, 
                           MTLSamplerMinMagFilterLinear, MTLSamplerMipFilterNotMipmapped, MTLCompareFunctionLess);
 
-    MTLLoadAction single_lighting_renderpass_color_attachment_load_actions[] = 
-        {MTLLoadActionClear,
-        MTLLoadActionClear,
-        MTLLoadActionClear,
-        MTLLoadActionClear};
-    MTLStoreAction single_lighting_renderpass_color_attachment_store_actions[] = 
+    MTLLoadAction g_buffer_renderpass_color_attachment_load_actions[] = 
+        {MTLLoadActionClear,//position
+        MTLLoadActionClear,//normal
+        MTLLoadActionClear};//color
+    MTLStoreAction g_buffer_renderpass_color_attachment_store_actions[] = 
         {MTLStoreActionStore,
-        MTLStoreActionDontCare,
-        MTLStoreActionDontCare,
-        MTLStoreActionDontCare};
-    id<MTLTexture> single_lighting_renderpass_color_attachment_textures[] = 
-        {0,
-        metal_render_context.g_buffer_position_texture,
+        MTLStoreActionStore,
+        MTLStoreActionStore};
+    id<MTLTexture> g_buffer_renderpass_color_attachment_textures[] = 
+        {metal_render_context.g_buffer_position_texture,
         metal_render_context.g_buffer_normal_texture,
         metal_render_context.g_buffer_color_texture};
-    v4 single_lighting_renderpass_color_attachment_clear_colors[] = 
+    v4 g_buffer_renderpass_color_attachment_clear_colors[] = 
         {{0, 0, 0, 0},
         {0, 0, 0, 0},
-        {0, 0, 0, 0},
         {0, 0, 0, 0}};
-    metal_render_context.single_renderpass = 
-        metal_make_renderpass(single_lighting_renderpass_color_attachment_load_actions, array_count(single_lighting_renderpass_color_attachment_load_actions),
-                              single_lighting_renderpass_color_attachment_store_actions, array_count(single_lighting_renderpass_color_attachment_store_actions),
-                              single_lighting_renderpass_color_attachment_textures, array_count(single_lighting_renderpass_color_attachment_textures),
-                              single_lighting_renderpass_color_attachment_clear_colors, array_count(single_lighting_renderpass_color_attachment_clear_colors),
+    metal_render_context.g_buffer_renderpass = 
+        metal_make_renderpass(g_buffer_renderpass_color_attachment_load_actions, array_count(g_buffer_renderpass_color_attachment_load_actions),
+                              g_buffer_renderpass_color_attachment_store_actions, array_count(g_buffer_renderpass_color_attachment_store_actions),
+                              g_buffer_renderpass_color_attachment_textures, array_count(g_buffer_renderpass_color_attachment_textures),
+                              g_buffer_renderpass_color_attachment_clear_colors, array_count(g_buffer_renderpass_color_attachment_clear_colors),
                               MTLLoadActionClear, MTLStoreActionStore,  // store depth buffer for the forward pass
                               metal_render_context.g_buffer_depth_texture,
                               1.0f);
+
+    MTLLoadAction deferred_renderpass_color_attachment_load_actions[] = 
+    {
+        MTLLoadActionClear,
+    };
+    MTLStoreAction deferred_renderpass_color_attachment_store_actions[] = 
+    {
+        MTLStoreActionStore,
+    };
+    v4 deferred_renderpass_color_attachment_clear_colors[] = 
+    {
+        {0, 0, 0, 0},
+    };
+    metal_render_context.deferred_renderpass = metal_make_renderpass
+        (
+         deferred_renderpass_color_attachment_load_actions, array_count(deferred_renderpass_color_attachment_load_actions),
+         deferred_renderpass_color_attachment_store_actions, array_count(deferred_renderpass_color_attachment_store_actions),
+         0, 0,
+         deferred_renderpass_color_attachment_clear_colors, array_count(deferred_renderpass_color_attachment_clear_colors),
+         MTLLoadActionDontCare, MTLStoreActionDontCare,  // store depth buffer for the forward pass
+         0,
+         1.0f
+        );
 
     MTLLoadAction forward_renderpass_load_actions[] = {MTLLoadActionLoad};
     MTLStoreAction forward_renderpass_store_actions[] = {MTLStoreActionStore};
@@ -1613,9 +1636,8 @@ int main(void)
                               1.0f);
 
     metal_render_context.forwardRenderFence = metal_make_fence(device);
-    metal_render_context.f = metal_make_fence(device);
     
-    metal_render_context.combined_vertex_buffer = metal_make_shared_buffer(device, gigabytes(1));
+    metal_render_context.combined_vertex_buffer = metal_make_shared_buffer(device, megabytes(256));
     metal_render_context.combined_index_buffer = metal_make_shared_buffer(device, megabytes(256));
 
     metal_render_context.giant_buffer = metal_make_shared_buffer(device, gigabytes(1));
@@ -1626,6 +1648,7 @@ int main(void)
 
     // TODO(gh) More robust way to manage these buffers??(i.e asset system?)
 
+#if 0
     CVDisplayLinkRef display_link;
     if(CVDisplayLinkCreateWithActiveCGDisplays(&display_link) == kCVReturnSuccess)
     {
@@ -1651,6 +1674,7 @@ int main(void)
         printf("Failed to create compatible display link with the displays\n");
         invalid_code_path;
     }
+#endif
 
     PlatformInput platform_input = {};
 

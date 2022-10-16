@@ -7,23 +7,9 @@
 
 struct GBuffers
 {
-    // TODO(gh) maybe this is too big... shrink these down by sacrificing precisions
-    // NOTE(gh) This starts from 1, because if we wanna use single pass deferred rendering,
-    // the deferred lighting pass(which outputs the final color into the color attachment 0)
-    // should use the same numbers as these.
-    // so for the g buffer renderpass, colorattachment 0 will be specifed as invalid.
-    // and we will not output anything to that.
-    float4 position [[color(1)]];
-    float4 normal [[color(2)]];
-    float4 color [[color(3)]];
-};
-
-
-// TODO(gh) I don't like this...
-struct VertexPN
-{
-    float3 p;
-    float3 N;
+    float4 position [[color(0)]];
+    float4 normal [[color(1)]];
+    float4 color [[color(2)]];
 };
 
 // NOTE(gh) : vertex is a prefix for vertex shader
@@ -125,6 +111,7 @@ singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]])
 struct DeferredLightingVertexOutput
 {
     float4 clip_p [[position]];
+    float2 texcoord;
     float3 light_p;
 
     bool enable_shadow;
@@ -151,6 +138,7 @@ singlepass_deferred_lighting_vertex(uint vertexID [[vertex_id]],
     DeferredLightingVertexOutput result = {};
 
     result.clip_p = float4(full_quad_vertices[vertexID], 0.0f, 1.0f);
+    result.texcoord = 0.5f*(full_quad_vertices[vertexID] + 1.0f);
     result.light_p = float3(light_p[0], light_p[1], light_p[2]);
 
     result.enable_shadow = *enable_shadow;
@@ -158,18 +146,16 @@ singlepass_deferred_lighting_vertex(uint vertexID [[vertex_id]],
     return result;
 }
 
-#if __METAL_VERSION__ >= 230
-// NOTE(gh) Single pass deferred rendering, which can be identified by the color attachments
-// rather than texture binding
 fragment float4 
 singlepass_deferred_lighting_frag(DeferredLightingVertexOutput vertex_output [[stage_in]],
-                       float4 position_g_buffer [[color(1)]],
-                       float4 normal_g_buffer [[color(2)]],
-                       float4 color_g_buffer [[color(3)]])
+                       texture2d<float> g_buffer_position [[texture(0)]],
+                       texture2d<float> g_buffer_normal [[texture(1)]],
+                       texture2d<float> g_buffer_color [[texture(2)]])
 {
-    float3 p = position_g_buffer.xyz;
-    float4 N = normal_g_buffer;
-    float3 color = color_g_buffer.xyz;
+    constexpr sampler s = sampler(coord::normalized, address::clamp_to_zero, filter::linear);
+    float3 p = g_buffer_position.sample(s, vertex_output.texcoord).xyz;
+    float4 N = g_buffer_normal.sample(s, vertex_output.texcoord);
+    float3 color = g_buffer_color.sample(s, vertex_output.texcoord).xyz;
 
     float3 L = normalize(vertex_output.light_p - p);
 
@@ -187,6 +173,3 @@ singlepass_deferred_lighting_frag(DeferredLightingVertexOutput vertex_output [[s
 
     return result;
 }
-#else
-// TODO(gh) traditional deferred lighting pass?
-#endif

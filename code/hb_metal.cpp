@@ -789,6 +789,30 @@ metal_make_argument_encoder(id<MTLLibrary> shader_library, const char *function_
     return result;
 }
 
+// TODO(joon) only resets 1 command!!!!
+//encodes reset command
+inline void
+metal_reset_icb(id<MTLCommandBuffer> command_buffer, id<MTLIndirectCommandBuffer> indirect_command_buffer)
+{
+    id<MTLBlitCommandEncoder> icb_result_encoder = [command_buffer blitCommandEncoder];
+
+    icb_result_encoder.label = @"Reset ICB";
+    [icb_result_encoder resetCommandsInBuffer:indirect_command_buffer
+        withRange:NSMakeRange(0, 1)];
+    [icb_result_encoder endEncoding];
+}
+
+// TODO(joon) only resets 1 command!!!!
+inline void
+metal_optimize_icb(id<MTLCommandBuffer> command_buffer, id<MTLIndirectCommandBuffer> icb)
+{
+    id<MTLBlitCommandEncoder> optimize_icb_encoder = [command_buffer blitCommandEncoder];
+    optimize_icb_encoder.label = @"Optimize ICB";
+    [optimize_icb_encoder optimizeIndirectCommandBuffer:icb
+        withRange:NSMakeRange(0, 1)];
+    [optimize_icb_encoder endEncoding];
+}
+
 
 
 
