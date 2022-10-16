@@ -681,7 +681,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     
                     metal_set_compute_pipeline(fill_grass_instance_compute_encoder, render_context->fill_grass_instance_data_pipeline);
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_count_buffer.buffer, 0, 0);
-                    // offset is not neede because we are indexing the array using the grass index,
+                    // offset is not needed because we are indexing the array using the grass index,
                     // which gets accumulated anyway
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_instance_buffer.buffer, 0, 1);
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->perlin_noise_buffer_offset, 2);
