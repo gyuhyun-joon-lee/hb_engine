@@ -99,7 +99,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->grass_grid_count_y = 4;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
-        v2 floor_left_bottom_p = V2(-100, -100);
+        v2 floor_left_bottom_p = hadamard(-V2(game_state->grass_grid_count_x/2, game_state->grass_grid_count_y/2), grid_dim);
         for(u32 y = 0;
                 y < game_state->grass_grid_count_y;
                 ++y)

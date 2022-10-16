@@ -719,6 +719,12 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                     grid_to_render_count++;
                 }
+
+                if(grid_to_render_count == 4)
+                {
+                    
+                    // grid_to_render_count == 0;
+                }
             }
         }
         printf("grid to render count : %d\n", grid_to_render_count);
@@ -740,7 +746,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_set_cull_mode(render_encoder, MTLCullModeNone); 
         metal_set_depth_stencil_state(render_encoder, render_context->depth_state);
         metal_set_render_pipeline(render_encoder, render_context->instanced_grass_render_pipeline);
-        // TODO(gh) This range thing is so error-prone
         [render_encoder executeCommandsInBuffer:render_context->indirect_command_buffer withRange:NSMakeRange(0, grid_to_render_count)];
 
         metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
