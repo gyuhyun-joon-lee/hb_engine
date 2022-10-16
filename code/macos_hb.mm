@@ -744,6 +744,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                             withRange:NSMakeRange(0, 1)
                     ];
 #if 1
+                    // TODO(gh) not sure if we really need this fence?
                     metal_signal_fence_after(
                             g_buffer_render_encoder, 
                             render_context->grass_double_buffer_fence[render_context->next_grass_double_buffer_index],
@@ -757,6 +758,123 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         }
     }
 
+#if 1
+    id<MTLRenderCommandEncoder> g_buffer_render_encoder = 
+        [command_buffer renderCommandEncoderWithDescriptor: render_context->g_buffer_renderpass];
+    g_buffer_render_encoder.label = @"Object G Buffer Rendering";
+    metal_set_viewport(g_buffer_render_encoder, 0, 0, window_width, window_height, 0, 1);
+    metal_set_scissor_rect(g_buffer_render_encoder, 0, 0, window_width, window_height);
+    metal_set_triangle_fill_mode(g_buffer_render_encoder, MTLTriangleFillModeFill);
+    metal_set_front_facing_winding(g_buffer_render_encoder, MTLWindingCounterClockwise);
+    metal_set_depth_stencil_state(g_buffer_render_encoder, render_context->depth_state);
+    metal_set_cull_mode(g_buffer_render_encoder, MTLCullModeBack); 
+
+    for(u32 consumed = 0;
+            consumed < render_push_buffer->used;
+            )
+    {
+        RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_push_buffer->base + consumed);
+
+        switch(header->type)
+        {
+            case RenderEntryType_AABB:
+            {
+                RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
+                consumed += sizeof(*entry);
+
+                m4x4 model = M4x4();
+                model = transpose(model); // make the matrix column-major
+
+                PerObjectData per_object_data = {};
+                per_object_data.model = model;
+                per_object_data.color = entry->color;
+
+                // TODO(gh) Sort the render entry based on cull mode
+                // metal_set_cull_mode(g_buffer_render_encoder, MTLCullModeBack); 
+                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
+                metal_set_vertex_buffer(g_buffer_render_encoder, 
+                                        render_context->combined_vertex_buffer.buffer, 
+                                        entry->vertex_buffer_offset, 2);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
+
+                metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
+                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+
+                metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
+                        render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+            }break;
+
+            case RenderEntryType_Cube:
+            {
+                RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
+                consumed += sizeof(*entry);
+
+                m4x4 model = st_m4x4(entry->p, entry->dim);
+                model = transpose(model); // make the matrix column-major
+
+                PerObjectData per_object_data = {};
+                per_object_data.model = model;
+                per_object_data.color = entry->color;
+
+                // TODO(gh) Sort the render entry based on cull mode
+                // metal_set_cull_mode(g_buffer_render_encoder, MTLCullModeBack); 
+
+                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
+                metal_set_vertex_buffer(g_buffer_render_encoder, 
+                                        render_context->combined_vertex_buffer.buffer, 
+                                        entry->vertex_buffer_offset, 2);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
+
+                metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
+
+                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+
+                metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
+                        render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+            }break;
+
+            case RenderEntryType_Grass:
+            {
+                RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
+                consumed += sizeof(*entry);
+
+                m4x4 model = M4x4();
+                model = transpose(model); // make the matrix column-major
+
+                PerObjectData per_object_data = {};
+                per_object_data.model = model;
+                per_object_data.color = entry->color;
+
+                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
+
+                metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
+                metal_set_vertex_buffer(g_buffer_render_encoder, 
+                                        render_context->combined_vertex_buffer.buffer, 
+                                        entry->vertex_buffer_offset, 2);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
+
+                metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
+
+                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+
+                metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
+                        render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+            }break;
+
+            default:
+            {
+                consumed += header->size;
+            }
+        }
+    }
+    metal_end_encoding(g_buffer_render_encoder);
+#endif
+
+    // NOTE(gh) Run deferred lighting on the resulting framebuffer
     id <MTLTexture> drawable_texture =  render_context->view.currentDrawable.texture;
     if(drawable_texture)
     {
@@ -793,146 +911,11 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
         metal_end_encoding(deferred_render_encoder);
 
-#if 0
-        id<MTLRenderCommandEncoder> render_encoder = 
-            [command_buffer renderCommandEncoderWithDescriptor: render_context->single_renderpass];
-        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
-        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
-        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
-        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-        metal_set_depth_stencil_state(render_encoder, render_context->depth_state);
-        metal_set_cull_mode(render_encoder, MTLCullModeBack); 
-
-        for(u32 consumed = 0;
-                consumed < render_push_buffer->used;
-                )
-        {
-            RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_push_buffer->base + consumed);
-
-            switch(header->type)
-            {
-                case RenderEntryType_AABB:
-                {
-                    RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += sizeof(*entry);
-
-                    m4x4 model = M4x4();
-                    model = transpose(model); // make the matrix column-major
-
-                    PerObjectData per_object_data = {};
-                    per_object_data.model = model;
-                    per_object_data.color = entry->color;
-
-                    // TODO(gh) Sort the render entry based on cull mode
-                    // metal_set_cull_mode(render_encoder, MTLCullModeBack); 
-                    metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
-                    metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
-                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                    metal_set_vertex_buffer(render_encoder, 
-                                            render_context->combined_vertex_buffer.buffer, 
-                                            entry->vertex_buffer_offset, 2);
-                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
-
-                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
-                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-
-                    metal_draw_indexed(render_encoder, MTLPrimitiveTypeTriangle, 
-                            render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
-                }break;
-
-                case RenderEntryType_Cube:
-                {
-                    RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += sizeof(*entry);
-
-                    m4x4 model = st_m4x4(entry->p, entry->dim);
-                    model = transpose(model); // make the matrix column-major
-
-                    PerObjectData per_object_data = {};
-                    per_object_data.model = model;
-                    per_object_data.color = entry->color;
-
-                    // TODO(gh) Sort the render entry based on cull mode
-                    // metal_set_cull_mode(render_encoder, MTLCullModeBack); 
-
-                    metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
-                    metal_set_vertex_bytes(render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
-                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                    metal_set_vertex_buffer(render_encoder, 
-                                            render_context->combined_vertex_buffer.buffer, 
-                                            entry->vertex_buffer_offset, 2);
-                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
-
-                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
-
-                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-
-                    metal_draw_indexed(render_encoder, MTLPrimitiveTypeTriangle, 
-                            render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
-                }break;
-
-                case RenderEntryType_Grass:
-                {
-                    RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += sizeof(*entry);
-
-                    m4x4 model = M4x4();
-                    model = transpose(model); // make the matrix column-major
-
-                    PerObjectData per_object_data = {};
-                    per_object_data.model = model;
-                    per_object_data.color = entry->color;
-
-                    metal_set_render_pipeline(render_encoder, render_context->singlepass_cube_pipeline);
-
-                    metal_set_vertex_bytes(render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                    metal_set_vertex_buffer(render_encoder, 
-                                            render_context->combined_vertex_buffer.buffer, 
-                                            entry->vertex_buffer_offset, 2);
-                    metal_set_vertex_bytes(render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
-
-                    metal_set_fragment_sampler(render_encoder, render_context->shadowmap_sampler, 0);
-
-                    metal_set_fragment_texture(render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
-
-                    metal_draw_indexed(render_encoder, MTLPrimitiveTypeTriangle, 
-                            render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
-                }break;
-
-                default:
-                {
-                    consumed += header->size;
-                }
-            }
-        }
-
-#endif
-#if 0
-        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
-        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
-        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
-        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-        metal_set_cull_mode(render_encoder, MTLCullModeBack);
-        // NOTE(gh) disable depth testing & writing for deferred lighting
-        metal_set_depth_stencil_state(render_encoder, render_context->disabled_depth_state);
-
-        metal_set_render_pipeline(render_encoder, render_context->singlepass_deferred_lighting_pipeline);
-
-        metal_set_vertex_bytes(render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
-        metal_set_vertex_bytes(render_encoder, &render_push_buffer->enable_shadow, sizeof(render_push_buffer->enable_shadow), 1);
-
-        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
-
-        // TODO(gh) Should this be tile stage or fragment stage?
-        metal_signal_fence_after(render_encoder, render_context->forwardRenderFence, MTLRenderStageTile);
-        metal_end_encoding(render_encoder);
-#endif
-
-#if 0
+#if 1
 //////// NOTE(gh) Forward rendering start
         render_context->forward_renderpass.colorAttachments[0].texture = drawable_texture;
         id<MTLRenderCommandEncoder> forward_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->forward_renderpass];
-        metal_wait_for_fence(forward_render_encoder, render_context->forwardRenderFence, MTLRenderStageFragment);
+        metal_wait_for_fence(forward_render_encoder, render_context->forward_render_fence, MTLRenderStageFragment);
 
         metal_set_viewport(forward_render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(forward_render_encoder, 0, 0, window_width, window_height);
@@ -1619,7 +1602,7 @@ int main(void)
                               g_buffer_renderpass_color_attachment_store_actions, array_count(g_buffer_renderpass_color_attachment_store_actions),
                               g_buffer_renderpass_color_attachment_textures, array_count(g_buffer_renderpass_color_attachment_textures),
                               g_buffer_renderpass_color_attachment_clear_colors, array_count(g_buffer_renderpass_color_attachment_clear_colors),
-                              MTLLoadActionClear, MTLStoreActionStore,  // store depth buffer for the forward pass
+                              MTLLoadActionLoad, MTLStoreActionStore,  // store depth buffer for the forward pass
                               metal_render_context.g_buffer_depth_texture,
                               1.0f);
 

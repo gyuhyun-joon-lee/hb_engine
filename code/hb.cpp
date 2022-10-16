@@ -96,7 +96,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         v2 grid_dim = V2(100, 100); // TODO(gh) just temporary, need to 'gather' the floors later
         game_state->grass_grid_count_x = 4;
-        game_state->grass_grid_count_y = 4;
+        game_state->grass_grid_count_y = 6;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
         v2 floor_left_bottom_p = hadamard(-V2(game_state->grass_grid_count_x/2, game_state->grass_grid_count_y/2), grid_dim);
@@ -131,8 +131,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *debug_camera = &game_state->debug_camera;
 
     Camera *render_camera = game_camera;
-    //render_camera = debug_camera;
-    b32 show_perlin_noise_grid = false;
+    // render_camera = debug_camera;
+    b32 show_perlin_noise_grid = true;
 
     if(render_camera == debug_camera)
     {
