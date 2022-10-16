@@ -626,31 +626,48 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 device GrassInstanceData *grass_instance_buffer [[buffer(1)]],
                                 const device float *perlin_noise_values [[buffer (2)]],
                                 const device float *floor_z_values [[buffer (3)]],
-                                const device packed_float2 *one_thread_worth_dim [[buffer (4)]],
+                                const device GridInfo *grid_info [[buffer (4)]],
+                                constant float4x4 *game_proj_view [[buffer (5)]],
                                 uint2 thread_count_per_grid [[threads_per_grid]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {
-    // TODO(gh) should check if this is really 'atomic'
-    uint grass_index = atomic_fetch_add_explicit(grass_count, 1, memory_order_relaxed);
-    // TODO(gh) Might not work well when we frustum cull the grasses
-    uint y = grass_index/thread_count_per_grid.x; 
-    uint x = grass_index-thread_count_per_grid.x*y; 
-
+    uint grass_index = thread_count_per_grid.x*thread_position_in_grid.y + thread_position_in_grid.x;
+    
     float noise = perlin_noise_values[grass_index];
     float random01 = random_between_0_1(grass_index, 0, 0);
     float length = 2.8f + random01;
     float z = floor_z_values[grass_index];
+    float tilt = clamp(1.9f + 0.7f*random01 + noise, 0.0f, length - 0.01f);
     uint hash = grass_index;
 
-    grass_instance_buffer[grass_index].center = packed_float3(one_thread_worth_dim->x*x, one_thread_worth_dim->y*y, z);
-    grass_instance_buffer[grass_index].hash = hash; 
-    grass_instance_buffer[grass_index].blade_width = 0.195f;
-    grass_instance_buffer[grass_index].length = length;
-    grass_instance_buffer[grass_index].tilt = clamp(1.9f + 0.7f*random01 + noise, 0.0f, length - 0.01f);
-    grass_instance_buffer[grass_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
-    grass_instance_buffer[grass_index].bend = 0.7f + 0.2f*random01;
-    grass_instance_buffer[grass_index].wiggliness = 2 + random01;
-    grass_instance_buffer[grass_index].color = packed_float3(random01, 0.784f, 0.2f);
+    float3 center = packed_float3(grid_info->min, 0) + 
+                    packed_float3(grid_info->one_thread_worth_dim.x*thread_position_in_grid.x, 
+                                  grid_info->one_thread_worth_dim.y*thread_position_in_grid.y, 
+                                  z);
+
+    // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
+    // Also, we can make the length smaller based on the facing direction
+    // These pad values are not well thought out, just throwing those in
+    float3 length_pad = 0.6f*float3(length, length, 0.0f);
+    float3 min = center - length_pad;
+    float3 max = center + length_pad;
+    max.z +=tilt + 1.0f;
+     
+    if(is_inside_frustum(game_proj_view, min, max))
+    {
+        // TODO(gh) should check if this is really 'atomic'
+        uint grass_instance_index = atomic_fetch_add_explicit(grass_count, 1, memory_order_relaxed);
+
+        grass_instance_buffer[grass_instance_index].center = center;
+        grass_instance_buffer[grass_instance_index].hash = hash; 
+        grass_instance_buffer[grass_instance_index].blade_width = 0.195f;
+        grass_instance_buffer[grass_instance_index].length = length;
+        grass_instance_buffer[grass_instance_index].tilt = tilt;
+        grass_instance_buffer[grass_instance_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
+        grass_instance_buffer[grass_instance_index].bend = 0.7f + 0.2f*random01;
+        grass_instance_buffer[grass_instance_index].wiggliness = 2 + random01;
+        grass_instance_buffer[grass_instance_index].color = packed_float3(random01, 0.784f, 0.2f);
+    }
 }
 
 struct Arguments 

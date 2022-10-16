@@ -575,7 +575,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
         // init grass count
         *((u32 *)render_context->grass_count_buffer.memory) = 0;
-
+        u32 grid_to_render_count = 0;
+        assert(render_context->indirect_command_count >= render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y);
         if(render_push_buffer->enable_grass_mesh_rendering)
         {
 #if 0
@@ -640,12 +641,25 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
             }
 
             metal_get_timestamp(&render_context->grass_rendering_end_timestamp, command_buffer, render_context->device);
+            
+            assert(sizeof(GrassInstanceData)*render_push_buffer->grass_grid_count_x*render_push_buffer->grass_grid_count_y*grid->grass_count_x*grid->grass_count_y <= 
+                    render_context->grass_instance_buffer.size);
 #endif
-
+            // Reset the indirect command buffer
+            id<MTLBlitCommandEncoder> icb_result_encoder = [command_buffer blitCommandEncoder];
+            icb_result_encoder.label = @"Reset ICB";
+            [icb_result_encoder resetCommandsInBuffer:render_context->indirect_command_buffer
+                withRange:NSMakeRange(0, render_context->indirect_command_count)];
+            [icb_result_encoder endEncoding];
+            
             for(u32 grass_grid_index = 0;
-                    grass_grid_index < 1;//render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y;
+                    grass_grid_index < render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y;
                     ++grass_grid_index)
             {
+                /*
+                   If the instance data per grass count is 64 bytes,
+                   64 * 256 * 256 = 4mb per grid.
+                 */
                 GrassGrid *grid = render_push_buffer->grass_grids + grass_grid_index;
                 v2 grid_dim = grid->max - grid->min;
                 v2 one_thread_worth_dim = V2(grid_dim.x/grid->grass_count_x, grid_dim.y/grid->grass_count_y);
@@ -657,31 +671,33 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     assert(grid->grass_count_x % wavefront_x == 0);
                     assert(grid->grass_count_y % wavefront_y == 0);
 
-                    // Encode command to reset the indirect command buffer
-                    id<MTLBlitCommandEncoder> icb_result_encoder = [command_buffer blitCommandEncoder];
-                    icb_result_encoder.label = @"Reset ICB Blit Encoder";
-
-                    [icb_result_encoder resetCommandsInBuffer:render_context->indirect_command_buffer
-                        withRange:NSMakeRange(0, render_context->indirect_command_count)];
-
-                    [icb_result_encoder endEncoding];
+                    GridInfo grid_info = {};
+                    grid_info.min = grid->min;
+                    grid_info.max = grid->max;
+                    grid_info.one_thread_worth_dim = one_thread_worth_dim;
 
                     id<MTLComputeCommandEncoder> fill_grass_instance_compute_encoder = [command_buffer computeCommandEncoder];
                     fill_grass_instance_compute_encoder.label = @"Fill Grass Instance Data";
+                    
                     metal_set_compute_pipeline(fill_grass_instance_compute_encoder, render_context->fill_grass_instance_data_pipeline);
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_count_buffer.buffer, 0, 0);
+                    // offset is not neede because we are indexing the array using the grass index,
+                    // which gets accumulated anyway
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_instance_buffer.buffer, 0, 1);
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->perlin_noise_buffer_offset, 2);
                     metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 3);
-                    metal_set_compute_bytes(fill_grass_instance_compute_encoder, &one_thread_worth_dim, sizeof(one_thread_worth_dim), 4);
-                    metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
-                    metal_signal_fence_after(fill_grass_instance_compute_encoder, render_context->f);// use memory barrier instead?
-                    metal_end_encoding(fill_grass_instance_compute_encoder);
+                    metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 4);
+                    metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 5);
 
-#if 1
+                    metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
+                    //metal_signal_fence_after(fill_grass_instance_compute_encoder, render_context->f);// use memory barrier instead?
+                    metal_memory_barrier_with_scope(fill_grass_instance_compute_encoder, MTLBarrierScopeBuffers);
+                    metal_end_encoding(fill_grass_instance_compute_encoder);
+                     
+
                     id<MTLComputeCommandEncoder> encode_instanced_grass_encoder = [command_buffer computeCommandEncoder];
                     encode_instanced_grass_encoder.label = @"Encode Instanced Grass Render Commands";
-                    metal_wait_for_fence(encode_instanced_grass_encoder, render_context->f);
+                    //metal_wait_for_fence(encode_instanced_grass_encoder, render_context->f);
                     metal_set_compute_pipeline(encode_instanced_grass_encoder, render_context->encode_instanced_grass_render_commands_pipeline);
                     metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->icb_argument_buffer.buffer, 0, 0);
                     metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_count_buffer.buffer, 0, 1);
@@ -698,54 +714,51 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                     // TODO(gh) we can combine some of the grids to dispatch render commands, but does that make sense?
                     metal_dispatch_compute_threads(encode_instanced_grass_encoder, V3u(1, 1, 1), V3u(1, 1, 1));
+                    metal_memory_barrier_with_scope(encode_instanced_grass_encoder, MTLBarrierScopeBuffers);
                     metal_end_encoding(encode_instanced_grass_encoder);
-#endif
 
-                    // Encode command to optimize the indirect command buffer after encoding
-                    id<MTLBlitCommandEncoder> optimize_icb_encoder = [command_buffer blitCommandEncoder];
-                    optimize_icb_encoder.label = @"Optimize ICB Blit Encoder";
-
-                    [optimize_icb_encoder optimizeIndirectCommandBuffer:render_context->indirect_command_buffer
-                        withRange:NSMakeRange(0, render_context->indirect_command_count)];
-
-                    [optimize_icb_encoder endEncoding];
-
-#if 1
-                    id<MTLRenderCommandEncoder> render_encoder = 
-                        [command_buffer renderCommandEncoderWithDescriptor: render_context->single_renderpass];
-
-                    metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
-                    metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
-                    metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
-                    metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-                    metal_set_cull_mode(render_encoder, MTLCullModeNone); 
-                    metal_set_depth_stencil_state(render_encoder, render_context->depth_state);
-
-                    metal_set_render_pipeline(render_encoder, render_context->instanced_grass_render_pipeline);
-
-                    // TODO(gh) This range thing is so error-prone
-                    [render_encoder executeCommandsInBuffer:render_context->indirect_command_buffer withRange:NSMakeRange(0, render_context->indirect_command_count)];
-
-                    metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
-                    metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
-                    metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
-                    metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
-                    metal_set_cull_mode(render_encoder, MTLCullModeBack);
-                    // NOTE(gh) disable depth testing & writing for deferred lighting
-                    metal_set_depth_stencil_state(render_encoder, render_context->disabled_depth_state);
-
-                    metal_set_render_pipeline(render_encoder, render_context->singlepass_deferred_lighting_pipeline);
-
-                    metal_set_vertex_bytes(render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
-                    metal_set_vertex_bytes(render_encoder, &render_push_buffer->enable_shadow, sizeof(render_push_buffer->enable_shadow), 1);
-
-                    metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
-
-                    metal_end_encoding(render_encoder);
-#endif
+                    grid_to_render_count++;
                 }
             }
         }
+        printf("grid to render count : %d\n", grid_to_render_count);
+          
+        // Optimize the indirect command buffer
+        id<MTLBlitCommandEncoder> optimize_icb_encoder = [command_buffer blitCommandEncoder];
+        optimize_icb_encoder.label = @"Optimize ICB";
+        [optimize_icb_encoder optimizeIndirectCommandBuffer:render_context->indirect_command_buffer
+            withRange:NSMakeRange(0, grid_to_render_count)];
+        [optimize_icb_encoder endEncoding];
+         
+        id<MTLRenderCommandEncoder> render_encoder = 
+            [command_buffer renderCommandEncoderWithDescriptor: render_context->single_renderpass];
+
+        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
+        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
+        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
+        metal_set_cull_mode(render_encoder, MTLCullModeNone); 
+        metal_set_depth_stencil_state(render_encoder, render_context->depth_state);
+        metal_set_render_pipeline(render_encoder, render_context->instanced_grass_render_pipeline);
+        // TODO(gh) This range thing is so error-prone
+        [render_encoder executeCommandsInBuffer:render_context->indirect_command_buffer withRange:NSMakeRange(0, grid_to_render_count)];
+
+        metal_set_viewport(render_encoder, 0, 0, window_width, window_height, 0, 1);
+        metal_set_scissor_rect(render_encoder, 0, 0, window_width, window_height);
+        metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(render_encoder, MTLWindingCounterClockwise);
+        metal_set_cull_mode(render_encoder, MTLCullModeBack);
+        // NOTE(gh) disable depth testing & writing for deferred lighting
+        metal_set_depth_stencil_state(render_encoder, render_context->disabled_depth_state);
+
+        metal_set_render_pipeline(render_encoder, render_context->singlepass_deferred_lighting_pipeline);
+
+        metal_set_vertex_bytes(render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
+        metal_set_vertex_bytes(render_encoder, &render_push_buffer->enable_shadow, sizeof(render_push_buffer->enable_shadow), 1);
+
+        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
+
+        metal_end_encoding(render_encoder);
 
 #if 0
         id<MTLRenderCommandEncoder> render_encoder = 
@@ -1422,7 +1435,8 @@ int main(void)
                             view.depthStencilPixelFormat, 0, true);
 
     metal_render_context.grass_count_buffer = metal_make_shared_buffer(device, sizeof(u32));
-    metal_render_context.grass_instance_buffer = metal_make_shared_buffer(device, sizeof(GrassInstanceData)*256*256);
+    // TODO(gh) Should be able to change this based on the game code grass count
+    metal_render_context.grass_instance_buffer = metal_make_shared_buffer(device, 32*sizeof(GrassInstanceData)*256*256);
 
     metal_render_context.grass_index_buffer = metal_make_shared_buffer(device, sizeof(u32)*39);
 
@@ -1470,10 +1484,10 @@ int main(void)
     // memory
     // TODO(gh) This is manually incremented, and it seems like the command only includes the render commands,
     // not the commands that set buffer.
-    metal_render_context.indirect_command_count = 1;
+    metal_render_context.indirect_command_count = 32;// TODO(gh) Change this so that we can only encode 4 tiles at once
     metal_render_context.indirect_command_buffer = [device newIndirectCommandBufferWithDescriptor:icbDescriptor
                                                             maxCommandCount:metal_render_context.indirect_command_count
-                                                            options:MTLResourceStorageModeShared];
+                                                            options:MTLResourceStorageModePrivate];
     id<MTLArgumentEncoder> argument_encoder = 
         metal_make_argument_encoder(shader_library, "encode_instanced_grass_render_commands", 0);
     metal_render_context.icb_argument_buffer = metal_make_shared_buffer(device, argument_encoder.encodedLength);

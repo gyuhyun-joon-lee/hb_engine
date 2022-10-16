@@ -94,13 +94,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             game_state->permutations255[i] = permutations255[i];
         }
 
-        v2 combined_floor_dim = V2(200, 200); // TODO(gh) just temporary, need to 'gather' the floors later
-        u32 total_grass_count_x = 512;
-        u32 total_grass_count_y = 512;
-        game_state->grass_grid_count_x = 2;
-        game_state->grass_grid_count_y = 2;
+        v2 grid_dim = V2(100, 100); // TODO(gh) just temporary, need to 'gather' the floors later
+        game_state->grass_grid_count_x = 6;
+        game_state->grass_grid_count_y = 4;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
-        v2 sub_floor_dim = V2(combined_floor_dim.x/game_state->grass_grid_count_x, combined_floor_dim.y/game_state->grass_grid_count_y); // Floor is only consisted of the flat triangles
 
         v2 floor_left_bottom_p = V2(-100, -100);
         for(u32 y = 0;
@@ -111,32 +108,21 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     x < game_state->grass_grid_count_x;
                     ++x)
             {
-                u32 grass_on_floor_count_x = total_grass_count_x / game_state->grass_grid_count_x;
-                u32 grass_on_floor_count_y =  total_grass_count_y / game_state->grass_grid_count_y;
+                // TODO(gh) Beware that when you change this value, you also need to change the size of grass instance buffer
+                // and the indirect command count(for now)
+                u32 grass_on_floor_count_x = 256;
+                u32 grass_on_floor_count_y = 256;
 
-                v2 min = floor_left_bottom_p + hadamard(sub_floor_dim, V2(x, y));
-                v2 max = min + sub_floor_dim;
+                v2 min = floor_left_bottom_p + hadamard(grid_dim, V2(x, y));
+                v2 max = min + grid_dim;
 
                 Entity *floor_entity = 
-                    add_floor_entity(game_state, &game_state->transient_arena, V3(min, 0), sub_floor_dim, V3(0.25f, 0.1f, 0.04f), grass_on_floor_count_x, grass_on_floor_count_y);
+                    add_floor_entity(game_state, &game_state->transient_arena, V3(min, 0), grid_dim, V3(0.25f, 0.1f, 0.04f), grass_on_floor_count_x, grass_on_floor_count_y);
 
                 GrassGrid *grid = game_state->grass_grids + y*game_state->grass_grid_count_x + x;
                 init_grass_grid(platform_render_push_buffer, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
             }
         }
-
-#if 0
-        u32 desired_grass_count = 5000;
-        // NOTE(gh) grass entities would always be sequential to each other.
-        plant_grasses_using_white_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
-                                        floor_width, floor_height, 0, desired_grass_count);
-#else 
-#if 0
-        u32 desired_grass_count = 100;
-        plant_grasses_using_brute_force_blue_noise(game_state, &game_state->random_series, platform_render_push_buffer, &game_state->transient_arena, 
-                                                  10, 10, 0, desired_grass_count, 0.1f);
-#endif
-#endif
         
         game_state->is_initialized = true;
     }
@@ -145,8 +131,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *debug_camera = &game_state->debug_camera;
 
     Camera *render_camera = game_camera;
-    // render_camera = debug_camera;
+    //render_camera = debug_camera;
     b32 show_perlin_noise_grid = false;
+
+    if(render_camera == debug_camera)
+    {
+        game_camera->roll += 0.8f * platform_input->dt_per_frame;
+    }
 
     f32 camera_rotation_speed = 3.0f * platform_input->dt_per_frame;
 
@@ -277,8 +268,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             V3(max.x, max.y, max.z),
         };
 
-        // grid->should_draw = false;
-        grid->should_draw = true;
+        grid->should_draw = false;
+        // grid->should_draw = true;
         for(u32 i = 0;
                 i < array_count(vertices) && !grid->should_draw;
                 ++i)
