@@ -90,12 +90,15 @@ struct MetalRenderContext
     // TODO(gh) Also, we can combine this with the singlepass pretty easily
     MTLRenderPassDescriptor *forward_renderpass;
 
+    // TODO(gh) do we really need this clear pass?
+    MTLRenderPassDescriptor *clear_g_buffer_renderpass; 
     MTLRenderPassDescriptor *g_buffer_renderpass; 
     MTLRenderPassDescriptor *deferred_renderpass; 
 
     // Fences
     // Fence to detect whether the deferred rendering has been finished before doing the foward rendering
-    id<MTLFence> forwardRenderFence;
+    id<MTLFence> forward_render_fence;
+    id<MTLFence> grass_double_buffer_fence[2];
 
     // Textures
     id<MTLTexture> g_buffer_position_texture;
@@ -108,7 +111,7 @@ struct MetalRenderContext
     id<MTLTexture> directional_light_shadowmap_depth_texture;
 
     // Buffers
-    u32 next_icb_to_use;
+    u32 next_grass_double_buffer_index;
     id<MTLIndirectCommandBuffer> icb[2]; 
     MetalSharedBuffer icb_argument_buffer[2];
     MetalSharedBuffer combined_vertex_buffer;

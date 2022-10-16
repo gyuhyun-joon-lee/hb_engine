@@ -687,6 +687,7 @@ encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
                                             constant packed_float3 *game_camera_p [[buffer(7)]],
                                             constant float *time_elasped [[buffer(8)]])
 {
+    uint grass_start_index = atomic_exchange_explicit(grass_start_count, *grass_count, memory_order_relaxed);
     render_command command(arguments->cmd_buffer, 0);
 
     command.set_vertex_buffer(grass_instance_buffer, 0);
@@ -694,8 +695,6 @@ encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
     command.set_vertex_buffer(light_proj_view, 2);
     command.set_vertex_buffer(game_camera_p, 3);
     command.set_vertex_buffer(time_elasped, 4);
-
-    uint grass_start_index = atomic_fetch_add_explicit(grass_start_count, *grass_count, memory_order_relaxed);
 
     command.draw_indexed_primitives(primitive_type::triangle, // primitive type
                                     39, // index count TODO(gh) We can also just pass those in, too?

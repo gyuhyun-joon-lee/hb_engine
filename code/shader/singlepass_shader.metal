@@ -139,6 +139,7 @@ singlepass_deferred_lighting_vertex(uint vertexID [[vertex_id]],
 
     result.clip_p = float4(full_quad_vertices[vertexID], 0.0f, 1.0f);
     result.texcoord = 0.5f*(full_quad_vertices[vertexID] + 1.0f);
+    result.texcoord.y = 1.0f - result.texcoord.y;
     result.light_p = float3(light_p[0], light_p[1], light_p[2]);
 
     result.enable_shadow = *enable_shadow;
