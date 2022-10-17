@@ -18,7 +18,6 @@ COMPILER_FLAGS = -g -Wall -O2 -std=c++11 -lstdc++ -lm -pthread -D HB_DEBUG=0 -D 
 COMPILER_IGNORE_WARNINGS = -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-writable-strings -Wno-switch -Wno-objc-missing-super-calls -Wno-missing-braces -Wnonportable-include-path -Wno-uninitialized -Wno-nonportable-include-path -Wno-tautological-bitwise-compare -Wno-unused-but-set-variable
 
 all : make_directory make_app compile_main create_lock compile_game delete_lock cleanup
-#all : make_directory make_app fox.dylib fox.app clean
 
 make_directory : 
 	mkdir -p $(MACOS_BUILD_PATH)
