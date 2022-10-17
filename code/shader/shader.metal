@@ -479,7 +479,7 @@ calculate_grass_vertex(const object_data PerGrassData *per_grass_data,
     else
     {
         // TODO(gh) Clean this up! 
-        // TODO(gh) Original method do it in view angle, any reason to do that
+        // TODO(gh) Original method do it in view space, any reason to do that
         // (grass possibly facing the direction other than z)?
         bool should_shift_thread_mod_1 = (dot(orthogonal_normal, *camera_p - center) < 0);
         float shift = 0.08f;
@@ -620,7 +620,6 @@ forward_show_frustum_frag(ShowFrustumVetexOutput vertex_output [[stage_in]])
     return result;
 }
 
-
 kernel void
 fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 device GrassInstanceData *grass_instance_buffer [[buffer(1)]],
@@ -676,6 +675,7 @@ struct Arguments
     command_buffer cmd_buffer [[id(0)]]; 
 };
 
+// TODO(gh) Use two different vertex functions to support distance-based LOD
 kernel void 
 encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
                                             device atomic_uint *grass_start_count [[buffer(1)]],

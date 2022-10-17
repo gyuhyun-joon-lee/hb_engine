@@ -779,7 +779,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         }
     }
 
-#if 1
     id<MTLRenderCommandEncoder> g_buffer_render_encoder = 
         [command_buffer renderCommandEncoderWithDescriptor: render_context->g_buffer_renderpass];
     g_buffer_render_encoder.label = @"Object G Buffer Rendering";
@@ -893,7 +892,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         }
     }
     metal_end_encoding(g_buffer_render_encoder);
-#endif
 
     // NOTE(gh) Run deferred lighting on the resulting framebuffer
     id <MTLTexture> drawable_texture =  render_context->view.currentDrawable.texture;
@@ -932,7 +930,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
         metal_end_encoding(deferred_render_encoder);
 
-#if 1
 //////// NOTE(gh) Forward rendering start
         render_context->forward_renderpass.colorAttachments[0].texture = drawable_texture;
         id<MTLRenderCommandEncoder> forward_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->forward_renderpass];
@@ -1036,28 +1033,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
             }
         }
 
-#if 0
-
-        v3 screen_space_triangle_vertices[] = 
-        {
-            {-0.7f, -0.7f, 0.0f},
-            {0.7f, -0.7f, 0.0f},
-            {-0.7f, 0.7f, 0.0f},
-
-            {0.7f, -0.7f, 0.0f},
-            {0.7f, 0.7f, 0.0f},
-            {-0.7f, 0.7f, 0.0f},
-        };
-
-        metal_set_render_pipeline(forward_render_encoder, render_context->screen_space_triangle_pipeline);
-        metal_set_vertex_bytes(forward_render_encoder, screen_space_triangle_vertices, array_size(screen_space_triangle_vertices), 0);
-        metal_set_vertex_bytes(forward_render_encoder, &time_elasped_from_start, sizeof(time_elasped_from_start), 1);
-        metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 0, array_count(screen_space_triangle_vertices));
-
-#endif
-
         metal_end_encoding(forward_render_encoder);
-#endif
 
         metal_commit_command_buffer(command_buffer);
          
