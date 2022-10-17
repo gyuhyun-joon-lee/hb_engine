@@ -6,7 +6,7 @@ MAKEFLAGS += --silent
 
 MAIN_CODE_PATH = ../code
 MACOS_BUILD_PATH = ../build
-MACOS_APP_NAME = PUL.app
+MACOS_APP_NAME = HB.app
 MACOS_EXE_PATH = $(MACOS_BUILD_PATH)/$(MACOS_APP_NAME)/Contents/MacOS
 MACOS_RESOURCE_PATH = $(MACOS_BUILD_PATH)/$(MACOS_APP_NAME)/Contents/Resources
 MACOS_FRAMEWORK = -framework Cocoa -framework CoreFoundation -framework CoreGraphics -framework CoreVideo -framework Metal -framework MetalKit
@@ -32,14 +32,14 @@ make_app :
 # target:  dependency1 dependency2 ...
 #       <tab> command
 compile_main : $(MAIN_CODE_PATH)/macos_hb.mm
-	$(COMPILER) $(ARCHITECTURE) $(COMPILER_FLAGS) $(COMPILER_IGNORE_WARNINGS) $(MACOS_FRAMEWORK) -o $(MACOS_EXE_PATH)/PUL $(MAIN_CODE_PATH)/macos_hb.mm 
+	$(COMPILER) $(ARCHITECTURE) $(COMPILER_FLAGS) $(COMPILER_IGNORE_WARNINGS) $(MACOS_FRAMEWORK) -o $(MACOS_EXE_PATH)/HB $(MAIN_CODE_PATH)/macos_hb.mm 
 
 create_lock : 
 	touch $(MACOS_EXE_PATH)/lock.tmp
 
 # TODO(joon) map file is not being generated correctly...
 compile_game : 
-	$(COMPILER) $(ARCHITECTURE)  -Wl,-map,$(MACOS_EXE_PATH)/output.map $(COMPILER_FLAGS) -D debug_records=game_debug_records -dynamiclib $(COMPILER_IGNORE_WARNINGS) -o $(MACOS_EXE_PATH)/pul.dylib $(MAIN_CODE_PATH)/hb.cpp 
+	$(COMPILER) $(ARCHITECTURE)  -Wl,-map,$(MACOS_EXE_PATH)/output.map $(COMPILER_FLAGS) -D debug_records=game_debug_records -dynamiclib $(COMPILER_IGNORE_WARNINGS) -o $(MACOS_EXE_PATH)/hb.dylib $(MAIN_CODE_PATH)/hb.cpp 
 
 delete_lock : 
 	rm $(MACOS_EXE_PATH)/lock.tmp

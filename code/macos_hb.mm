@@ -1205,8 +1205,8 @@ int main(void)
     CGSize display_dim = CGDisplayScreenSize(main_displayID);
     u32 display_serial_number = CGDisplaySerialNumber(main_displayID);
 
-    char *lock_file_path = "/Volumes/meka/HB_engine/build/PUL.app/Contents/MacOS/lock.tmp";
-    char *game_code_path = "/Volumes/meka/HB_engine/build/PUL.app/Contents/MacOS/pul.dylib";
+    char *lock_file_path = "/Volumes/meka/HB_engine/build/HB.app/Contents/MacOS/lock.tmp";
+    char *game_code_path = "/Volumes/meka/HB_engine/build/HB.app/Contents/MacOS/hb.dylib";
     MacOSGameCode macos_game_code = {};
     macos_load_game_code(&macos_game_code, game_code_path);
 
