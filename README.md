@@ -19,11 +19,11 @@ If you have one of the apple sillicon Macs and wanna build the project, please f
 
 # Features
 For now, HB engine is capable of :
-- Rendering 1M procudural grasses using the traditional pipelines, or 260K grasses using mesh shading in 60FPS.
+- Rendering 1M procedural grasses using the traditional pipelines, or 260K grasses using mesh shading in 60FPS.
 - Multi-threaded Perlin noise generation to simulate wind.
 - Live code editing, which allows you to edit game code without closing the application.
 
-# Misc
+# Showcase
 Showcase #1(2022/10/12)
 https://www.youtube.com/watch?v=kZ75YueSfdk
 ![Sample 1](showcase/2022_10_12.png)
