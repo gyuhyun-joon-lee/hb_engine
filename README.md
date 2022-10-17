@@ -26,5 +26,5 @@ For now, HB engine is capable of :
 # Misc
 Showcase #1(2022/10/12)
 https://www.youtube.com/watch?v=kZ75YueSfdk
-![Sample 1](sample_images/2022_10_12.png)
+![Sample 1](showcase/2022_10_12.png)
 
