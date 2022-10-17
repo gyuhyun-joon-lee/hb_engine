@@ -29,12 +29,12 @@
 internal void output_debug_records();
 
 /*
-    TODO(gh)
-    - Render Font using one of the graphics API
-        - If we are going to use the packed texture, how should we correctly sample from it in the shader?
-*/
+   TODO(gh)
+   - Render Font using one of the graphics API
+   - If we are going to use the packed texture, how should we correctly sample from it in the shader?
+   */
 
-extern "C" 
+    extern "C" 
 GAME_UPDATE_AND_RENDER(update_and_render)
 {
     GameState *game_state = (GameState *)platform_memory->permanent_memory;
@@ -48,11 +48,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // TODO(gh) entity arena?
         game_state->max_entity_count = 8192;
         game_state->entities = push_array(&game_state->transient_arena, Entity, game_state->max_entity_count);
-        
+
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
-                                                    game_state->transient_arena.total_size + 
-                                                    game_state->mass_agg_arena.total_size,
-                                                    megabytes(16));
+                game_state->transient_arena.total_size + 
+                game_state->mass_agg_arena.total_size,
+                megabytes(16));
 
         // TODO(gh) get rid of rand(), or get the time and rand information from platform layer?
         // srand(time(0));
@@ -95,8 +95,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
 
         v2 grid_dim = V2(100, 100); // TODO(gh) just temporary, need to 'gather' the floors later
-        game_state->grass_grid_count_x = 4;
-        game_state->grass_grid_count_y = 6;
+        game_state->grass_grid_count_x = 6;
+        game_state->grass_grid_count_y = 4;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
         v2 floor_left_bottom_p = hadamard(-V2(game_state->grass_grid_count_x/2, game_state->grass_grid_count_y/2), grid_dim);
@@ -123,7 +123,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 init_grass_grid(platform_render_push_buffer, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
             }
         }
-        
+
         game_state->is_initialized = true;
     }
 
@@ -132,7 +132,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     Camera *render_camera = game_camera;
     // render_camera = debug_camera;
-    b32 show_perlin_noise_grid = true;
+    b32 show_perlin_noise_grid = false;
 
     if(render_camera == debug_camera)
     {
@@ -177,19 +177,19 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         render_camera->p += -camera_speed*camera_right_dir;
     }
-    
+
     // NOTE(gh) update entity start
     for(u32 entity_index = 0;
-        entity_index < game_state->entity_count;
-        ++entity_index)
+            entity_index < game_state->entity_count;
+            ++entity_index)
     {
         Entity *entity = game_state->entities + entity_index;
         switch(entity->type)
         {
             case EntityType_Floor:
             case EntityType_AABB:
-            {
-            }break;
+                {
+                }break;
         }
     }
 
@@ -197,7 +197,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #if 1
     TempMemory perlin_noise_temp_memory = 
         start_temp_memory(&game_state->transient_arena, 
-                        sizeof(ThreadUpdatePerlinNoiseBufferData)*update_perlin_noise_buffer_data_count);
+                sizeof(ThreadUpdatePerlinNoiseBufferData)*update_perlin_noise_buffer_data_count);
     ThreadUpdatePerlinNoiseBufferData *update_perlin_noise_buffer_data = 
         push_array(&perlin_noise_temp_memory, ThreadUpdatePerlinNoiseBufferData, update_perlin_noise_buffer_data_count);
 #endif
@@ -234,9 +234,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
     m4x4 view = camera_transform(game_camera);
     m4x4 proj = perspective_projection_near_is_01(game_camera->fov, 
-                                                game_camera->near, 
-                                                game_camera->far, 
-                                                platform_render_push_buffer->width_over_height);
+            game_camera->near, 
+            game_camera->far, 
+            platform_render_push_buffer->width_over_height);
 
     m4x4 proj_view = proj * view;
 
@@ -279,8 +279,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             // We are using projection matrix which puts z to 0 to 1
             if((hp.x >= -hp.w && hp.x <= hp.w) &&
-                (hp.y >= -hp.w && hp.y <= hp.w) &&
-                (hp.z >= 0 && hp.z <= hp.w))
+                    (hp.y >= -hp.w && hp.y <= hp.w) &&
+                    (hp.z >= 0 && hp.z <= hp.w))
             {
                 grid->should_draw = true;
                 break;
@@ -290,10 +290,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     // NOTE(gh) render entity start
     init_render_push_buffer(platform_render_push_buffer, render_camera, game_camera,
-                            game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
-                            V3(0, 0, 0), true);
+            game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
+            V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
-    platform_render_push_buffer->enable_grass_mesh_rendering = true;
+    platform_render_push_buffer->enable_grass_rendering = true;
     platform_render_push_buffer->enable_show_perlin_noise_grid = show_perlin_noise_grid;
 
     for(u32 entity_index = 0;

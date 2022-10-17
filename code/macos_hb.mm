@@ -444,6 +444,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
     // NOTE(gh) render shadow map
     id<MTLRenderCommandEncoder> shadowmap_render_encoder = [shadow_command_buffer renderCommandEncoderWithDescriptor : render_context->directional_light_shadowmap_renderpass];
+    shadowmap_render_encoder.label = @"Shadowmap Render";
     metal_set_viewport(shadowmap_render_encoder, 0, 0, 
                        render_context->directional_light_shadowmap_depth_texture_width, 
                        render_context->directional_light_shadowmap_depth_texture_height, 
@@ -550,6 +551,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
     id<MTLRenderCommandEncoder> clear_g_buffer_render_encoder = 
         [command_buffer renderCommandEncoderWithDescriptor: render_context->clear_g_buffer_renderpass];
+    clear_g_buffer_render_encoder.label = @"Clear G Buffers";
     metal_end_encoding(clear_g_buffer_render_encoder);
     
 
@@ -571,12 +573,19 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
     PerFrameData per_frame_data = {};
     per_frame_data.proj_view = render_proj_view;
 
-    // init grass count
-    *((u32 *)render_context->grass_count_buffer.memory) = 0;
-    *((u32 *)render_context->grass_start_count_buffer.memory) = 0;
     u32 grid_to_render_count = 0;
-    if(render_push_buffer->enable_grass_mesh_rendering)
+    if(render_push_buffer->enable_grass_rendering)
     {
+        // init grass count
+        // TODO(gh) not sure why, but it seems like this removes the nasty bug that I had before...
+        id<MTLComputeCommandEncoder> initialize_grass_counts_encoder = [command_buffer computeCommandEncoder];
+        metal_set_compute_pipeline(initialize_grass_counts_encoder, render_context->initialize_grass_counts_pipeline);
+        metal_set_compute_buffer(initialize_grass_counts_encoder, render_context->grass_start_count_buffer.buffer, 0, 0);
+        metal_set_compute_buffer(initialize_grass_counts_encoder, render_context->grass_count_buffer.buffer, 0, 1);
+        metal_dispatch_compute_threads(initialize_grass_counts_encoder, V3u(1, 1, 1), V3u(1, 1, 1));
+        metal_memory_barrier_with_scope(initialize_grass_counts_encoder, MTLBarrierScopeBuffers);
+        metal_end_encoding(initialize_grass_counts_encoder);
+
 #if 0
         metal_get_timestamp(&render_context->grass_rendering_start_timestamp, command_buffer, render_context->device);
         // NOTE(gh) first, render all the grasses with mesh render pipeline
@@ -670,7 +679,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 grid_info.one_thread_worth_dim = one_thread_worth_dim;
 
                 id<MTLComputeCommandEncoder> fill_grass_instance_compute_encoder = [command_buffer computeCommandEncoder];
-                fill_grass_instance_compute_encoder.label = @"Fill Grass Instance Data";
+                NSString *a = @"Fill Grass Instance Data";
+                fill_grass_instance_compute_encoder.label = [a stringByAppendingFormat:@"%u", grass_grid_index];
                 
                 metal_set_compute_pipeline(fill_grass_instance_compute_encoder, render_context->fill_grass_instance_data_pipeline);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_count_buffer.buffer, 0, 0);
@@ -683,7 +693,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 5);
 
                 metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
-                //metal_signal_fence_after(fill_grass_instance_compute_encoder, render_context->f);// use memory barrier instead?
                 metal_memory_barrier_with_scope(fill_grass_instance_compute_encoder, MTLBarrierScopeBuffers);
                 metal_end_encoding(fill_grass_instance_compute_encoder);
                  
@@ -694,15 +703,27 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 {
                     // Reset the indirect command buffer
                     id<MTLBlitCommandEncoder> icb_reset_encoder = [command_buffer blitCommandEncoder];
-                    metal_wait_for_fence(icb_reset_encoder, render_context->grass_double_buffer_fence[render_context->next_grass_double_buffer_index]);
-                    icb_reset_encoder.label = @"Reset ICB";
+                    if(render_context->next_grass_double_buffer_index == 0)
+                    {
+                        icb_reset_encoder.label = @"Reset ICB 0";
+                    }
+                    else
+                    {
+                        icb_reset_encoder.label = @"Reset ICB 1";
+                    }
                     [icb_reset_encoder resetCommandsInBuffer: render_context->icb[render_context->next_grass_double_buffer_index]
                         withRange:NSMakeRange(0, 1)];
                     [icb_reset_encoder endEncoding];
 
                     id<MTLComputeCommandEncoder> encode_instanced_grass_encoder = [command_buffer computeCommandEncoder];
-
-                    encode_instanced_grass_encoder.label = @"Encode Instanced Grass Render Commands";
+                    if(render_context->next_grass_double_buffer_index == 0)
+                    {
+                        encode_instanced_grass_encoder.label = @"Encode Instanced Grass Render Commands 0";
+                    }
+                    else
+                    {
+                        encode_instanced_grass_encoder.label = @"Encode Instanced Grass Render Commands 1";
+                    }
                     metal_set_compute_pipeline(encode_instanced_grass_encoder, render_context->encode_instanced_grass_render_commands_pipeline);
                     metal_set_compute_buffer(
                             encode_instanced_grass_encoder, 
@@ -722,7 +743,6 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                     // TODO(gh) we can combine some of the grids to dispatch render commands, but does that make sense?
                     metal_dispatch_compute_threads(encode_instanced_grass_encoder, V3u(1, 1, 1), V3u(1, 1, 1));
-                    metal_memory_barrier_with_scope(encode_instanced_grass_encoder, MTLBarrierScopeBuffers);
                     metal_end_encoding(encode_instanced_grass_encoder);
 
                     // Optimize the indirect command buffer
@@ -730,7 +750,8 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                     id<MTLRenderCommandEncoder> g_buffer_render_encoder = 
                         [command_buffer renderCommandEncoderWithDescriptor: render_context->g_buffer_renderpass];
-                    g_buffer_render_encoder.label = @"Instanced Grass Rendering";
+                    NSString *b = @"Fill Grass Instance Data";
+                    g_buffer_render_encoder.label = [b stringByAppendingFormat:@"%u", grid_to_render_count];
 
                     metal_set_viewport(g_buffer_render_encoder, 0, 0, window_width, window_height, 0, 1);
                     metal_set_scissor_rect(g_buffer_render_encoder, 0, 0, window_width, window_height);
@@ -743,12 +764,12 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                         executeCommandsInBuffer:render_context->icb[render_context->next_grass_double_buffer_index] 
                             withRange:NSMakeRange(0, 1)
                     ];
-#if 1
+#if 0
                     // TODO(gh) not sure if we really need this fence?
                     metal_signal_fence_after(
                             g_buffer_render_encoder, 
                             render_context->grass_double_buffer_fence[render_context->next_grass_double_buffer_index],
-                            MTLRenderStageTile);
+                            MTLRenderStageVertex);
 #endif
                     metal_end_encoding(g_buffer_render_encoder);
 
@@ -1038,27 +1059,18 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         metal_end_encoding(forward_render_encoder);
 #endif
 
+        metal_commit_command_buffer(command_buffer);
+         
         // TODO(gh) My understading is metal will automatically sync with the display when I request presenting,
         // but double check
-        [command_buffer presentDrawable: render_context->view.currentDrawable];
+        id<MTLCommandBuffer> present_command_buffer = [render_context->command_queue commandBuffer];
 
-        metal_commit_command_buffer(command_buffer);
+        [present_command_buffer presentDrawable: render_context->view.currentDrawable];
+        metal_commit_command_buffer(present_command_buffer);
 
         // TODO(gh) properly sync with the frame!
-        // metal_wait_until_command_buffer_completed(command_buffer);
     }
 }
-
-#if 0
-internal void
-metal_display(MetalRenderContext *render_context)
-{
-    id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
-
-    metal_present_drawable(command_buffer, render_context->view);
-    metal_commit_command_buffer(command_buffer);
-}
-#endif
  
 
 // NOTE(gh): returns the base path where all the folders(code, misc, data) are located
@@ -1424,6 +1436,9 @@ int main(void)
                                         max_object_thread_count_per_object_threadgroup,
                                         max_mesh_threadgroup_count_per_mesh_grid,
                                         max_mesh_thread_count_per_mesh_threadgroup); 
+
+    metal_render_context.initialize_grass_counts_pipeline = 
+        metal_make_compute_pipeline(device, shader_library, "initialize_grass_counts");
 
     metal_render_context.fill_grass_instance_data_pipeline = 
         metal_make_compute_pipeline(device, shader_library, "fill_grass_instance_data_compute");

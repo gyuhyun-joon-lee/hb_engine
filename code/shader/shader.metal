@@ -809,3 +809,11 @@ instanced_grass_render_vertex(uint vertexID [[vertex_id]],
     return result;
 }
 
+kernel void
+initialize_grass_counts(device atomic_uint *grass_start_count [[buffer(0)]],
+                        device atomic_uint *grass_count [[buffer(1)]])
+{
+    atomic_exchange_explicit(grass_start_count, 0, memory_order_relaxed);
+    atomic_exchange_explicit(grass_count, 0, memory_order_relaxed);
+}
+

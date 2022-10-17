@@ -76,6 +76,8 @@ struct MetalRenderContext
 
     // Compute Pipelines
     id<MTLComputePipelineState> add_compute_pipeline;
+    id<MTLComputePipelineState> initialize_grass_counts_pipeline;
+
     id<MTLComputePipelineState> fill_grass_instance_data_pipeline;
     id<MTLComputePipelineState> encode_instanced_grass_render_commands_pipeline;
 

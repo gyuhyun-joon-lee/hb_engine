@@ -309,7 +309,7 @@ struct PlatformRenderPushBuffer
     // Configurations
     b32 enable_shadow;
     b32 enable_show_perlin_noise_grid; // show perlin noise on top of the floor
-    b32 enable_grass_mesh_rendering;
+    b32 enable_grass_rendering;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void (name)(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory, PlatformRenderPushBuffer *platform_render_push_buffer, ThreadWorkQueue *thread_work_queue)
