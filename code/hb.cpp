@@ -132,7 +132,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     Camera *render_camera = game_camera;
     // render_camera = debug_camera;
-    b32 show_perlin_noise_grid = false;
+    b32 show_perlin_noise_grid = true;
 
     if(render_camera == debug_camera)
     {
