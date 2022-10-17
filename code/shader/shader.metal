@@ -274,6 +274,26 @@ float random_between_0_1(int x, int y, int z)
     return (( 1.0 - ( (seed * (seed * seed * 15731 + 789221) + 1376312589) & 2147483647) / 1073741824.0f) + 1.0f) / 2.0f;
 }
 
+uint xor_shift(uint x, uint y, uint z)
+{    
+    // TODO(gh) better hash key lol
+    uint key = 123*x+332*y+395*z;
+    key ^= (key << 13);
+    key ^= (key >> 17);    
+    key ^= (key << 5);    
+    return key;
+}
+
+uint wang_hash(uint seed)
+{
+    seed = (seed ^ 61) ^ (seed >> 16);
+    seed *= 9;
+    seed = seed ^ (seed >> 4);
+    seed *= 0x27d4eb2d;
+    seed = seed ^ (seed >> 15);
+    return seed;
+}
+
 // 16 floats = 64 bytes
 struct PerGrassData
 {
@@ -631,18 +651,18 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {
     uint grass_index = thread_count_per_grid.x*thread_position_in_grid.y + thread_position_in_grid.x;
-    
-    float noise = perlin_noise_values[grass_index];
-    float random01 = random_between_0_1(grass_index, 0, 0);
-    float length = 2.8f + random01;
     float z = floor_z_values[grass_index];
-    float tilt = clamp(1.9f + 0.7f*random01 + noise, 0.0f, length - 0.01f);
-    uint hash = grass_index;
-
     float3 center = packed_float3(grid_info->min, 0) + 
                     packed_float3(grid_info->one_thread_worth_dim.x*thread_position_in_grid.x, 
                                   grid_info->one_thread_worth_dim.y*thread_position_in_grid.y, 
                                   z);
+    
+    // TODO(gh) better hash function for each grass?
+    float noise = perlin_noise_values[grass_index];
+    uint hash = 10000000*(wang_hash(grass_index)/(float)0xffffffff);
+    float random01 = (float)hash/(float)(10000000);
+    float length = 2.8f + random01;
+    float tilt = clamp(1.9f + 0.7f*random01 + noise, 0.0f, length - 0.01f);
 
     // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
     // Also, we can make the length smaller based on the facing direction
@@ -650,7 +670,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
     float3 length_pad = 0.6f*float3(length, length, 0.0f);
     float3 min = center - length_pad;
     float3 max = center + length_pad;
-    max.z +=tilt + 1.0f;
+    max.z += tilt + 1.0f;
      
     if(is_inside_frustum(game_proj_view, min, max))
     {
