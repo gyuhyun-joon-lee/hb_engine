@@ -170,7 +170,6 @@ internal
 THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
 {
     ThreadUpdatePerlinNoiseBufferData *d = (ThreadUpdatePerlinNoiseBufferData *)data;
-
     TIMED_BLOCK();
 
     f32 *row = (f32 *)d->perlin_noise_buffer + d->start_y * d->total_x_count + d->start_x;

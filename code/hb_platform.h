@@ -20,17 +20,24 @@ struct PlatformReadFileResult
     u64 size; // TOOD/gh : make this to be at least 64bit
 };
 
-#define PLATFORM_GET_FILE_SIZE(name) u64 (name)(char *filename)
+#define PLATFORM_GET_FILE_SIZE(name) u64 (name)(const char *filename)
 typedef PLATFORM_GET_FILE_SIZE(platform_get_file_size);
 
-#define PLATFORM_READ_FILE(name) PlatformReadFileResult (name)(char *filename)
+#define PLATFORM_READ_FILE(name) PlatformReadFileResult (name)(const char *filename)
 typedef PLATFORM_READ_FILE(platform_read_file);
 
-#define PLATFORM_WRITE_ENTIRE_FILE(name) void (name)(char *file_name, void *memory_to_write, u32 size)
+#define PLATFORM_WRITE_ENTIRE_FILE(name) void (name)(const char *file_name, void *memory_to_write, u32 size)
 typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 
 #define PLATFORM_FREE_FILE_MEMORY(name) void (name)(void *memory)
 typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
+
+// TODO(gh) Also make one that releases texture handle
+#define PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(name) void *(name)(void *device, i32 width, i32 height, i32 bytes_per_pixel)
+typedef PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(platform_allocate_and_acquire_texture_handle);
+
+#define PLATFORM_WRITE_TO_ENTIRE_TEXTURE(name) void (name)(void *texture_handle, void *src, i32 width, i32 height, i32 bytes_per_pixel)
+typedef PLATFORM_WRITE_TO_ENTIRE_TEXTURE(platform_write_to_entire_texture);
 
 struct PlatformAPI
 {
@@ -38,6 +45,8 @@ struct PlatformAPI
     platform_write_entire_file *write_entire_file;
     platform_free_file_memory *free_file_memory;
 
+    platform_allocate_and_acquire_texture_handle *allocate_and_acquire_texture_handle;
+    platform_write_to_entire_texture *write_to_entire_texture;
     // platform_atomic_compare_and_exchange32() *atomic_compare_and_exchange32;
     // platform_atomic_compare_and_exchange64() *atomic_compare_and_exchange64;
 };
@@ -216,7 +225,6 @@ u64 rdtsc(void)
 	return val;
 }
 
-
 // TODO(gh) multi thread this!
 
 #define PLATFORM_DEBUG_PRINT_CYCLE_COUNTERS(name) void (name)(debug_cycle_counter *debug_cycle_counters)
@@ -260,14 +268,12 @@ struct ThreadWorkQueue
     platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
 };
 
-
 // TODO(gh) Request(game code) - Give(platform layer) system?
 struct PlatformRenderPushBuffer
 {
     // NOTE(gh) provided by the platform layer
+    void *device; // TODO(gh) Not well thought-out concept
     f32 width_over_height; 
-    // TODO(gh) Just a temp thing, should move this into game code(maybe)
-    void *char_infos;
 
     // TODO(gh) Rename this into command buffer or something
     u8 *base;

@@ -5,6 +5,16 @@
 #ifndef HB_H
 #define HB_H
 
+struct FontAssetInfo
+{
+    f32 pixel_offset_x;
+    f32 pixel_advance_x;
+
+    v2 texcoord_min;
+    v2 texcoord_max;
+};
+
+
 struct GameState
 {
     b32 is_initialized;
@@ -25,6 +35,9 @@ struct GameState
 
     RandomSeries random_series;
 
+    // TODO(gh) font_asset_infos 
+    FontAssetInfo font_asset_infos[256];
+
     GrassGrid *grass_grids;
     u32 grass_grid_count_x;
     u32 grass_grid_count_y;
@@ -33,6 +46,8 @@ struct GameState
     f32 time_until_offset_x_inc;
 
     u32 *permutations255;
+
+    GameAssets assets;
 
     // TODO(gh) More structured light information
 

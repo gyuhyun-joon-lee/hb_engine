@@ -10,6 +10,7 @@
 #include "hb_render_group.h"
 #include "hb_simulation.h"
 #include "hb_entity.h"
+#include "hb_asset.h"
 #include "hb_platform.h"
 #include "hb_debug.h"
 #include "hb.h"
@@ -21,6 +22,7 @@
 #include "hb_entity.cpp"
 #include "hb_render_group.cpp"
 #include "hb_image_loader.cpp"
+#include "hb_asset.cpp"
 
 // TODO(gh) not a great idea
 #include <time.h>
@@ -122,6 +124,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 init_grass_grid(platform_render_push_buffer, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
             }
         }
+
+        //load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
 
         game_state->is_initialized = true;
     }
@@ -410,6 +414,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     end_temp_memory(&perlin_noise_temp_memory);
 
+#if 0
     char *string = "Let's see if we can render this";
 
     char *c=string;
@@ -422,10 +427,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         // NOTE(gh) This also advances the offset x 
         // TODO(gh) width and height should be same as the font bitmaap!!!!!!!!!!!
-        if(*c == '\'')
-        {
-            int a = 1;
-        }
         stbtt_GetBakedQuad(char_infos, 1024, 1024, *c, (float*)&offset_x, (float*)&offset_y, &quad, 0);
 
         push_char(platform_render_push_buffer, V3(1, 1, 1), 
@@ -434,6 +435,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         c++;
     }
+#endif
 
     // TODO(gh) simplify variables that can effect the wind 
     // maybe with world unit speed

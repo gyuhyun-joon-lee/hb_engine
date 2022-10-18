@@ -463,19 +463,17 @@ metal_make_render_pipeline(id<MTLDevice> device,
     return result;
 }
 
-inline void
-metal_write_entire_texture2D(MetalTexture2D *texture, void *src, i32 src_width, i32 src_height, i32 src_stride)
+internal
+PLATFORM_WRITE_TO_ENTIRE_TEXTURE(metal_write_to_entire_texture)
 {
-    assert(texture->width == src_width);
-    assert(texture->height == src_height);
-
-    MTLRegion region = MTLRegionMake2D(0, 0, texture->width, texture->height);
-    [texture->texture replaceRegion:region
+    MTLRegion region = MTLRegionMake2D(0, 0, width, height);
+    [(id<MTLTexture>)texture_handle replaceRegion:region
           mipmapLevel:0
             withBytes:src
-          bytesPerRow:src_stride];
+          bytesPerRow:width*bytes_per_pixel];
 }
 
+// TODO(gh)
 // TODO(gh) Should we make this more general, or should we keep this for clarification?
 inline MetalTexture2D
 metal_make_texture2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, 
@@ -501,6 +499,35 @@ metal_make_texture2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 widt
     return result;
 }
 
+internal
+PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(metal_allocate_and_acquire_texture_handle)
+{
+    // This assumes that every asset has pre-known _unnormalized_ pixel format such as RBGA8 or R8... 
+    // 
+    MTLPixelFormat pixel_format = MTLPixelFormatInvalid;
+    switch(bytes_per_pixel)
+    {
+        case 1:
+        {
+            pixel_format = MTLPixelFormatR8Uint;
+        }break;
+
+        case 4:
+        {
+            // TODO(gh) fill this in
+        }break;
+        default:
+        {
+            invalid_code_path;
+        };
+    }
+    
+    MetalTexture2D texture2D = metal_make_texture2D((id<MTLDevice>)device, pixel_format,width, height, 
+                                                    MTLTextureUsageShaderRead, MTLStorageModeShared);
+
+    void *result = (void *)texture2D.texture;
+    return result;
+}
 
 inline id<MTLDepthStencilState>
 metal_make_depth_state(id<MTLDevice> device, MTLCompareFunction compare_function, b32 should_enable_write)

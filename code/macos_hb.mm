@@ -26,6 +26,7 @@
 #include "hb_random.h"
 #include "hb_simd.h"
 #include "hb_render_group.h"
+#include "hb_asset.h"
 #include "hb_shared_with_shader.h"
 #include "hb_platform.h"
 
@@ -342,6 +343,8 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
 
 struct MacOSThread
 {
+    // TODO(gh) only used to allocate resources(texture, buffer...)
+    id<MTLDevice> device;
     u32 ID;
     ThreadWorkQueue *queue;
 
@@ -1242,6 +1245,7 @@ int main(void)
     platform_api.read_file = debug_macos_read_file;
     platform_api.write_entire_file = debug_macos_write_entire_file;
     platform_api.free_file_memory = debug_macos_free_file_memory;
+    platform_api.allocate_and_acquire_texture_handle = metal_allocate_and_acquire_texture_handle;
 
     PlatformMemory platform_memory = {};
 
@@ -1598,6 +1602,7 @@ int main(void)
                               MTLTextureUsageRenderTarget,
                               MTLStorageModePrivate);
 
+#if 0
     u32 font_bitmap_width = 1024;
     u32 font_bitmap_height = 1024;
     metal_render_context.font_bitmap = metal_make_texture2D(
@@ -1609,7 +1614,7 @@ int main(void)
             );
     stbtt_bakedchar *char_infos = (stbtt_bakedchar *)malloc(sizeof(stbtt_bakedchar)*256); // only holds the ascii characters
     u8 *font_bitmap = (u8 *)malloc(sizeof(u8)*font_bitmap_width*font_bitmap_height);
-    PlatformReadFileResult font_data = debug_macos_read_file("/Users/mekalopo/Library/Fonts/LiberationMono-Regular.ttf");
+    PlatformReadFileResult font_data = debug_macos_read_file();
     if(stbtt_BakeFontBitmap(font_data.memory, 0, 64.0f, font_bitmap, font_bitmap_width, font_bitmap_height, 0, 256, char_infos) > 0) // no guarantee this fits!
     {
         // Fit!!
@@ -1625,6 +1630,7 @@ int main(void)
             font_bitmap, 
             font_bitmap_width, font_bitmap_height, font_bitmap_width);
     free(font_bitmap);
+#endif
 
     // NOTE(gh) Create samplers
     metal_render_context.shadowmap_sampler = 
@@ -1786,7 +1792,6 @@ int main(void)
     platform_render_push_buffer.base = (u8 *)malloc(platform_render_push_buffer.total_size);
     // TODO(gh) Make sure to update this value whenever we resize the window
     platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
-    platform_render_push_buffer.char_infos = char_infos;
 
     platform_render_push_buffer.combined_vertex_buffer = metal_render_context.combined_vertex_buffer.memory;
     platform_render_push_buffer.combined_vertex_buffer_size = metal_render_context.combined_vertex_buffer.size;
