@@ -36,7 +36,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
    - If we are going to use the packed texture, how should we correctly sample from it in the shader?
    */
 
-    extern "C" 
+extern "C" 
 GAME_UPDATE_AND_RENDER(update_and_render)
 {
     GameState *game_state = (GameState *)platform_memory->permanent_memory;
@@ -132,7 +132,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     Camera *render_camera = game_camera;
     // render_camera = debug_camera;
-    b32 show_perlin_noise_grid = true;
+    b32 show_perlin_noise_grid = false;
 
     if(render_camera == debug_camera)
     {
@@ -467,13 +467,13 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 
             char buffer[512] = {};
             snprintf(buffer, array_count(buffer),
-                    "%s(%s:%u): %ucy, %uh, %ucy/h ", function, file, line, cycle_count, hit_count, cycle_count/hit_count);
+                    "%s(%s(%u)): %ucy, %uh, %ucy/h ", function, file, line, cycle_count, hit_count, cycle_count/hit_count);
 
             debug_text_line(platform_render_push_buffer, assets, buffer, p);
 
             atomic_exchange(&record->hit_count_cycle_count, 0);
+            p.y -= 100.0f/platform_render_push_buffer->window_height;
         }
-        p.y -= 100.0f/platform_render_push_buffer->window_height;
     }
 #endif
 }

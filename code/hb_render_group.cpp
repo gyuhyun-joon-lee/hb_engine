@@ -294,6 +294,8 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *re
 internal void
 push_line(PlatformRenderPushBuffer *render_push_buffer, v3 start, v3 end, v3 color)
 {
+    TIMED_BLOCK();
+
     RenderEntryLine *entry = (RenderEntryLine *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
     assert(render_push_buffer->used <= render_push_buffer->total_size);
@@ -350,6 +352,7 @@ internal void
 push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
           CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
+    TIMED_BLOCK();
     RenderEntryAABB *entry = (RenderEntryAABB *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
     assert(render_push_buffer->used <= render_push_buffer->total_size);
@@ -367,7 +370,6 @@ push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color,
     entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);
     entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);
     entry->index_count = index_count;
-
 }
 
 internal void
