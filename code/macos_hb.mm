@@ -30,8 +30,6 @@
 #include "hb_shared_with_shader.h"
 #include "hb_platform.h"
 
-#define STB_TRUETYPE_IMPLEMENTATION 
-#include "stb_truetype.h"
 #include "hb_metal.cpp"
 
 // TODO(gh): Get rid of global variables?
@@ -1036,46 +1034,35 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     RenderEntryChar *entry = (RenderEntryChar *)((u8 *)render_push_buffer->base + consumed);
                     consumed += header->size; 
 
-
-                    v2 normalized_min = V2(entry->pixel_min.x/window_width, entry->pixel_min.y/window_height);
-                    normalized_min = 2.0f*(normalized_min - V2(0.5f, 0.5f));
-                    // NOTE(gh) min and max in NDC
-                    v2 normalized_max = V2(entry->pixel_max.x/window_width, entry->pixel_max.y/window_height);
-                    normalized_max = 2.0f*(normalized_max - V2(0.5f, 0.5f));
-                    // TODO(gh) Far from being efficient
+                    // TODO(gh) Not that efficient, but good enough for now
                     v2 vertices[] = 
                     {
-                        normalized_min,
-                        normalized_max,
-                        V2(normalized_min.x, normalized_max.y),
+                        entry->min,
+                        entry->max,
+                        V2(entry->min.x, entry->max.y),
 
-                        normalized_min,
-                        V2(normalized_max.x, normalized_min.y),
-                        normalized_max,
+                        entry->min,
+                        V2(entry->max.x, entry->min.y),
+                        entry->max,
                     };
 
-                    v2 normalized_texcoord_min = V2(entry->texcoord_min.x, 
-                                                    entry->texcoord_min.y);
-                     
-                    v2 normalized_texcoord_max = V2(entry->texcoord_max.x, 
-                                                    entry->texcoord_max.y);
                     // Top-down
                     v2 texcoords[] = 
                     {
-                        V2(normalized_texcoord_min.x, normalized_texcoord_max.y),
-                        V2(normalized_texcoord_max.x, normalized_texcoord_min.y),
-                        V2(normalized_texcoord_min.x, normalized_texcoord_min.y),
+                        V2(entry->texcoord_min.x, entry->texcoord_max.y),
+                        V2(entry->texcoord_max.x, entry->texcoord_min.y),
+                        V2(entry->texcoord_min.x, entry->texcoord_min.y),
 
-                        V2(normalized_texcoord_min.x, normalized_texcoord_max.y),
-                        V2(normalized_texcoord_max.x, normalized_texcoord_max.y),
-                        V2(normalized_texcoord_max.x, normalized_texcoord_min.y),
+                        V2(entry->texcoord_min.x, entry->texcoord_max.y),
+                        V2(entry->texcoord_max.x, entry->texcoord_max.y),
+                        V2(entry->texcoord_max.x, entry->texcoord_min.y),
                     };
 
                     metal_set_render_pipeline(forward_render_encoder, render_context->forward_render_font_pipeline);
                     metal_set_vertex_bytes(forward_render_encoder, vertices, array_size(vertices), 0);
                     metal_set_vertex_bytes(forward_render_encoder, texcoords, array_size(texcoords), 1);
                     metal_set_vertex_bytes(forward_render_encoder, &entry->color, sizeof(entry->color), 2);
-                    metal_set_fragment_texture(forward_render_encoder, render_context->font_bitmap.texture, 0);
+                    metal_set_fragment_texture(forward_render_encoder, (id<MTLTexture>)entry->texture_handle, 0);
 
                     metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
                 }break;
@@ -1246,6 +1233,7 @@ int main(void)
     platform_api.write_entire_file = debug_macos_write_entire_file;
     platform_api.free_file_memory = debug_macos_free_file_memory;
     platform_api.allocate_and_acquire_texture_handle = metal_allocate_and_acquire_texture_handle;
+    platform_api.write_to_entire_texture = metal_write_to_entire_texture;
 
     PlatformMemory platform_memory = {};
 
@@ -1602,36 +1590,6 @@ int main(void)
                               MTLTextureUsageRenderTarget,
                               MTLStorageModePrivate);
 
-#if 0
-    u32 font_bitmap_width = 1024;
-    u32 font_bitmap_height = 1024;
-    metal_render_context.font_bitmap = metal_make_texture2D(
-            device, 
-            MTLPixelFormatR8Uint, 
-            font_bitmap_width, font_bitmap_height, 
-            MTLTextureUsageShaderRead,
-            MTLStorageModeShared
-            );
-    stbtt_bakedchar *char_infos = (stbtt_bakedchar *)malloc(sizeof(stbtt_bakedchar)*256); // only holds the ascii characters
-    u8 *font_bitmap = (u8 *)malloc(sizeof(u8)*font_bitmap_width*font_bitmap_height);
-    PlatformReadFileResult font_data = debug_macos_read_file();
-    if(stbtt_BakeFontBitmap(font_data.memory, 0, 64.0f, font_bitmap, font_bitmap_width, font_bitmap_height, 0, 256, char_infos) > 0) // no guarantee this fits!
-    {
-        // Fit!!
-        int a = 1;
-    }
-    else
-    {
-        // TODO(gh) Characters don't fit in the bitmap that we provided
-        assert(0);
-    }
-    metal_write_entire_texture2D(
-            &metal_render_context.font_bitmap, 
-            font_bitmap, 
-            font_bitmap_width, font_bitmap_height, font_bitmap_width);
-    free(font_bitmap);
-#endif
-
     // NOTE(gh) Create samplers
     metal_render_context.shadowmap_sampler = 
         metal_make_sampler(device, true, MTLSamplerAddressModeClampToEdge, 
@@ -1792,6 +1750,7 @@ int main(void)
     platform_render_push_buffer.base = (u8 *)malloc(platform_render_push_buffer.total_size);
     // TODO(gh) Make sure to update this value whenever we resize the window
     platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
+    platform_render_push_buffer.device = (void *)device;
 
     platform_render_push_buffer.combined_vertex_buffer = metal_render_context.combined_vertex_buffer.memory;
     platform_render_push_buffer.combined_vertex_buffer_size = metal_render_context.combined_vertex_buffer.size;

@@ -229,14 +229,16 @@ struct RenderEntryFrustum
 struct RenderEntryChar
 {
     RenderEntryHeader header;
+    void *texture_handle;
 
     v3 color;
-    v2 pixel_min; // bottom left corner is (0, 0), top right corner is (window_width, window_height)
-    v2 pixel_max; // bottom left corner is (0, 0), top right corner is (window_width, window_height)
+    // Ranges from -1 to 1
+    v2 min; 
+    v2 max;
 
-    // Top-Down
-    v2 texcoord_min; // in pixel
-    v2 texcoord_max; // in pixel
+    // Top-Down, ranges from 0 to 1
+    v2 texcoord_min; 
+    v2 texcoord_max;
 };
 
 #endif

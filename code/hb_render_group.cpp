@@ -453,7 +453,7 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
 // TODO(gh) Change this with textured quad? Because we have to have some kind of texture system
 // that is visible from the game code someday!
 internal void
-push_char(PlatformRenderPushBuffer *render_push_buffer, v3 color, v2 pixel_min, v2 pixel_max,v2 texcoord_min, v2 texcoord_max)
+push_char(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 min, v2 max, v2 texcoord_min, v2 texcoord_max)
 {
     RenderEntryChar *entry = (RenderEntryChar *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
@@ -462,9 +462,10 @@ push_char(PlatformRenderPushBuffer *render_push_buffer, v3 color, v2 pixel_min, 
     entry->header.type = RenderEntryType_Char;
     entry->header.size = sizeof(*entry);
 
+    entry->texture_handle = assets->font_bitmap.handle;
     entry->color = color;
-    entry->pixel_min = pixel_min;
-    entry->pixel_max = pixel_max;
+    entry->min = min;
+    entry->max = max;
     entry->texcoord_min = texcoord_min;
     entry->texcoord_max = texcoord_max;
 }

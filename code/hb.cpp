@@ -27,10 +27,6 @@
 // TODO(gh) not a great idea
 #include <time.h>
 
-// TODO(gh) Not thrilled about this double-include both in game code and in platform layer
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
-
 internal void output_debug_records();
 
 /*
@@ -125,7 +121,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
         }
 
-        //load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
+        load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
 
         game_state->is_initialized = true;
     }
@@ -413,6 +409,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue);
 
     end_temp_memory(&perlin_noise_temp_memory);
+
+    push_char(platform_render_push_buffer, &game_state->assets, V3(1, 1, 1), 
+                V2(-0.5f, -0.5f), V2(0.5f, 0.5f),
+                V2(0.0f, 0.0f), V2(1.0f, 1.0f));
 
 #if 0
     char *string = "Let's see if we can render this";

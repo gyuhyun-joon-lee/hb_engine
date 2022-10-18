@@ -112,7 +112,6 @@ struct MetalRenderContext
     MetalTexture2D g_buffer_color_texture;
     MetalTexture2D g_buffer_depth_texture;
     MetalTexture2D directional_light_shadowmap_depth_texture;
-    MetalTexture2D font_bitmap;
 
     // Buffers
     u32 next_grass_double_buffer_index;
