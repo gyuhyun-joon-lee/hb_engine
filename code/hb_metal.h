@@ -39,6 +39,8 @@ struct MetalTexture2D
     id<MTLTexture> texture;
     i32 width;
     i32 height;
+
+    // TODO(gh) maybe also store usage and storage mode?
 };
 
 struct MetalTimestamp
@@ -71,8 +73,8 @@ struct MetalRenderContext
     // Forward Pipelines
     id<MTLRenderPipelineState> forward_line_pipeline;
     id<MTLRenderPipelineState> screen_space_triangle_pipeline;
-    id<MTLRenderPipelineState> forward_show_perlin_noise_grid_pipeline;
-    id<MTLRenderPipelineState> forward_show_game_camera_frustum;
+    id<MTLRenderPipelineState> forward_render_perlin_noise_grid_pipeline;
+    id<MTLRenderPipelineState> forward_render_game_camera_frustum_pipeline;
 
     // Compute Pipelines
     id<MTLComputePipelineState> add_compute_pipeline;
@@ -83,6 +85,8 @@ struct MetalRenderContext
 
     // Mesh Pipelines(although the type is same as render pipeline)
     id<MTLRenderPipelineState> grass_mesh_render_pipeline;
+
+    id<MTLRenderPipelineState> forward_render_font_pipeline;
     
     // Renderpasses
     MTLRenderPassDescriptor *directional_light_shadowmap_renderpass;
@@ -103,14 +107,12 @@ struct MetalRenderContext
     id<MTLFence> grass_double_buffer_fence[2];
 
     // Textures
-    id<MTLTexture> g_buffer_position_texture;
-    id<MTLTexture> g_buffer_normal_texture;
-    id<MTLTexture> g_buffer_color_texture;
-    id<MTLTexture> g_buffer_depth_texture;
-
-    i32 directional_light_shadowmap_depth_texture_width;
-    i32 directional_light_shadowmap_depth_texture_height;
-    id<MTLTexture> directional_light_shadowmap_depth_texture;
+    MetalTexture2D g_buffer_position_texture;
+    MetalTexture2D g_buffer_normal_texture;
+    MetalTexture2D g_buffer_color_texture;
+    MetalTexture2D g_buffer_depth_texture;
+    MetalTexture2D directional_light_shadowmap_depth_texture;
+    MetalTexture2D font_bitmap;
 
     // Buffers
     u32 next_grass_double_buffer_index;

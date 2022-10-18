@@ -35,6 +35,8 @@ struct GameState
     u32 *permutations255;
 
     // TODO(gh) More structured light information
+
+    // TODO(gh) some sort of asset system
 };
 
 #endif

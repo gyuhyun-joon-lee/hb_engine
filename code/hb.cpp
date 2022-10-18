@@ -24,6 +24,9 @@
 
 // TODO(gh) not a great idea
 #include <time.h>
+
+// TODO(gh) Not thrilled about this double-include both in game code and in platform layer
+#define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
 internal void output_debug_records();
@@ -53,10 +56,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 game_state->transient_arena.total_size + 
                 game_state->mass_agg_arena.total_size,
                 megabytes(16));
-
-        // TODO(gh) get rid of rand(), or get the time and rand information from platform layer?
-        // srand(time(0));
-        game_state->random_series = start_random_series(rand());
 
         game_state->game_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 1.0f, 1000.0f);
         game_state->game_camera.pitch += 1.5f;
@@ -222,7 +221,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         data->one_past_end_y = grid->grass_count_x;
         data->time_elasped_from_start = platform_input->time_elasped_from_start;
         data->perlin_noise_buffer = grid->perlin_noise_buffer;
-        data->hash_buffer = grid->hash_buffer;
         data->permutations255 = game_state->permutations255;
         thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_update_perlin_noise_buffer_callback, (void *)data);
 
@@ -411,6 +409,31 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue);
 
     end_temp_memory(&perlin_noise_temp_memory);
+
+    char *string = "Let's see if we can render this";
+
+    char *c=string;
+    f32 offset_x = 0;
+    f32 offset_y = 100;
+    while(*c != '\0')
+    {
+        stbtt_bakedchar *char_infos = (stbtt_bakedchar *)platform_render_push_buffer->char_infos;
+        stbtt_aligned_quad quad = {};
+
+        // NOTE(gh) This also advances the offset x 
+        // TODO(gh) width and height should be same as the font bitmaap!!!!!!!!!!!
+        if(*c == '\'')
+        {
+            int a = 1;
+        }
+        stbtt_GetBakedQuad(char_infos, 1024, 1024, *c, (float*)&offset_x, (float*)&offset_y, &quad, 0);
+
+        push_char(platform_render_push_buffer, V3(1, 1, 1), 
+                    V2(quad.x0, quad.y0), V2(quad.x1, quad.y1),
+                    V2(quad.s0, quad.t0), V2(quad.s1, quad.t1));
+
+        c++;
+    }
 
     // TODO(gh) simplify variables that can effect the wind 
     // maybe with world unit speed

@@ -3862,7 +3862,7 @@ STBTT_DEF void stbtt_GetBakedQuad(const stbtt_bakedchar *chardata, int pw, int p
    float ipw = 1.0f / pw, iph = 1.0f / ph;
    const stbtt_bakedchar *b = chardata + char_index;
    int round_x = STBTT_ifloor((*xpos + b->xoff) + 0.5f);
-   int round_y = STBTT_ifloor((*ypos + b->yoff) + 0.5f);
+   int round_y = STBTT_ifloor((*ypos) + 0.5f);
 
    q->x0 = round_x + d3d_bias;
    q->y0 = round_y + d3d_bias;

@@ -266,6 +266,8 @@ struct PlatformRenderPushBuffer
 {
     // NOTE(gh) provided by the platform layer
     f32 width_over_height; 
+    // TODO(gh) Just a temp thing, should move this into game code(maybe)
+    void *char_infos;
 
     // TODO(gh) Rename this into command buffer or something
     u8 *base;

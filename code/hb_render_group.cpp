@@ -228,32 +228,11 @@ init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, Entity *floor, Ran
 {
     grass_grid->grass_count_x = grass_count_x;
     grass_grid->grass_count_y = grass_count_y;
-    grass_grid->updated_hash_buffer = false;
     grass_grid->updated_floor_z_buffer = false;
     grass_grid->min = min;
     grass_grid->max = max;
 
     u32 total_grass_count = grass_grid->grass_count_x * grass_grid->grass_count_y;
-
-    if(!grass_grid->hash_buffer)
-    {
-        grass_grid->hash_buffer = (u32 *)((u8 *)render_push_buffer->giant_buffer + render_push_buffer->giant_buffer_used);
-        grass_grid->hash_buffer_size = sizeof(u32) * total_grass_count;
-        grass_grid->hash_buffer_offset = render_push_buffer->giant_buffer_used;
-
-        for(u32 i = 0;
-                i < total_grass_count;
-                ++i)
-        {
-            // grass_grid->hash_buffer[i] = random_between_u32(series, 0, 10000);
-            grass_grid->hash_buffer[i] = (u32)(10000 * (rand() / (f32)RAND_MAX));
-        }
-
-        render_push_buffer->giant_buffer_used += grass_grid->hash_buffer_size;
-        assert(render_push_buffer->giant_buffer_used <= render_push_buffer->giant_buffer_size);
-
-        grass_grid->updated_hash_buffer = true;
-    }
 
     if(!grass_grid->floor_z_buffer)
     {
@@ -469,6 +448,25 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
                                             render_push_buffer->combined_index_buffer_size,
                                             indices, sizeof(indices[0]) * index_count);
     entry->index_count = index_count;
+}
+
+// TODO(gh) Change this with textured quad? Because we have to have some kind of texture system
+// that is visible from the game code someday!
+internal void
+push_char(PlatformRenderPushBuffer *render_push_buffer, v3 color, v2 pixel_min, v2 pixel_max,v2 texcoord_min, v2 texcoord_max)
+{
+    RenderEntryChar *entry = (RenderEntryChar *)(render_push_buffer->base + render_push_buffer->used);
+    render_push_buffer->used += sizeof(*entry);
+    assert(render_push_buffer->used <= render_push_buffer->total_size);
+
+    entry->header.type = RenderEntryType_Char;
+    entry->header.size = sizeof(*entry);
+
+    entry->color = color;
+    entry->pixel_min = pixel_min;
+    entry->pixel_max = pixel_max;
+    entry->texcoord_min = texcoord_min;
+    entry->texcoord_max = texcoord_max;
 }
 
 

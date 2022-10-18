@@ -22,13 +22,6 @@ struct GrassGrid
     u32 grass_count_x;
     u32 grass_count_y;
 
-    // NOTE(gh) Platform layer should give enough memory to each of the buffer to 
-    // hold grass_count_x*grass_count_y amount of elements. 
-    u32 *hash_buffer;
-    u32 hash_buffer_size;
-    u32 hash_buffer_offset; // offset to the giant buffer, game code should not care about this
-    b32 updated_hash_buffer;
-
     f32 *floor_z_buffer;
     u32 floor_z_buffer_size;
     u32 floor_z_buffer_offset; // offset to the giant buffer, game code should not care about this
@@ -148,6 +141,7 @@ enum RenderEntryType
     RenderEntryType_Cube,
     RenderEntryType_Grass,
     RenderEntryType_Frustum,
+    RenderEntryType_Char,
 };
 
 // TODO(gh) Do we have enough reason to keep this header?
@@ -157,6 +151,7 @@ struct RenderEntryHeader
     RenderEntryType type;
     // We store this to automatically advance inside the render entry buffer
     // This can be much smaller than 4 bytes to save space
+    // TODO(gh) This thing is very easy to forget!
     u32 size;
 };
 
@@ -219,6 +214,7 @@ struct RenderEntryGrass
     u32 index_count;
 };
 
+// TODO(gh) Replace this with quad?... or maybe not...
 struct RenderEntryFrustum
 {
     RenderEntryHeader header;
@@ -230,6 +226,17 @@ struct RenderEntryFrustum
     u32 index_count;
 };
 
+struct RenderEntryChar
+{
+    RenderEntryHeader header;
 
+    v3 color;
+    v2 pixel_min; // bottom left corner is (0, 0), top right corner is (window_width, window_height)
+    v2 pixel_max; // bottom left corner is (0, 0), top right corner is (window_width, window_height)
+
+    // Top-Down
+    v2 texcoord_min; // in pixel
+    v2 texcoord_max; // in pixel
+};
 
 #endif

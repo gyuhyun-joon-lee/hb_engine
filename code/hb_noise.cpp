@@ -173,13 +173,11 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
 
     TIMED_BLOCK();
 
-    u32 *hash_row = (u32 *)d->hash_buffer + d->start_y * d->total_x_count + d->start_x;
     f32 *row = (f32 *)d->perlin_noise_buffer + d->start_y * d->total_x_count + d->start_x;
     for(u32 y = d->start_y;
             y < d->one_past_end_y;
             ++y)
     {
-        u32 *hash_column = (u32 *)hash_row;
         f32 *column = (f32 *)row;
         for(u32 x = d->start_x;
                 x < d->one_past_end_x;
@@ -202,7 +200,6 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
             *column++ = noise;
         }
 
-        hash_row += d->total_x_count;
         row += d->total_x_count;
     }
 }

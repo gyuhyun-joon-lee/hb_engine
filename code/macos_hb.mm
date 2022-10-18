@@ -29,6 +29,8 @@
 #include "hb_shared_with_shader.h"
 #include "hb_platform.h"
 
+#define STB_TRUETYPE_IMPLEMENTATION 
+#include "stb_truetype.h"
 #include "hb_metal.cpp"
 
 // TODO(gh): Get rid of global variables?
@@ -79,7 +81,7 @@ PLATFORM_GET_FILE_SIZE(macos_get_file_size)
 
 PLATFORM_READ_FILE(debug_macos_read_file)
 {
-    PlatformReadFileResult Result = {};
+    PlatformReadFileResult result = {};
 
     int File = open(filename, O_RDONLY);
     int Error = errno;
@@ -92,19 +94,19 @@ PLATFORM_READ_FILE(debug_macos_read_file)
         if(fileSize > 0)
         {
             // TODO/gh : no more os level allocations!
-            Result.size = fileSize;
-            Result.memory = (u8 *)malloc(Result.size);
-            if(read(File, Result.memory, fileSize) == -1)
+            result.size = fileSize;
+            result.memory = (u8 *)malloc(result.size);
+            if(read(File, result.memory, result.size) == -1)
             {
-                free(Result.memory);
-                Result.size = 0;
+                free(result.memory);
+                result.size = 0;
             }
         }
 
         close(File);
     }
 
-    return Result;
+    return result;
 }
 
 PLATFORM_WRITE_ENTIRE_FILE(debug_macos_write_entire_file)
@@ -446,12 +448,12 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
     id<MTLRenderCommandEncoder> shadowmap_render_encoder = [shadow_command_buffer renderCommandEncoderWithDescriptor : render_context->directional_light_shadowmap_renderpass];
     shadowmap_render_encoder.label = @"Shadowmap Render";
     metal_set_viewport(shadowmap_render_encoder, 0, 0, 
-                       render_context->directional_light_shadowmap_depth_texture_width, 
-                       render_context->directional_light_shadowmap_depth_texture_height, 
+                       render_context->directional_light_shadowmap_depth_texture.width, 
+                       render_context->directional_light_shadowmap_depth_texture.height, 
                        0, 1); // TODO(gh) near and far value when rendering the shadowmap)
     metal_set_scissor_rect(shadowmap_render_encoder, 0, 0, 
-                           render_context->directional_light_shadowmap_depth_texture_width, 
-                           render_context->directional_light_shadowmap_depth_texture_height);
+                           render_context->directional_light_shadowmap_depth_texture.width, 
+                           render_context->directional_light_shadowmap_depth_texture.height);
     metal_set_triangle_fill_mode(shadowmap_render_encoder, MTLTriangleFillModeFill);
     metal_set_front_facing_winding(shadowmap_render_encoder, MTLWindingCounterClockwise);
     // Culling front facing triangles when rendering shadowmap to avoid 
@@ -468,7 +470,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
     // TODO(gh) These are totally made up near, far, width values 
     // m4x4 light_proj = perspective_projection(degree_to_radian(120), 0.01f, 100.0f, (f32)render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
-    m4x4 light_proj = orthogonal_projection(0.01f, 10000.0f, 50.0f, render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
+    m4x4 light_proj = orthogonal_projection(0.01f, 10000.0f, 50.0f, render_context->directional_light_shadowmap_depth_texture.width / (f32)render_context->directional_light_shadowmap_depth_texture.height);
     v3 directional_light_z_axis = -directional_light_direction;
     v3 directional_light_x_axis = normalize(cross(V3(0, 0, 1), directional_light_z_axis));
     v3 directional_light_y_axis = normalize(cross(directional_light_z_axis, directional_light_x_axis));
@@ -820,7 +822,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
 
                 metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
-                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
 
                 metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
                         render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
@@ -851,7 +853,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                 metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
 
-                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
 
                 metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
                         render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
@@ -879,7 +881,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                 metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
 
-                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture, 0);
+                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
 
                 metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
                         render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
@@ -922,9 +924,9 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
         metal_set_vertex_bytes(deferred_render_encoder, &directional_light_p, sizeof(directional_light_p), 0);
         metal_set_vertex_bytes(deferred_render_encoder, &render_push_buffer->enable_shadow, sizeof(render_push_buffer->enable_shadow), 1);
-        metal_set_fragment_texture(deferred_render_encoder, render_context->g_buffer_position_texture, 0);
-        metal_set_fragment_texture(deferred_render_encoder, render_context->g_buffer_normal_texture, 1);
-        metal_set_fragment_texture(deferred_render_encoder, render_context->g_buffer_color_texture, 2);
+        metal_set_fragment_texture(deferred_render_encoder, render_context->g_buffer_position_texture.texture, 0);
+        metal_set_fragment_texture(deferred_render_encoder, render_context->g_buffer_normal_texture.texture, 1);
+        metal_set_fragment_texture(deferred_render_encoder, render_context->g_buffer_color_texture.texture, 2);
 
         metal_draw_non_indexed(deferred_render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
 
@@ -973,7 +975,7 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                 // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
                 // indierct draw method?
                 // NOTE(gh) z value will come from the floor z buffer
-                metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_perlin_noise_grid_pipeline);
+                metal_set_render_pipeline(forward_render_encoder, render_context->forward_render_perlin_noise_grid_pipeline);
 
                 metal_set_vertex_bytes(forward_render_encoder, square_vertices, array_size(square_vertices), 0);
                 metal_set_vertex_bytes(forward_render_encoder, &square_dim, sizeof(square_dim), 1);
@@ -1017,13 +1019,62 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
                     RenderEntryFrustum *entry = (RenderEntryFrustum *)((u8 *)render_push_buffer->base + consumed);
                     consumed += header->size;
 
-                    metal_set_render_pipeline(forward_render_encoder, render_context->forward_show_game_camera_frustum);
+                    metal_set_render_pipeline(forward_render_encoder, render_context->forward_render_game_camera_frustum_pipeline);
                     metal_set_vertex_buffer(forward_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
                     metal_set_vertex_bytes(forward_render_encoder, &render_proj_view, sizeof(render_proj_view), 1);
 
                     metal_draw_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 
                                     render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
 
+                }break;
+
+                case RenderEntryType_Char:
+                {
+                    RenderEntryChar *entry = (RenderEntryChar *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += header->size; 
+
+
+                    v2 normalized_min = V2(entry->pixel_min.x/window_width, entry->pixel_min.y/window_height);
+                    normalized_min = 2.0f*(normalized_min - V2(0.5f, 0.5f));
+                    // NOTE(gh) min and max in NDC
+                    v2 normalized_max = V2(entry->pixel_max.x/window_width, entry->pixel_max.y/window_height);
+                    normalized_max = 2.0f*(normalized_max - V2(0.5f, 0.5f));
+                    // TODO(gh) Far from being efficient
+                    v2 vertices[] = 
+                    {
+                        normalized_min,
+                        normalized_max,
+                        V2(normalized_min.x, normalized_max.y),
+
+                        normalized_min,
+                        V2(normalized_max.x, normalized_min.y),
+                        normalized_max,
+                    };
+
+                    v2 normalized_texcoord_min = V2(entry->texcoord_min.x, 
+                                                    entry->texcoord_min.y);
+                     
+                    v2 normalized_texcoord_max = V2(entry->texcoord_max.x, 
+                                                    entry->texcoord_max.y);
+                    // Top-down
+                    v2 texcoords[] = 
+                    {
+                        V2(normalized_texcoord_min.x, normalized_texcoord_max.y),
+                        V2(normalized_texcoord_max.x, normalized_texcoord_min.y),
+                        V2(normalized_texcoord_min.x, normalized_texcoord_min.y),
+
+                        V2(normalized_texcoord_min.x, normalized_texcoord_max.y),
+                        V2(normalized_texcoord_max.x, normalized_texcoord_max.y),
+                        V2(normalized_texcoord_max.x, normalized_texcoord_min.y),
+                    };
+
+                    metal_set_render_pipeline(forward_render_encoder, render_context->forward_render_font_pipeline);
+                    metal_set_vertex_bytes(forward_render_encoder, vertices, array_size(vertices), 0);
+                    metal_set_vertex_bytes(forward_render_encoder, texcoords, array_size(texcoords), 1);
+                    metal_set_vertex_bytes(forward_render_encoder, &entry->color, sizeof(entry->color), 2);
+                    metal_set_fragment_texture(forward_render_encoder, render_context->font_bitmap.texture, 0);
+
+                    metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
                 }break;
 
                 default:
@@ -1375,18 +1426,27 @@ int main(void)
                             forward_pipeline_color_attachment_write_masks, array_count(forward_pipeline_color_attachment_write_masks),
                             view.depthStencilPixelFormat, forward_blending_disabled);
 
-    metal_render_context.forward_show_perlin_noise_grid_pipeline = 
+    metal_render_context.forward_render_perlin_noise_grid_pipeline = 
         metal_make_render_pipeline(device, "Forward Show Perlin Noise Grid Pipeline", 
-                            "forward_show_perlin_noise_grid_vert", "forward_show_perlin_noise_grid_frag",
+                            "forward_render_perlin_noise_grid_vert", "forward_render_perlin_noise_grid_frag",
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
                             forward_pipeline_color_attachment_pixel_formats, array_count(forward_pipeline_color_attachment_pixel_formats),
                             forward_pipeline_color_attachment_write_masks, array_count(forward_pipeline_color_attachment_write_masks),
                             view.depthStencilPixelFormat, forward_blending_enabled);
 
-    metal_render_context.forward_show_game_camera_frustum = 
+    metal_render_context.forward_render_game_camera_frustum_pipeline = 
         metal_make_render_pipeline(device, "Forward Show Game Camera Frustum Pipeline", 
-                            "forward_show_frustum_vert", "forward_show_frustum_frag",
+                            "forward_render_frustum_vert", "forward_render_frustum_frag",
+                            shader_library,
+                            MTLPrimitiveTopologyClassTriangle,
+                            forward_pipeline_color_attachment_pixel_formats, array_count(forward_pipeline_color_attachment_pixel_formats),
+                            forward_pipeline_color_attachment_write_masks, array_count(forward_pipeline_color_attachment_write_masks),
+                            view.depthStencilPixelFormat, forward_blending_enabled);
+
+    metal_render_context.forward_render_font_pipeline = 
+        metal_make_render_pipeline(device, "Forward Font Render Pipeline", 
+                            "forward_render_font_vertex", "forward_render_font_frag",
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
                             forward_pipeline_color_attachment_pixel_formats, array_count(forward_pipeline_color_attachment_pixel_formats),
@@ -1507,40 +1567,64 @@ int main(void)
 
     // NOTE(gh) Create required textures
     metal_render_context.g_buffer_position_texture  = 
-        metal_make_texture_2D(device, 
+        metal_make_texture2D(device, 
                               MTLPixelFormatRGBA32Float, 
                               window_width, 
                               window_height,
-                              MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
                               MTLStorageModePrivate);
 
     metal_render_context.g_buffer_normal_texture  = 
-        metal_make_texture_2D(device, 
+        metal_make_texture2D(device, 
                               MTLPixelFormatRGBA32Float, 
                               window_width, 
                               window_height,
-                              MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
                               MTLStorageModePrivate);
 
     metal_render_context.g_buffer_color_texture  = 
-        metal_make_texture_2D(device, 
+        metal_make_texture2D(device, 
                               MTLPixelFormatRGBA8Unorm, 
                               window_width, 
                               window_height,
-                              MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
                               MTLStorageModePrivate);
 
     metal_render_context.g_buffer_depth_texture  = 
-        metal_make_texture_2D(device, 
+        metal_make_texture2D(device, 
                               MTLPixelFormatDepth32Float, 
                               window_width, 
                               window_height,
-                              MTLTextureType2D,
                               MTLTextureUsageRenderTarget,
                               MTLStorageModePrivate);
+
+    u32 font_bitmap_width = 1024;
+    u32 font_bitmap_height = 1024;
+    metal_render_context.font_bitmap = metal_make_texture2D(
+            device, 
+            MTLPixelFormatR8Uint, 
+            font_bitmap_width, font_bitmap_height, 
+            MTLTextureUsageShaderRead,
+            MTLStorageModeShared
+            );
+    stbtt_bakedchar *char_infos = (stbtt_bakedchar *)malloc(sizeof(stbtt_bakedchar)*256); // only holds the ascii characters
+    u8 *font_bitmap = (u8 *)malloc(sizeof(u8)*font_bitmap_width*font_bitmap_height);
+    PlatformReadFileResult font_data = debug_macos_read_file("/Users/mekalopo/Library/Fonts/LiberationMono-Regular.ttf");
+    if(stbtt_BakeFontBitmap(font_data.memory, 0, 64.0f, font_bitmap, font_bitmap_width, font_bitmap_height, 0, 256, char_infos) > 0) // no guarantee this fits!
+    {
+        // Fit!!
+        int a = 1;
+    }
+    else
+    {
+        // TODO(gh) Characters don't fit in the bitmap that we provided
+        assert(0);
+    }
+    metal_write_entire_texture2D(
+            &metal_render_context.font_bitmap, 
+            font_bitmap, 
+            font_bitmap_width, font_bitmap_height, font_bitmap_width);
+    free(font_bitmap);
 
     // NOTE(gh) Create samplers
     metal_render_context.shadowmap_sampler = 
@@ -1556,9 +1640,9 @@ int main(void)
         MTLStoreActionStore,
         MTLStoreActionStore};
     id<MTLTexture> clear_g_buffer_renderpass_color_attachment_textures[] = 
-        {metal_render_context.g_buffer_position_texture,
-        metal_render_context.g_buffer_normal_texture,
-        metal_render_context.g_buffer_color_texture};
+        {metal_render_context.g_buffer_position_texture.texture,
+        metal_render_context.g_buffer_normal_texture.texture,
+        metal_render_context.g_buffer_color_texture.texture};
     v4 clear_g_buffer_renderpass_color_attachment_clear_colors[] = 
         {{0, 0, 0, 0},
         {0, 0, 0, 0},
@@ -1569,7 +1653,7 @@ int main(void)
                               clear_g_buffer_renderpass_color_attachment_textures, array_count(clear_g_buffer_renderpass_color_attachment_textures),
                               clear_g_buffer_renderpass_color_attachment_clear_colors, array_count(clear_g_buffer_renderpass_color_attachment_clear_colors),
                               MTLLoadActionClear, MTLStoreActionStore,  // store depth buffer for the forward pass
-                              metal_render_context.g_buffer_depth_texture,
+                              metal_render_context.g_buffer_depth_texture.texture,
                               1.0f);   
 
     MTLLoadAction g_buffer_renderpass_color_attachment_load_actions[] = 
@@ -1581,9 +1665,9 @@ int main(void)
         MTLStoreActionStore,
         MTLStoreActionStore};
     id<MTLTexture> g_buffer_renderpass_color_attachment_textures[] = 
-        {metal_render_context.g_buffer_position_texture,
-        metal_render_context.g_buffer_normal_texture,
-        metal_render_context.g_buffer_color_texture};
+        {metal_render_context.g_buffer_position_texture.texture,
+        metal_render_context.g_buffer_normal_texture.texture,
+        metal_render_context.g_buffer_color_texture.texture};
     v4 g_buffer_renderpass_color_attachment_clear_colors[] = 
         {{0, 0, 0, 0},
         {0, 0, 0, 0},
@@ -1594,7 +1678,7 @@ int main(void)
                               g_buffer_renderpass_color_attachment_textures, array_count(g_buffer_renderpass_color_attachment_textures),
                               g_buffer_renderpass_color_attachment_clear_colors, array_count(g_buffer_renderpass_color_attachment_clear_colors),
                               MTLLoadActionLoad, MTLStoreActionStore,  // store depth buffer for the forward pass
-                              metal_render_context.g_buffer_depth_texture,
+                              metal_render_context.g_buffer_depth_texture.texture,
                               1.0f);
 
     MTLLoadAction deferred_renderpass_color_attachment_load_actions[] = 
@@ -1628,18 +1712,15 @@ int main(void)
                               0, 0,
                               0, 0,
                               MTLLoadActionLoad, MTLStoreActionDontCare, 
-                              metal_render_context.g_buffer_depth_texture,
+                              metal_render_context.g_buffer_depth_texture.texture,
                               1.0f);
 
     // TODO(gh) peter panning happens when the resolution is too low. 
-    metal_render_context.directional_light_shadowmap_depth_texture_width = 1024;
-    metal_render_context.directional_light_shadowmap_depth_texture_height = 1024;
     metal_render_context.directional_light_shadowmap_depth_texture = 
-        metal_make_texture_2D(device, 
+        metal_make_texture2D(device, 
                               MTLPixelFormatDepth32Float, 
-                              metal_render_context.directional_light_shadowmap_depth_texture_width, 
-                              metal_render_context.directional_light_shadowmap_depth_texture_height,
-                              MTLTextureType2D,
+                              1024, 
+                              1024,
                               MTLTextureUsageRenderTarget,
                               MTLStorageModePrivate);
     metal_render_context.directional_light_shadowmap_renderpass = 
@@ -1648,7 +1729,7 @@ int main(void)
                               0, 0, 
                               0, 0,
                               MTLLoadActionClear, MTLStoreActionStore,
-                              metal_render_context.directional_light_shadowmap_depth_texture,
+                              metal_render_context.directional_light_shadowmap_depth_texture.texture,
                               1.0f);
 
     metal_render_context.forward_render_fence = metal_make_fence(device);
@@ -1705,6 +1786,7 @@ int main(void)
     platform_render_push_buffer.base = (u8 *)malloc(platform_render_push_buffer.total_size);
     // TODO(gh) Make sure to update this value whenever we resize the window
     platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
+    platform_render_push_buffer.char_infos = char_infos;
 
     platform_render_push_buffer.combined_vertex_buffer = metal_render_context.combined_vertex_buffer.memory;
     platform_render_push_buffer.combined_vertex_buffer_size = metal_render_context.combined_vertex_buffer.size;

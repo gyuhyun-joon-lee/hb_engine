@@ -463,24 +463,44 @@ metal_make_render_pipeline(id<MTLDevice> device,
     return result;
 }
 
+inline void
+metal_write_entire_texture2D(MetalTexture2D *texture, void *src, i32 src_width, i32 src_height, i32 src_stride)
+{
+    assert(texture->width == src_width);
+    assert(texture->height == src_height);
 
-inline id<MTLTexture>
-metal_make_texture_2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, 
-                  MTLTextureType type, MTLTextureUsage usage, MTLStorageMode storage_mode)
+    MTLRegion region = MTLRegionMake2D(0, 0, texture->width, texture->height);
+    [texture->texture replaceRegion:region
+          mipmapLevel:0
+            withBytes:src
+          bytesPerRow:src_stride];
+}
+
+// TODO(gh) Should we make this more general, or should we keep this for clarification?
+inline MetalTexture2D
+metal_make_texture2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, 
+                  MTLTextureUsage usage, MTLStorageMode storage_mode)
 {
     MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pixel_format
                                                                    width:width
                                                                   height:height
                                                                mipmapped:NO];
-    descriptor.textureType = type;
+    descriptor.textureType = MTLTextureType2D;
     descriptor.usage |= usage;
     descriptor.storageMode =  storage_mode;
+    descriptor.mipmapLevelCount = 1;
 
-    id<MTLTexture> result  = [device newTextureWithDescriptor:descriptor];
+    id<MTLTexture> texture  = [device newTextureWithDescriptor:descriptor];
     [descriptor release];
+
+    MetalTexture2D result = {};
+    result.texture = texture;
+    result.width = width;
+    result.height = height;
 
     return result;
 }
+
 
 inline id<MTLDepthStencilState>
 metal_make_depth_state(id<MTLDevice> device, MTLCompareFunction compare_function, b32 should_enable_write)
