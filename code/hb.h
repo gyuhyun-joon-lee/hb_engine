@@ -5,16 +5,6 @@
 #ifndef HB_H
 #define HB_H
 
-struct FontAssetInfo
-{
-    f32 pixel_offset_x;
-    f32 pixel_advance_x;
-
-    v2 texcoord_min;
-    v2 texcoord_max;
-};
-
-
 struct GameState
 {
     b32 is_initialized;

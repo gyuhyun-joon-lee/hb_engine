@@ -1749,7 +1749,10 @@ int main(void)
     platform_render_push_buffer.total_size = megabytes(16);
     platform_render_push_buffer.base = (u8 *)malloc(platform_render_push_buffer.total_size);
     // TODO(gh) Make sure to update this value whenever we resize the window
+    platform_render_push_buffer.window_width = window_width;
+    platform_render_push_buffer.window_height = window_height;
     platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
+
     platform_render_push_buffer.device = (void *)device;
 
     platform_render_push_buffer.combined_vertex_buffer = metal_render_context.combined_vertex_buffer.memory;

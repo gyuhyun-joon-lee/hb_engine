@@ -273,6 +273,8 @@ struct PlatformRenderPushBuffer
 {
     // NOTE(gh) provided by the platform layer
     void *device; // TODO(gh) Not well thought-out concept
+    i32 window_width;
+    i32 window_height;
     f32 width_over_height; 
 
     // TODO(gh) Rename this into command buffer or something

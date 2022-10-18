@@ -27,10 +27,10 @@
 #define atomic_increment(ptr) __sync_add_and_fetch(ptr, 1)
 #define atomic_increment_64(ptr) __sync_add_and_fetch(ptr, 1)
 
-#define atomic_add(ptr, value_to_add) __sync_add_and_fetch(ptr, value_to_add)
-#define atomic_add_64(ptr, value_to_add) __sync_add_and_fetch(ptr, value_to_add)
+#define atomic_add(ptr, value_to_add) __atomic_add_fetch(ptr, value_to_add, __ATOMIC_RELAXED)
+#define atomic_add_64(ptr, value_to_add) __atomic_add_fetch(ptr, value_to_add, __ATOMIC_RELAXED)
 
-// TODO(gh) mem order  
+// TODO(gh) mem order?
 #define atomic_exchange(ptr, value) __atomic_exchange_n(ptr, value, __ATOMIC_SEQ_CST)
 #endif
 

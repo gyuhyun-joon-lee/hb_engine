@@ -61,7 +61,6 @@ fade(f32 t)
 internal f32 
 perlin_noise01(u32 *permutations255, f32 x, f32 y, f32 z, u32 frequency)
 {
-    TIMED_BLOCK();
 
     u32 xi = (u32)x;
     u32 yi = (u32)y;

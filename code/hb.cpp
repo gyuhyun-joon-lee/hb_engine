@@ -27,7 +27,8 @@
 // TODO(gh) not a great idea
 #include <time.h>
 
-internal void output_debug_records();
+internal void 
+output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, v2 p);
 
 /*
    TODO(gh)
@@ -410,31 +411,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     end_temp_memory(&perlin_noise_temp_memory);
 
-    push_char(platform_render_push_buffer, &game_state->assets, V3(1, 1, 1), 
-                V2(-0.5f, -0.5f), V2(0.5f, 0.5f),
-                V2(0.0f, 0.0f), V2(1.0f, 1.0f));
-
-#if 0
+#if 1
     char *string = "Let's see if we can render this";
 
-    char *c=string;
-    f32 offset_x = 0;
-    f32 offset_y = 100;
-    while(*c != '\0')
-    {
-        stbtt_bakedchar *char_infos = (stbtt_bakedchar *)platform_render_push_buffer->char_infos;
-        stbtt_aligned_quad quad = {};
-
-        // NOTE(gh) This also advances the offset x 
-        // TODO(gh) width and height should be same as the font bitmaap!!!!!!!!!!!
-        stbtt_GetBakedQuad(char_infos, 1024, 1024, *c, (float*)&offset_x, (float*)&offset_y, &quad, 0);
-
-        push_char(platform_render_push_buffer, V3(1, 1, 1), 
-                    V2(quad.x0, quad.y0), V2(quad.x1, quad.y1),
-                    V2(quad.s0, quad.t0), V2(quad.s1, quad.t1));
-
-        c++;
-    }
 #endif
 
     // TODO(gh) simplify variables that can effect the wind 
@@ -447,13 +426,30 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     // TODO(gh) This prevents us from timing the game update and render loop itself 
-    output_debug_records();
+    output_debug_records(platform_render_push_buffer, &game_state->assets, V2(-0.95f, 0.95f));
 }
 
+internal void
+debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, const char *text, v2 p)
+{
+    const char *c=text;
+    while(*c != '\0')
+    {
+        f32 x_advance_in_ndc = 
+            push_char(platform_render_push_buffer, assets, V3(1, 1, 1), p, (u8)*c);
+
+        p.x += x_advance_in_ndc;
+        c++;
+    }
+}
+
+// NOTE(gh) This counter will fire at the last seconds, meaning this array will be large enough
+// to contain all the records that we time_blocked in other codes
 DebugRecord game_debug_records[__COUNTER__];
 
+#include <stdio.h>
 internal void
-output_debug_records()
+output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, v2 p)
 {
 #if HB_DEBUG
     for(u32 record_index = 0;
@@ -461,14 +457,23 @@ output_debug_records()
             ++record_index)
     {
         DebugRecord *record = game_debug_records + record_index;
-        const char *function = record->function;
-        u32 line = record->line;
-        u32 hit_count = record->hit_count_cycle_count >> 32;
-        u32 cycle_count = (u32)(record->hit_count_cycle_count & 0xffffffff);
+        if(record->function)
+        {
+            const char *function = record->function;
+            const char *file = record->file;
+            u32 line = record->line;
+            u32 hit_count = record->hit_count_cycle_count >> 32;
+            u32 cycle_count = (u32)(record->hit_count_cycle_count & 0xffffffff);
 
-        printf("%s(%u): %ucy, %uh, %ucy/h ", function, line, cycle_count, hit_count, cycle_count/hit_count);
+            char buffer[512] = {};
+            snprintf(buffer, array_count(buffer),
+                    "%s(%s:%u): %ucy, %uh, %ucy/h ", function, file, line, cycle_count, hit_count, cycle_count/hit_count);
 
-        atomic_exchange(&record->hit_count_cycle_count, 0);
+            debug_text_line(platform_render_push_buffer, assets, buffer, p);
+
+            atomic_exchange(&record->hit_count_cycle_count, 0);
+        }
+        p.y -= 100.0f/platform_render_push_buffer->window_height;
     }
 #endif
 }

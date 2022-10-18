@@ -48,9 +48,10 @@ struct TimedBlock
 
     ~TimedBlock()
     {
-        // TODO(gh) double check if this is working properly
         u64 hit_count_cycle_count = ((u64)hit_count << 32) | (rdtsc() - start_cycle_count);
-        atomic_add(&record->hit_count_cycle_count, hit_count_cycle_count);
+        // TODO(gh) Because of this, you should never put timed_block inside the very hot loop.
+        // Instead, put it outside the loop and do hit_count += loop_count
+        atomic_add_64(&record->hit_count_cycle_count, hit_count_cycle_count);
     }
 };
 

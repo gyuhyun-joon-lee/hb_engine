@@ -78,7 +78,6 @@ init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 fov_in_degree,
 internal m4x4 
 camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_axis)
 {
-    TIMED_BLOCK();
     m4x4 result = {};
 
     // NOTE(gh) to pack the rotation & translation into one matrix(with an order of translation and the rotation),
@@ -182,7 +181,6 @@ get_camera_right(Camera *camera)
 internal void
 get_camera_frustum(Camera *camera, CameraFrustum *frustum, f32 width_over_height)
 {
-    TIMED_BLOCK();
     v3 camera_dir = get_camera_lookat(camera);
     v3 camera_right = get_camera_right(camera);
     v3 camera_up = normalize(cross(camera_right, camera_dir));
@@ -352,8 +350,6 @@ internal void
 push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
           CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
-    TIMED_BLOCK();
-
     RenderEntryAABB *entry = (RenderEntryAABB *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
     assert(render_push_buffer->used <= render_push_buffer->total_size);
@@ -378,7 +374,6 @@ internal void
 push_cube(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
           CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
-    TIMED_BLOCK();
     RenderEntryCube *entry = (RenderEntryCube *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
     assert(render_push_buffer->used <= render_push_buffer->total_size);
@@ -452,8 +447,8 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
 
 // TODO(gh) Change this with textured quad? Because we have to have some kind of texture system
 // that is visible from the game code someday!
-internal void
-push_char(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 min, v2 max, v2 texcoord_min, v2 texcoord_max)
+internal f32
+push_char(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 p, u8 c)
 {
     RenderEntryChar *entry = (RenderEntryChar *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
@@ -462,12 +457,21 @@ push_char(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 c
     entry->header.type = RenderEntryType_Char;
     entry->header.size = sizeof(*entry);
 
+    u32 a = sizeof(*entry);
+    u32 b = sizeof(assets->font_bitmap.handle);
+
+    FontAssetInfo *font_info = assets->font_infos + c;
     entry->texture_handle = assets->font_bitmap.handle;
     entry->color = color;
-    entry->min = min;
-    entry->max = max;
-    entry->texcoord_min = texcoord_min;
-    entry->texcoord_max = texcoord_max;
+    entry->min = p + V2(font_info->pixel_min.x/render_push_buffer->window_width, 
+                        font_info->pixel_min.y/render_push_buffer->window_height);
+    entry->max = entry->min + V2(font_info->pixel_dim.x/render_push_buffer->window_width, 
+                                font_info->pixel_dim.y/render_push_buffer->window_height);
+    entry->texcoord_min = assets->font_infos[c].texcoord_min;
+    entry->texcoord_max = assets->font_infos[c].texcoord_max;
+
+    f32 x_advance_in_ndc = font_info->pixel_x_advance/render_push_buffer->window_width;
+    return x_advance_in_ndc;
 }
 
 
