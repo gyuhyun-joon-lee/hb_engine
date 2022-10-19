@@ -22,6 +22,7 @@
 #include "hb_render.cpp"
 #include "hb_image_loader.cpp"
 #include "hb_asset.cpp"
+#include "hb_mesh_generation.cpp"
 
 // TODO(gh) not a great idea
 #include <time.h>
@@ -64,6 +65,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->circle_camera = init_circle_camera(V3(0, 0, 20), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
         // Really far away camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
+
+        generate_sphere_mesh(&game_state->transient_arena, 10.0f, 256, 128);
 
         u32 permutations255[] = 
         { 

@@ -183,7 +183,7 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 left_bottom_p, v2
                 ++x)
         {
             /*
-               NOTE/gh: Given certain cycle, we will construct the mesh like this
+               NOTE(gh) Given certain cycle, we will construct the mesh like this
                v2-----v3
                |       |
                |       |
