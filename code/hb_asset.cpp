@@ -24,7 +24,7 @@ load_asset_texture(PlatformAPI *platform_api, void *device, void *src, i32 width
 }
 
 internal void
-load_font(const char *file_path, PlatformAPI *platform_api, void *device, TextureAsset *font_asset, FontAssetInfo *font_infos)
+load_font(const char *file_path, PlatformAPI *platform_api, void *device, TextureAsset *font_asset, GlyphAssetInfo *glyph_infos)
 {
     PlatformReadFileResult font_data = platform_api->read_file(file_path);
 
@@ -35,10 +35,12 @@ load_font(const char *file_path, PlatformAPI *platform_api, void *device, Textur
     stbtt_bakedchar *char_infos = (stbtt_bakedchar *)malloc(sizeof(stbtt_bakedchar)*256); // only holds the ascii characters
     u8 *font_bitmap = (u8 *)malloc(sizeof(u8)*font_bitmap_width*font_bitmap_height);
 
+    // Load font bitmap into GPU
     if(stbtt_BakeFontBitmap(font_data.memory, 0, 64.0f, font_bitmap, font_bitmap_width, font_bitmap_height, 0, 256, char_infos) > 0) // no guarantee this fits!
     {
         *font_asset = load_asset_texture(platform_api, device, 
                                         font_bitmap, font_bitmap_width, font_bitmap_height, 1);
+        free(font_bitmap);
     }
 
     for(u32 c = 0;
@@ -46,19 +48,22 @@ load_font(const char *file_path, PlatformAPI *platform_api, void *device, Textur
             ++c)
     {
         stbtt_bakedchar *char_info = char_infos + c;
-        FontAssetInfo *font_info = font_infos + c;
+        GlyphAssetInfo *glyph_info = glyph_infos + c;
 
-        font_info->pixel_min.x = char_info->xoff;
-        font_info->pixel_min.y = 0;
-        font_info->pixel_x_advance = char_info->xadvance;
-        font_info->pixel_dim.x = char_info->x1 - char_info->x0;
-        font_info->pixel_dim.y = char_info->y1 - char_info->y0;
-        font_info->texcoord_min = V2(char_info->x0/(f32)font_bitmap_width, char_info->y0/(f32)font_bitmap_height); 
-        font_info->texcoord_max = V2(char_info->x1/(f32)font_bitmap_width, char_info->y1/(f32)font_bitmap_height); 
+        int height = char_info->y1 - char_info->y0;
+
+        glyph_info->x_offset_px = char_info->xoff;
+        glyph_info->x_advance_px = char_info->xadvance;
+        glyph_info->y_offset_from_baseline_px = -(height + char_info->yoff); // STB uses top-down bitmap, and yoff is also top-down in px based on the glyph's height
+
+        glyph_info->dim_px = V2(char_info->x1 - char_info->x0, char_info->y1 - char_info->y0);
+
+        // Top-down, ranging from 0 to 1
+        glyph_info->texcoord_min01 = V2(char_info->x0/(f32)font_bitmap_width, char_info->y0/(f32)font_bitmap_height); 
+        glyph_info->texcoord_max01 = V2(char_info->x1/(f32)font_bitmap_width, char_info->y1/(f32)font_bitmap_height); 
     }
 
     free(char_infos);
-    free(font_bitmap);
 }
 
 // TODO(gh) 'stream' assets?
@@ -68,5 +73,5 @@ internal void
 load_game_assets(GameAssets *assets, PlatformAPI *platform_api, void *device)
 {
     load_font("/Users/mekalopo/Library/Fonts/LiberationMono-Regular.ttf",
-                platform_api, device, &assets->font_bitmap, assets->font_infos);
+                platform_api, device, &assets->font_bitmap, assets->glyph_infos);
 }

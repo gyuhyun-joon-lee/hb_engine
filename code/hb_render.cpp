@@ -2,7 +2,7 @@
  * Written by Gyuhyun Lee
  */
 
-#include "hb_render_group.h"
+#include "hb_render.h"
 
 internal Camera
 init_fps_camera(v3 p, f32 focal_length, f32 fov_in_degree, f32 near, f32 far)
@@ -450,7 +450,7 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
 // TODO(gh) Change this with textured quad? Because we have to have some kind of texture system
 // that is visible from the game code someday!
 internal f32
-push_char(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 p, u8 c)
+push_char(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 p_px, u8 c)
 {
     RenderEntryChar *entry = (RenderEntryChar *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
@@ -462,18 +462,22 @@ push_char(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 c
     u32 a = sizeof(*entry);
     u32 b = sizeof(assets->font_bitmap.handle);
 
-    FontAssetInfo *font_info = assets->font_infos + c;
+    GlyphAssetInfo *glyph_info = assets->glyph_infos + c;
     entry->texture_handle = assets->font_bitmap.handle;
     entry->color = color;
-    entry->min = p + V2(font_info->pixel_min.x/render_push_buffer->window_width, 
-                        font_info->pixel_min.y/render_push_buffer->window_height);
-    entry->max = entry->min + V2(font_info->pixel_dim.x/render_push_buffer->window_width, 
-                                font_info->pixel_dim.y/render_push_buffer->window_height);
-    entry->texcoord_min = assets->font_infos[c].texcoord_min;
-    entry->texcoord_max = assets->font_infos[c].texcoord_max;
 
-    f32 x_advance_in_ndc = font_info->pixel_x_advance/render_push_buffer->window_width;
-    return x_advance_in_ndc;
+    v2 min_px = V2(p_px.x + glyph_info->x_offset_px, p_px.y + glyph_info->y_offset_from_baseline_px);
+    v2 max_px = min_px + glyph_info->dim_px;
+
+    // TODO(gh)This is wrong, just a placeholder
+    entry->min = V2(min_px.x / render_push_buffer->window_width, min_px.y / render_push_buffer->window_height);
+    entry->max = V2(max_px.x / render_push_buffer->window_width, max_px.y / render_push_buffer->window_height);
+
+    entry->texcoord_min = glyph_info->texcoord_min01;
+    entry->texcoord_max = glyph_info->texcoord_max01;
+
+    f32 x_advance_px = glyph_info->x_advance_px;
+    return x_advance_px;
 }
 
 

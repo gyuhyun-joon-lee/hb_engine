@@ -7,7 +7,7 @@
 #include "hb_math.h"
 #include "hb_random.h"
 #include "hb_font.h"
-#include "hb_render_group.h"
+#include "hb_render.h"
 #include "hb_simulation.h"
 #include "hb_entity.h"
 #include "hb_asset.h"
@@ -20,7 +20,7 @@
 #include "hb_simulation.cpp"
 #include "hb_noise.cpp"
 #include "hb_entity.cpp"
-#include "hb_render_group.cpp"
+#include "hb_render.cpp"
 #include "hb_image_loader.cpp"
 #include "hb_asset.cpp"
 
@@ -426,7 +426,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     // TODO(gh) This prevents us from timing the game update and render loop itself 
-    output_debug_records(platform_render_push_buffer, &game_state->assets, V2(-0.95f, 0.95f));
+    output_debug_records(platform_render_push_buffer, &game_state->assets, V2(100, 100));
 }
 
 internal void
@@ -435,10 +435,10 @@ debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAsset
     const char *c=text;
     while(*c != '\0')
     {
-        f32 x_advance_in_ndc = 
+        f32 x_advance_px = 
             push_char(platform_render_push_buffer, assets, V3(1, 1, 1), p, (u8)*c);
 
-        p.x += x_advance_in_ndc;
+        p.x += x_advance_px;
         c++;
     }
 }
@@ -472,7 +472,9 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
             debug_text_line(platform_render_push_buffer, assets, buffer, p);
 
             atomic_exchange(&record->hit_count_cycle_count, 0);
-            p.y -= 100.0f/platform_render_push_buffer->window_height;
+
+            // TODO(gh) advance the vertical line properly!!
+            p.y += 128;
         }
     }
 #endif

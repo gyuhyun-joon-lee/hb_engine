@@ -25,9 +25,6 @@ struct GameState
 
     RandomSeries random_series;
 
-    // TODO(gh) font_asset_infos 
-    FontAssetInfo font_asset_infos[256];
-
     GrassGrid *grass_grids;
     u32 grass_grid_count_x;
     u32 grass_grid_count_y;

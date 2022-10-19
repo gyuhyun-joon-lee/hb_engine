@@ -25,7 +25,7 @@
 #include "hb_math.h"
 #include "hb_random.h"
 #include "hb_simd.h"
-#include "hb_render_group.h"
+#include "hb_render.h"
 #include "hb_asset.h"
 #include "hb_shared_with_shader.h"
 #include "hb_platform.h"

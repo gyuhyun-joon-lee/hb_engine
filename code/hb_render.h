@@ -2,8 +2,8 @@
  * Written by Gyuhyun Lee
  */
 
-#ifndef HB_RENDER_GROUP_H
-#define HB_RENDER_GROUP_H
+#ifndef HB_RENDER_H
+#define HB_RENDER_H
 
 /*
    Later down the road, we might wanna thing about this, if there are a lot of things to render.
