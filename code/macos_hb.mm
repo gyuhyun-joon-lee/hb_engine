@@ -1029,9 +1029,9 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
 
                 }break;
 
-                case RenderEntryType_Char:
+                case RenderEntryType_Glyph:
                 {
-                    RenderEntryChar *entry = (RenderEntryChar *)((u8 *)render_push_buffer->base + consumed);
+                    RenderEntryGlyph *entry = (RenderEntryGlyph *)((u8 *)render_push_buffer->base + consumed);
                     consumed += header->size; 
 
                     // TODO(gh) Not that efficient, but good enough for now

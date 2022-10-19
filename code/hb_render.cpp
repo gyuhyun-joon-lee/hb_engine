@@ -450,13 +450,13 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
 // TODO(gh) Change this with textured quad? Because we have to have some kind of texture system
 // that is visible from the game code someday!
 internal f32
-push_char(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 p_px, u8 c)
+push_glyph(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 p_px, u8 c, f32 scale)
 {
-    RenderEntryChar *entry = (RenderEntryChar *)(render_push_buffer->base + render_push_buffer->used);
+    RenderEntryGlyph *entry = (RenderEntryGlyph *)(render_push_buffer->base + render_push_buffer->used);
     render_push_buffer->used += sizeof(*entry);
     assert(render_push_buffer->used <= render_push_buffer->total_size);
 
-    entry->header.type = RenderEntryType_Char;
+    entry->header.type = RenderEntryType_Glyph;
     entry->header.size = sizeof(*entry);
 
     u32 a = sizeof(*entry);
@@ -466,12 +466,13 @@ push_char(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 c
     entry->texture_handle = assets->font_bitmap.handle;
     entry->color = color;
 
-    v2 min_px = V2(p_px.x + glyph_info->x_offset_px, p_px.y + glyph_info->y_offset_from_baseline_px);
-    v2 max_px = min_px + glyph_info->dim_px;
+    v2 min_px = p_px + scale*V2(glyph_info->x_offset_px, glyph_info->y_offset_from_baseline_px);
+    v2 max_px = min_px + scale*glyph_info->dim_px;
 
-    // TODO(gh)This is wrong, just a placeholder
-    entry->min = V2(min_px.x / render_push_buffer->window_width, min_px.y / render_push_buffer->window_height);
-    entry->max = V2(max_px.x / render_push_buffer->window_width, max_px.y / render_push_buffer->window_height);
+    // TODO(gh) For now p_px assumes that the center is the bottom-left corner of the screen,
+    // but we might wanna change that and stick to it
+    entry->min = 2*V2(min_px.x / render_push_buffer->window_width, min_px.y / render_push_buffer->window_height) - V2(1, 1);
+    entry->max = 2*V2(max_px.x / render_push_buffer->window_width, max_px.y / render_push_buffer->window_height) - V2(1, 1);
 
     entry->texcoord_min = glyph_info->texcoord_min01;
     entry->texcoord_max = glyph_info->texcoord_max01;

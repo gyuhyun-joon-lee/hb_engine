@@ -141,7 +141,7 @@ enum RenderEntryType
     RenderEntryType_Cube,
     RenderEntryType_Grass,
     RenderEntryType_Frustum,
-    RenderEntryType_Char,
+    RenderEntryType_Glyph,
 };
 
 // TODO(gh) Do we have enough reason to keep this header?
@@ -226,7 +226,7 @@ struct RenderEntryFrustum
     u32 index_count;
 };
 
-struct RenderEntryChar
+struct RenderEntryGlyph
 {
     RenderEntryHeader header;
     void *texture_handle;

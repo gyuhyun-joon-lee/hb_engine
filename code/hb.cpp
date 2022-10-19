@@ -432,13 +432,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 internal void
 debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, const char *text, v2 p)
 {
+    float scale = 0.5f;
     const char *c=text;
     while(*c != '\0')
     {
         f32 x_advance_px = 
-            push_char(platform_render_push_buffer, assets, V3(1, 1, 1), p, (u8)*c);
+            push_glyph(platform_render_push_buffer, assets, V3(1, 1, 1), p, (u8)*c, scale);
 
-        p.x += x_advance_px;
+        p.x += scale*x_advance_px;
         c++;
     }
 }
@@ -474,7 +475,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
             atomic_exchange(&record->hit_count_cycle_count, 0);
 
             // TODO(gh) advance the vertical line properly!!
-            p.y += 128;
+            p.y += 64;
         }
     }
 #endif
