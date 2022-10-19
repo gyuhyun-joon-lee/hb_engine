@@ -477,6 +477,7 @@ push_glyph(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 
     entry->texcoord_min = glyph_info->texcoord_min01;
     entry->texcoord_max = glyph_info->texcoord_max01;
 
+    // TODO(gh) Change this to use kerning!
     f32 x_advance_px = glyph_info->x_advance_px;
     return x_advance_px;
 }
