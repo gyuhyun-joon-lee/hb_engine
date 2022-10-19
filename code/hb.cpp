@@ -416,6 +416,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
 #endif
 
+
     // TODO(gh) simplify variables that can effect the wind 
     // maybe with world unit speed
     game_state->time_until_offset_x_inc += platform_input->dt_per_frame;
@@ -427,8 +428,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     if(debug_platform_render_push_buffer)
     {
+        init_render_push_buffer(debug_platform_render_push_buffer, render_camera, game_camera,
+                                0, 0, 0, V3(0, 0, 0), false);
         // TODO(gh) This prevents us from timing the game update and render loop itself 
-        output_debug_records(debug_platform_render_push_buffer, &game_state->assets, V2(100, 100));
+        output_debug_records(debug_platform_render_push_buffer, &game_state->assets, V2(20, 1600));
     }
 }
 
@@ -462,7 +465,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 {
 #if HB_DEBUG
     for(u32 record_index = 0;
-            record_index < 1;//array_count(game_debug_records);
+            record_index < array_count(game_debug_records);
             ++record_index)
     {
         DebugRecord *record = game_debug_records + record_index;
@@ -479,9 +482,9 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
                     "%s(%s(%u)): %ucy, %uh, %ucy/h ", function, file, line, cycle_count, hit_count, cycle_count/hit_count);
 
             // TODO(gh) Do we wanna keep this scale value?
-            f32 scale = 1.0f;
-            //debug_text_line(platform_render_push_buffer, assets, buffer, p, scale);
-            debug_text_line(platform_render_push_buffer, assets, "To", p, scale);
+            f32 scale = 0.5f;
+            debug_text_line(platform_render_push_buffer, assets, buffer, p, scale);
+            //debug_text_line(platform_render_push_buffer, assets, "To", p, scale);
             // TODO(gh) I don't like the fact that this function has to 'know' what font asset it is using..
             p.y += scale*assets->font_asset.newline_advance_px;
 
