@@ -438,10 +438,86 @@ thread_proc(void *data)
     return 0;
 }
 
+internal void
+DEBUG_metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height)
+{
+    id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
+    id <MTLTexture> drawable_texture =  render_context->view.currentDrawable.texture;
+    if(drawable_texture)
+    {
+        render_context->forward_renderpass.colorAttachments[0].texture = drawable_texture;
+        id<MTLRenderCommandEncoder> forward_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->forward_renderpass];
+
+        metal_set_viewport(forward_render_encoder, 0, 0, window_width, window_height, 0, 1);
+        metal_set_scissor_rect(forward_render_encoder, 0, 0, window_width, window_height);
+        metal_set_depth_stencil_state(forward_render_encoder, render_context->disabled_depth_state);
+        metal_set_triangle_fill_mode(forward_render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(forward_render_encoder, MTLWindingCounterClockwise);
+        metal_set_cull_mode(forward_render_encoder, MTLCullModeBack); 
+
+        for(u32 consumed = 0;
+                consumed < render_push_buffer->used;
+           )
+        {
+            RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_push_buffer->base + consumed);       
+
+            switch(header->type)
+            {
+                case RenderEntryType_Glyph:
+                {
+                    RenderEntryGlyph *entry = (RenderEntryGlyph *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += header->size; 
+
+                    // TODO(gh) Not that efficient, but good enough for now
+                    v2 vertices[] = 
+                    {
+                        entry->min,
+                        entry->max,
+                        V2(entry->min.x, entry->max.y),
+
+                        entry->min,
+                        V2(entry->max.x, entry->min.y),
+                        entry->max,
+                    };
+
+                    // Top-down
+                    v2 texcoords[] = 
+                    {
+                        V2(entry->texcoord_min.x, entry->texcoord_max.y),
+                        V2(entry->texcoord_max.x, entry->texcoord_min.y),
+                        V2(entry->texcoord_min.x, entry->texcoord_min.y),
+
+                        V2(entry->texcoord_min.x, entry->texcoord_max.y),
+                        V2(entry->texcoord_max.x, entry->texcoord_max.y),
+                        V2(entry->texcoord_max.x, entry->texcoord_min.y),
+                    };
+
+                    metal_set_render_pipeline(forward_render_encoder, render_context->forward_render_font_pipeline);
+                    metal_set_vertex_bytes(forward_render_encoder, vertices, array_size(vertices), 0);
+                    metal_set_vertex_bytes(forward_render_encoder, texcoords, array_size(texcoords), 1);
+                    metal_set_vertex_bytes(forward_render_encoder, &entry->color, sizeof(entry->color), 2);
+                    metal_set_fragment_texture(forward_render_encoder, (id<MTLTexture>)entry->texture_handle, 0);
+
+                    metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
+                }break;
+
+                default:
+                {
+                    consumed += header->size;
+                };
+            }
+        }
+
+        metal_end_encoding(forward_render_encoder);
+    }
+
+    metal_commit_command_buffer(command_buffer);
+}
+
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
 // and put them inside the render mesh so that the graphics API can render them.
 internal void
-metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 time_elasped_from_start)
+metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 time_elasped_from_start)
 {
     id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
@@ -1075,18 +1151,21 @@ metal_render_and_display(MetalRenderContext *render_context, PlatformRenderPushB
         }
 
         metal_end_encoding(forward_render_encoder);
-
         metal_commit_command_buffer(command_buffer);
          
-        // TODO(gh) My understading is metal will automatically sync with the display when I request presenting,
-        // but double check
-        id<MTLCommandBuffer> present_command_buffer = [render_context->command_queue commandBuffer];
-
-        [present_command_buffer presentDrawable: render_context->view.currentDrawable];
-        metal_commit_command_buffer(present_command_buffer);
-
         // TODO(gh) properly sync with the frame!
     }
+}
+
+internal void
+metal_display(MetalRenderContext *render_context)
+{
+    // TODO(gh) My understading is metal will automatically sync with the display when I request presenting,
+    // but double check
+    id<MTLCommandBuffer> present_command_buffer = [render_context->command_queue commandBuffer];
+
+    [present_command_buffer presentDrawable: render_context->view.currentDrawable];
+    metal_commit_command_buffer(present_command_buffer);
 }
  
 
@@ -1762,6 +1841,21 @@ int main(void)
     platform_render_push_buffer.giant_buffer = metal_render_context.giant_buffer.memory;
     platform_render_push_buffer.giant_buffer_size = metal_render_context.giant_buffer.size;
 
+    PlatformRenderPushBuffer *debug_platform_render_push_buffer = 0;
+#if HB_DEBUG 
+    PlatformRenderPushBuffer _debug_platform_render_push_buffer = {};
+    _debug_platform_render_push_buffer.total_size = megabytes(1);
+    _debug_platform_render_push_buffer.base = (u8 *)malloc(_debug_platform_render_push_buffer.total_size);
+    // TODO(gh) Make sure to update this value whenever we resize the window
+    _debug_platform_render_push_buffer.window_width = window_width;
+    _debug_platform_render_push_buffer.window_height = window_height;
+    _debug_platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
+
+    _debug_platform_render_push_buffer.device = (void *)device;
+
+    debug_platform_render_push_buffer = &_debug_platform_render_push_buffer;
+#endif 
+
     [app activateIgnoringOtherApps:YES];
     [app run];
 
@@ -1798,14 +1892,19 @@ int main(void)
         {
             if(macos_game_code.update_and_render)
             {
-                macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer, &thread_work_queue);
+                macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer, debug_platform_render_push_buffer, &thread_work_queue);
             }
 
             // TODO(gh) Priority queue?
 
             @autoreleasepool
             {
-                metal_render_and_display(&metal_render_context, &platform_render_push_buffer, window_width, window_height, time_elasped_from_start);
+                metal_render(&metal_render_context, &platform_render_push_buffer, window_width, window_height, time_elasped_from_start);
+                if(debug_platform_render_push_buffer)
+                {
+                    DEBUG_metal_render(&metal_render_context, debug_platform_render_push_buffer, window_width, window_height);
+                }
+                metal_display(&metal_render_context);
 
                 u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
                 u32 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);

@@ -290,15 +290,25 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *re
     render_push_buffer->used = 0;
 }
 
+internal void *
+_push_render_element(PlatformRenderPushBuffer *render_push_buffer, u32 size)
+{
+    void *entry = (void *)(render_push_buffer->base + render_push_buffer->used);
+
+    render_push_buffer->used += size;
+    assert(render_push_buffer->used <= render_push_buffer->total_size);
+
+    return entry;
+}
+#define push_render_element(render_push_buffer, type) (type *)_push_render_element(render_push_buffer, sizeof(type))
+
 // TODO(gh) do we want to collape this to single line_group or something to save memory(color, type)?
 internal void
 push_line(PlatformRenderPushBuffer *render_push_buffer, v3 start, v3 end, v3 color)
 {
     TIMED_BLOCK();
 
-    RenderEntryLine *entry = (RenderEntryLine *)(render_push_buffer->base + render_push_buffer->used);
-    render_push_buffer->used += sizeof(*entry);
-    assert(render_push_buffer->used <= render_push_buffer->total_size);
+    RenderEntryLine *entry = push_render_element(render_push_buffer, RenderEntryLine);
 
     entry->header.type = RenderEntryType_Line;
     entry->header.size = sizeof(*entry);
@@ -353,9 +363,7 @@ push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color,
           CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
     TIMED_BLOCK();
-    RenderEntryAABB *entry = (RenderEntryAABB *)(render_push_buffer->base + render_push_buffer->used);
-    render_push_buffer->used += sizeof(*entry);
-    assert(render_push_buffer->used <= render_push_buffer->total_size);
+    RenderEntryAABB *entry = push_render_element(render_push_buffer, RenderEntryAABB);
 
     entry->header.type = RenderEntryType_AABB;
     entry->header.size = sizeof(*entry);
@@ -376,9 +384,7 @@ internal void
 push_cube(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
           CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
-    RenderEntryCube *entry = (RenderEntryCube *)(render_push_buffer->base + render_push_buffer->used);
-    render_push_buffer->used += sizeof(*entry);
-    assert(render_push_buffer->used <= render_push_buffer->total_size);
+    RenderEntryCube *entry = push_render_element(render_push_buffer, RenderEntryCube);
 
     entry->header.type = RenderEntryType_Cube;
     entry->header.size = sizeof(*entry);
@@ -401,9 +407,7 @@ internal void
 push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
           CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
-    RenderEntryGrass *entry = (RenderEntryGrass *)(render_push_buffer->base + render_push_buffer->used);
-    render_push_buffer->used += sizeof(*entry);
-    assert(render_push_buffer->used <= render_push_buffer->total_size);
+    RenderEntryGrass *entry = push_render_element(render_push_buffer, RenderEntryGrass);
 
     assert(render_push_buffer->used <= render_push_buffer->total_size);
     assert(vertex_count != 0 && index_count != 0);
@@ -426,9 +430,7 @@ internal void
 push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color, 
             v3 *vertices, u32 vertex_count, u32 *indices, u32 index_count)
 {
-    RenderEntryFrustum *entry = (RenderEntryFrustum *)(render_push_buffer->base + render_push_buffer->used);
-    render_push_buffer->used += sizeof(*entry);
-    assert(render_push_buffer->used <= render_push_buffer->total_size);
+    RenderEntryFrustum *entry = push_render_element(render_push_buffer, RenderEntryFrustum);
 
     entry->header.type = RenderEntryType_Frustum;
     entry->header.size = sizeof(*entry);
@@ -450,20 +452,20 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
 // TODO(gh) Change this with textured quad? Because we have to have some kind of texture system
 // that is visible from the game code someday!
 internal f32
-push_glyph(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 p_px, u8 c, f32 scale)
+push_glyph(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 p_px, u32 glyph, f32 scale)
 {
-    RenderEntryGlyph *entry = (RenderEntryGlyph *)(render_push_buffer->base + render_push_buffer->used);
-    render_push_buffer->used += sizeof(*entry);
-    assert(render_push_buffer->used <= render_push_buffer->total_size);
+    RenderEntryGlyph *entry = push_render_element(render_push_buffer, RenderEntryGlyph);
 
     entry->header.type = RenderEntryType_Glyph;
     entry->header.size = sizeof(*entry);
 
-    u32 a = sizeof(*entry);
-    u32 b = sizeof(assets->font_bitmap.handle);
+    assert(glyph >= assets->font_asset.start_glyph && glyph <= assets->font_asset.end_glyph);
+    // This is what we should be using to get the information about the glyph, 
+    // as our font info does not start from ascii 0
+    u32 glyphID = glyph - assets->font_asset.start_glyph;
 
-    GlyphAssetInfo *glyph_info = assets->glyph_infos + c;
-    entry->texture_handle = assets->font_bitmap.handle;
+    GlyphAssetInfo *glyph_info = assets->font_asset.glyph_infos + glyphID;
+    entry->texture_handle = assets->font_asset.font_bitmap.handle;
     entry->color = color;
 
     v2 min_px = p_px + scale*V2(glyph_info->x_offset_px, glyph_info->y_offset_from_baseline_px);

@@ -16,10 +16,9 @@ struct TextureAsset
 
 struct GlyphAssetInfo
 {
+    // These are all scaled based on the requested font height
     f32 x_offset_px; // Where should we draw this glyphs based on the current position x
-    f32 x_advance_px; // How much we should advance to draw the next charcter
-    // Most upper case will be 0, and some characters like 'p' will be -12 or something,
-    // which means the character extends below the baseline
+    f32 x_advance_px; // How much we should advance to draw the next character(does not take account of kerning)
     f32 y_offset_from_baseline_px; 
 
     v2 dim_px;
@@ -29,10 +28,22 @@ struct GlyphAssetInfo
     v2 texcoord_max01;
 };
 
+struct FontAsset
+{
+    u32 start_glyph;
+    u32 end_glyph;
+    u32 glyph_count;
+    f32 *kerning_advances; // can hold glyph_count*glyph_count amount of data
+    GlyphAssetInfo *glyph_infos; // can hold glyph_count amount of data 
+
+    f32 newline_advance_px; // how much we should advance vertically, when we move onto newline
+
+    TextureAsset font_bitmap;
+};
+
 struct GameAssets
 {
-    GlyphAssetInfo glyph_infos[256]; 
-    TextureAsset font_bitmap;
+    FontAsset font_asset;
 };
 
 #endif

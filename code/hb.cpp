@@ -425,21 +425,29 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->time_until_offset_x_inc = 0;
     }
 
-    // TODO(gh) This prevents us from timing the game update and render loop itself 
-    output_debug_records(platform_render_push_buffer, &game_state->assets, V2(100, 100));
+    if(debug_platform_render_push_buffer)
+    {
+        // TODO(gh) This prevents us from timing the game update and render loop itself 
+        output_debug_records(debug_platform_render_push_buffer, &game_state->assets, V2(100, 100));
+    }
 }
 
 internal void
-debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, const char *text, v2 p)
+debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, const char *text, v2 p, f32 scale)
 {
-    float scale = 0.5f;
     const char *c=text;
     while(*c != '\0')
     {
         f32 x_advance_px = 
             push_glyph(platform_render_push_buffer, assets, V3(1, 1, 1), p, (u8)*c, scale);
 
-        p.x += scale*x_advance_px;
+        f32 kerning_advance = 0;
+        if(*(c+1) != '\0')
+        {
+            kerning_advance = get_font_kerning(&assets->font_asset, *c, *(c+1));
+        }
+
+        p.x += scale*(x_advance_px+kerning_advance);
         c++;
     }
 }
@@ -454,7 +462,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 {
 #if HB_DEBUG
     for(u32 record_index = 0;
-            record_index < array_count(game_debug_records);
+            record_index < 1;//array_count(game_debug_records);
             ++record_index)
     {
         DebugRecord *record = game_debug_records + record_index;
@@ -470,12 +478,14 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
             snprintf(buffer, array_count(buffer),
                     "%s(%s(%u)): %ucy, %uh, %ucy/h ", function, file, line, cycle_count, hit_count, cycle_count/hit_count);
 
-            debug_text_line(platform_render_push_buffer, assets, buffer, p);
+            // TODO(gh) Do we wanna keep this scale value?
+            f32 scale = 1.0f;
+            //debug_text_line(platform_render_push_buffer, assets, buffer, p, scale);
+            debug_text_line(platform_render_push_buffer, assets, "To", p, scale);
+            // TODO(gh) I don't like the fact that this function has to 'know' what font asset it is using..
+            p.y += scale*assets->font_asset.newline_advance_px;
 
             atomic_exchange(&record->hit_count_cycle_count, 0);
-
-            // TODO(gh) advance the vertical line properly!!
-            p.y += 64;
         }
     }
 #endif

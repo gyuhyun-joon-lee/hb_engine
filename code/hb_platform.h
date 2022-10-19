@@ -322,7 +322,7 @@ struct PlatformRenderPushBuffer
     b32 enable_grass_rendering;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void (name)(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory, PlatformRenderPushBuffer *platform_render_push_buffer, ThreadWorkQueue *thread_work_queue)
+#define GAME_UPDATE_AND_RENDER(name) void (name)(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory, PlatformRenderPushBuffer *platform_render_push_buffer, PlatformRenderPushBuffer *debug_platform_render_push_buffer, ThreadWorkQueue *thread_work_queue)
 typedef GAME_UPDATE_AND_RENDER(UpdateAndRender);
 
 #ifdef __cplusplus
