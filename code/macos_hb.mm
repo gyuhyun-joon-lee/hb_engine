@@ -39,7 +39,7 @@ global v2 mouse_diff;
 global b32 is_game_running;
 global dispatch_semaphore_t semaphore;
 
-// TODO(gh) temporary thing to remove render_group.cpp
+// TODO(gh) temporary thing to remove render_group.cpp from the platform layer
 internal m4x4 
 camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_axis)
 {
@@ -566,9 +566,9 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
         switch(header->type)
         {
-            case RenderEntryType_AABB:
+            case RenderEntryType_MeshPN:
             {
-                RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
+                RenderEntryMeshPN *entry = (RenderEntryMeshPN *)((u8 *)render_push_buffer->base + consumed);
                 consumed += sizeof(*entry);
 
                 if(entry->should_cast_shadow)
@@ -589,6 +589,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 }
             }break;
 
+#if 0
             case RenderEntryType_Cube:
             {
                 RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
@@ -611,7 +612,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                                       render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
                 }
             }break;
-
+#endif 
             default: 
             {
                 consumed += header->size;
@@ -876,9 +877,9 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
         switch(header->type)
         {
-            case RenderEntryType_AABB:
+            case RenderEntryType_MeshPN:
             {
-                RenderEntryAABB *entry = (RenderEntryAABB *)((u8 *)render_push_buffer->base + consumed);
+                RenderEntryMeshPN *entry = (RenderEntryMeshPN *)((u8 *)render_push_buffer->base + consumed);
                 consumed += sizeof(*entry);
 
                 m4x4 model = M4x4();
@@ -899,37 +900,6 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
 
                 metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
-                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
-
-                metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
-                        render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
-            }break;
-
-            case RenderEntryType_Cube:
-            {
-                RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
-                consumed += sizeof(*entry);
-
-                m4x4 model = st_m4x4(entry->p, entry->dim);
-                model = transpose(model); // make the matrix column-major
-
-                PerObjectData per_object_data = {};
-                per_object_data.model = model;
-                per_object_data.color = entry->color;
-
-                // TODO(gh) Sort the render entry based on cull mode
-                // metal_set_cull_mode(g_buffer_render_encoder, MTLCullModeBack); 
-
-                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
-                metal_set_vertex_bytes(g_buffer_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
-                metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                metal_set_vertex_buffer(g_buffer_render_encoder, 
-                                        render_context->combined_vertex_buffer.buffer, 
-                                        entry->vertex_buffer_offset, 2);
-                metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
-
-                metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
-
                 metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
 
                 metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 

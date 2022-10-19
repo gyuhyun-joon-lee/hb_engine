@@ -335,7 +335,7 @@ push_data(void *dst_buffer, u64 *dst_used, u64 dst_size, void *src, u32 src_size
 // TODO(gh) not sure how this will hold up when the scene gets complicated(with a lot or vertices)
 // so keep an eye on this method
 internal u32
-push_vertex_data(PlatformRenderPushBuffer *render_push_buffer, CommonVertex *vertices, u32 vertex_count)
+push_vertex_data(PlatformRenderPushBuffer *render_push_buffer, VertexPN *vertices, u32 vertex_count)
 {
     u32 result = push_data(render_push_buffer->combined_vertex_buffer, 
                             &render_push_buffer->combined_vertex_buffer_used, 
@@ -359,37 +359,14 @@ push_index_data(PlatformRenderPushBuffer *render_push_buffer, u32 *indices, u32 
 }
  
 internal void
-push_aabb(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
-          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
+push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
+          VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
     TIMED_BLOCK();
-    RenderEntryAABB *entry = push_render_element(render_push_buffer, RenderEntryAABB);
+    RenderEntryMeshPN *entry = push_render_element(render_push_buffer, RenderEntryMeshPN);
 
-    entry->header.type = RenderEntryType_AABB;
+    entry->header.type = RenderEntryType_MeshPN;
     entry->header.size = sizeof(*entry);
-
-    entry->p = p;
-    entry->dim = dim;
-
-    entry->should_cast_shadow = should_cast_shadow;
-    
-    entry->color = color;
-
-    entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);
-    entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);
-    entry->index_count = index_count;
-}
-
-internal void
-push_cube(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
-          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
-{
-    RenderEntryCube *entry = push_render_element(render_push_buffer, RenderEntryCube);
-
-    entry->header.type = RenderEntryType_Cube;
-    entry->header.size = sizeof(*entry);
-
-    assert(render_push_buffer->used <= render_push_buffer->total_size);
 
     entry->p = p;
     entry->dim = dim;
@@ -405,7 +382,7 @@ push_cube(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color,
 
 internal void
 push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
-          CommonVertex *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
+          VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
 {
     RenderEntryGrass *entry = push_render_element(render_push_buffer, RenderEntryGrass);
 

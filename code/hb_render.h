@@ -9,7 +9,7 @@
    Later down the road, we might wanna thing about this, if there are a lot of things to render.
 */
 
-struct CommonVertex
+struct VertexPN
 {
     v3 p;
     v3 normal;
@@ -136,9 +136,9 @@ struct CircleCamera
 
 enum RenderEntryType
 {
-    RenderEntryType_AABB,
+    RenderEntryType_Null,
     RenderEntryType_Line,
-    RenderEntryType_Cube,
+    RenderEntryType_MeshPN,
     RenderEntryType_Grass,
     RenderEntryType_Frustum,
     RenderEntryType_Glyph,
@@ -155,24 +155,7 @@ struct RenderEntryHeader
     u32 size;
 };
 
-struct RenderEntryAABB
-{
-    RenderEntryHeader header;
-
-    v3 p;
-    v3 dim;
-    v3 color;
-
-    b32 should_cast_shadow;
-
-    // TODO(gh) Make this as a struct?
-    // NOTE(gh) offset to the combined vertex & index buffer
-    u32 vertex_buffer_offset;
-    u32 index_buffer_offset;
-    u32 index_count;
-};
-
-struct RenderEntryCube
+struct RenderEntryMeshPN
 {
     RenderEntryHeader header;
 

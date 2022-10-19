@@ -15,7 +15,6 @@
 #include "hb_debug.h"
 #include "hb.h"
 
-#include "hb_mesh_loader.cpp"
 #include "hb_ray.cpp"
 #include "hb_simulation.cpp"
 #include "hb_noise.cpp"
@@ -292,7 +291,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
-    platform_render_push_buffer->enable_grass_rendering = true;
+    platform_render_push_buffer->enable_grass_rendering = false;
     platform_render_push_buffer->enable_show_perlin_noise_grid = show_perlin_noise_grid;
 
     for(u32 entity_index = 0;
@@ -304,17 +303,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         {
             case EntityType_Floor:
             case EntityType_AABB:
-            {
-                push_aabb(platform_render_push_buffer, 
-                          entity->p, entity->dim, entity->color, 
-                          entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
-            }break;
-
             case EntityType_Cube:
             {
-                push_cube(platform_render_push_buffer, 
+                push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
-                          entity->vertices, entity->vertex_count, entity->indices, entity->index_count, true);
+                          entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
             }break;
         }
     }

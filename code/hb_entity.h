@@ -48,7 +48,7 @@ struct Entity
     u32 x_quad_count;
     u32 y_quad_count;
 
-    CommonVertex *vertices;
+    VertexPN *vertices;
     u32 vertex_count;
 
     // TODO(gh) We don't really need to hold the indices, 

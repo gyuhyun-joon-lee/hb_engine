@@ -91,7 +91,7 @@ add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
     result->color = color;
 
     result->vertex_count = array_count(cube_vertices) / 6;
-    result->vertices = (CommonVertex *)malloc(sizeof(CommonVertex) * result->vertex_count);
+    result->vertices = (VertexPN *)malloc(sizeof(VertexPN) * result->vertex_count);
     for(u32 i = 0;
             i < result->vertex_count;
             ++i)
@@ -137,7 +137,7 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 left_bottom_p, v2
     u32 total_vertex_count = x_vertex_count * y_vertex_count;
 
     result->vertex_count = total_vertex_count;
-    result->vertices = push_array(arena, CommonVertex, result->vertex_count);
+    result->vertices = push_array(arena, VertexPN, result->vertex_count);
 
     u32 populated_vertex_count = 0;
     for(u32 y = 0;
@@ -250,7 +250,7 @@ populate_grass_vertices(v3 p0,
                         f32 height, // how tall the grass should be
                         v2 facing_direction, 
                         f32 tilt, f32 bend, f32 grass_divided_count, 
-                        CommonVertex *vertices, u32 vertex_count, u32 hash, f32 time, f32 wiggliness)
+                        VertexPN *vertices, u32 vertex_count, u32 hash, f32 time, f32 wiggliness)
 {
     assert(compare_with_epsilon(length_square(facing_direction), 1.0f));
 
@@ -334,7 +334,7 @@ add_grass_entity(GameState *game_state, RandomSeries *series,
 
     result->grass_divided_count = grass_divided_count;
     result->vertex_count = 2*result->grass_divided_count + 1;
-    result->vertices = push_array(arena, CommonVertex, result->vertex_count); // TODO(gh) replace this with proper buffering
+    result->vertices = push_array(arena, VertexPN, result->vertex_count); // TODO(gh) replace this with proper buffering
 
     result->index_count = 3 * (2*(result->grass_divided_count - 1)+1);
     result->indices = push_array(arena, u32, result->index_count);
