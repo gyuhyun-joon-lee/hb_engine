@@ -101,16 +101,6 @@ load_font(const char *file_path, PlatformAPI *platform_api, void *device,
             u32 glyph1 = j + font_asset->start_glyph;
             int kern_advance = stbtt_GetCodepointKernAdvance(&font_info, (int)glyph0, (int)glyph1);
 
-            if(kern_advance !=0)
-            {
-                int a =1;
-            }
-
-            if(glyph0 == 'T' && glyph1 == 'o')
-            {
-                int a = 1;
-            }
-
             // indexing is first_glyphID * glyp_count + second_glyphID
             font_asset->kerning_advances[i*font_asset->glyph_count + j] = font_scale*kern_advance;
         }
@@ -137,6 +127,8 @@ load_game_assets(GameAssets *assets, PlatformAPI *platform_api, void *device)
     load_font("/Users/mekalopo/Library/Fonts/LiberationMono-Regular.ttf",
                 platform_api, device, &assets->font_asset, ' ', '~');
 #endif
+    // TODO(gh) We don't really need the bitmap for space, but because of the way how we are 
+    // accessing to get the kerning values, we need to start from ' ' 
     load_font("/System/Library/Fonts/Supplemental/arial.ttf",
                 platform_api, device, &assets->font_asset, ' ', '~');
 }
@@ -144,8 +136,8 @@ load_game_assets(GameAssets *assets, PlatformAPI *platform_api, void *device)
 internal f32
 get_font_kerning(FontAsset *font_asset, u32 glyph0, u32 glyph1)
 {
-    u32 glyph0ID = glyph0 - font_asset->start_glyph;
-    u32 glyph1ID = glyph1 - font_asset->start_glyph;
+    u32 glyph0ID = clamp(font_asset->start_glyph, glyph0, font_asset->end_glyph) - font_asset->start_glyph;
+    u32 glyph1ID = clamp(font_asset->start_glyph, glyph1, font_asset->end_glyph) - font_asset->start_glyph;
 
     f32 result = font_asset->kerning_advances[glyph0ID*font_asset->glyph_count + glyph1ID];
     return result;

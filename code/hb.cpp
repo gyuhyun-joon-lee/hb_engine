@@ -431,9 +431,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 }
 
+// TODO(gh) we can use this function to make the p relative to bottom_left!
 internal void
-debug_text_reset()
+debug_reset_text_to_top_left(v2 *p)
 {
+    *p = V2(0, 0);
 }
 
 internal void
@@ -458,7 +460,22 @@ debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAsset
     }
 }
 
-// NOTE(gh) This counter will fire at the last seconds, meaning this array will be large enough
+internal void
+debug_newline(v2 *top_down_p, f32 scale, FontAsset *font_asset)
+{
+    // TODO(gh) I don't like the fact that this function has to 'know' what font asset it is using..
+    top_down_p->y += scale*(font_asset->ascent_from_baseline + 
+                            font_asset->descent_from_baseline + 
+                            font_asset->line_gap);
+}
+
+
+/*
+    grass : hiragana U+8349
+    engine : U+30A8 U+30F3 U+30B8 U+30F3
+*/
+
+// NOTE(gh) This counter value will be inserted at at the end of the compilation, meaning this array will be large enough
 // to contain all the records that we time_blocked in other codes
 DebugRecord game_debug_records[__COUNTER__];
 
@@ -485,14 +502,11 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
                     "%s(%s(%u)): %ucy, %uh, %ucy/h ", function, file, line, cycle_count, hit_count, cycle_count/hit_count);
 
             // TODO(gh) Do we wanna keep this scale value?
-            f32 scale = 0.4f;
+            f32 scale = 0.5f;
             debug_text_line(platform_render_push_buffer, assets, buffer, top_left_rel_p_px, scale);
 
             //debug_text_line(platform_render_push_buffer, assets, "Togpli", top_left_rel_p_px, scale);
-            // TODO(gh) I don't like the fact that this function has to 'know' what font asset it is using..
-            top_left_rel_p_px.y += scale*(assets->font_asset.ascent_from_baseline + 
-                                        assets->font_asset.descent_from_baseline + 
-                                        assets->font_asset.line_gap);
+            debug_newline(&top_left_rel_p_px, scale, &assets->font_asset);
 
             atomic_exchange(&record->hit_count_cycle_count, 0);
         }

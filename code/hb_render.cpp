@@ -438,8 +438,8 @@ push_glyph(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 
     entry->header.size = sizeof(*entry);
 
     FontAsset *font_asset = &assets->font_asset;
-
     assert(glyph >= font_asset->start_glyph && glyph <= font_asset->end_glyph);
+
     // This is what we should be using to get the information about the glyph, 
     // as our font info does not start from ascii 0
     u32 glyphID = glyph - font_asset->start_glyph;
