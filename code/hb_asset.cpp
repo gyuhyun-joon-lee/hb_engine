@@ -50,7 +50,7 @@ begin_load_font(LoadFontInfo *load_font_info, FontAsset *font_asset, const char 
     // TODO(gh) We should get rid of these mallocs, for sure.
     // TODO(gh) memset to 0?
     u32 codepoint_to_glyphID_table_size = sizeof(u32) * MAX_UNICODE_CODEPOINT;
-    font_asset->codepoint_to_glyphID_table = (u32 *)malloc(sizeof(u32) * MAX_UNICODE_CODEPOINT);
+    font_asset->codepoint_to_glyphID_table = (u16 *)malloc(sizeof(u16) * MAX_UNICODE_CODEPOINT);
     zero_memory(font_asset->codepoint_to_glyphID_table, codepoint_to_glyphID_table_size);
     font_asset->glyph_assets = (GlyphAsset *)malloc(sizeof(GlyphAsset) * max_glyph_count);
     font_asset->kerning_advances = (f32 *)malloc(sizeof(f32) * max_glyph_count * max_glyph_count);
@@ -76,13 +76,7 @@ end_load_font(LoadFontInfo *load_font_info)
             u32 codepoint0 = font_asset->glyph_assets[i].unicode_codepoint;
             u32 codepoint1 = font_asset->glyph_assets[j].unicode_codepoint;
 
-            if(codepoint0 == 'i' && codepoint1 == 'n')
-            {
-                int a = 1;
-            }
-
             f32 kerning = load_font_info->font_scale*stbtt_GetCodepointKernAdvance(&load_font_info->font_info, codepoint0 ,codepoint1);
-
             font_asset->kerning_advances[i*font_asset->max_glyph_count + j] = kerning;
         }
     }
@@ -97,7 +91,8 @@ add_glyph_asset(LoadFontInfo *load_font_info, PlatformAPI *platform_api, u32 uni
     int glyphID_that_doesnt_exist = stbtt_FindGlyphIndex(&load_font_info->font_info, 11111);     
     assert(stbtt_FindGlyphIndex(&load_font_info->font_info, unicode_codepoint)!=glyphID_that_doesnt_exist);
 
-    u32 glyphID = load_font_info->populated_glyph_count++;
+    u16 glyphID = load_font_info->populated_glyph_count++;
+    assert(load_font_info->populated_glyph_count <= load_font_info->font_asset->max_glyph_count);
     load_font_info->font_asset->codepoint_to_glyphID_table[unicode_codepoint] = glyphID;
 
     int x_advance_px;
@@ -163,8 +158,8 @@ load_game_assets(GameAssets *assets, PlatformAPI *platform_api, void *device)
 internal f32
 get_glyph_kerning(FontAsset *font_asset, f32 scale, u32 unicode_codepoint0, u32 unicode_codepoint1)
 {
-    u32 glyph0ID = font_asset->codepoint_to_glyphID_table[unicode_codepoint0];
-    u32 glyph1ID = font_asset->codepoint_to_glyphID_table[unicode_codepoint1];
+    u16 glyph0ID = font_asset->codepoint_to_glyphID_table[unicode_codepoint0];
+    u16 glyph1ID = font_asset->codepoint_to_glyphID_table[unicode_codepoint1];
 
     f32 result = scale*font_asset->kerning_advances[glyph0ID*font_asset->max_glyph_count + glyph1ID];
     return result;
@@ -173,7 +168,7 @@ get_glyph_kerning(FontAsset *font_asset, f32 scale, u32 unicode_codepoint0, u32 
 internal f32
 get_glyph_x_advance_px(FontAsset *font_asset, f32 scale, u32 unicode_codepoint)
 {
-    u32 glyphID = font_asset->codepoint_to_glyphID_table[unicode_codepoint];
+    u16 glyphID = font_asset->codepoint_to_glyphID_table[unicode_codepoint];
     f32 result = scale*font_asset->glyph_assets[glyphID].x_advance_px;
 
     return result;
@@ -182,7 +177,7 @@ get_glyph_x_advance_px(FontAsset *font_asset, f32 scale, u32 unicode_codepoint)
 internal f32
 get_glyph_left_bearing_px(FontAsset *font_asset, f32 scale, u32 unicode_codepoint)
 {
-    u32 glyphID = font_asset->codepoint_to_glyphID_table[unicode_codepoint];
+    u16 glyphID = font_asset->codepoint_to_glyphID_table[unicode_codepoint];
     f32 result = scale*font_asset->glyph_assets[glyphID].left_bearing_px;
 
     return result;

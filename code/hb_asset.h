@@ -37,7 +37,10 @@ struct GlyphAsset
 struct FontAsset
 {
     u32 max_glyph_count;
-    u32 *codepoint_to_glyphID_table; // use this to get the glyphID to index glyph & kerning information
+    // TODO(gh) This might be a bit slow, as this is 4MB long.
+    // We can sort this by the codepoint for faster lookup, but always make sure
+    // to measure it!
+    u16 *codepoint_to_glyphID_table; // use this to get the glyphID to index glyph & kerning information
     f32 *kerning_advances; // can hold glyph_count*glyph_count amount of data
     GlyphAsset *glyph_assets; // can hold glyph_count amount of data 
 
@@ -57,8 +60,7 @@ struct LoadFontInfo
 
     FontAsset *font_asset;
 
-    u32 populated_glyph_count;
-    u32 max_glyph_count;
+    u16 populated_glyph_count;
 
     stbtt_fontinfo font_info;
     f32 font_scale;
