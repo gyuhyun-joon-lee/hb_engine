@@ -5,6 +5,8 @@
 #ifndef HB_ASSET_H
 #define HB_ASSET_H
 
+#define MAX_UNICODE_CODEPOINT 10FFFF
+
 struct TextureAsset
 {
     void *handle;
