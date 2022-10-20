@@ -36,7 +36,10 @@ struct FontAsset
     f32 *kerning_advances; // can hold glyph_count*glyph_count amount of data
     GlyphAssetInfo *glyph_infos; // can hold glyph_count amount of data 
 
-    f32 newline_advance_px; // how much we should advance vertically, when we move onto newline
+    // whenever we wanna move to the newline, we should move glyph_height + line_gap amount
+    f32 ascent_from_baseline;
+    f32 descent_from_baseline;
+    f32 line_gap; 
 
     TextureAsset font_bitmap;
 };

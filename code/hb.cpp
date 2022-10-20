@@ -294,7 +294,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
-    platform_render_push_buffer->enable_grass_rendering = false;
+    platform_render_push_buffer->enable_grass_rendering = true;
     platform_render_push_buffer->enable_show_perlin_noise_grid = show_perlin_noise_grid;
 
     for(u32 entity_index = 0;
@@ -427,18 +427,24 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         init_render_push_buffer(debug_platform_render_push_buffer, render_camera, game_camera,
                                 0, 0, 0, V3(0, 0, 0), false);
         // TODO(gh) This prevents us from timing the game update and render loop itself 
-        output_debug_records(debug_platform_render_push_buffer, &game_state->assets, V2(20, 1600));
+        output_debug_records(debug_platform_render_push_buffer, &game_state->assets, V2(0, 0));
     }
 }
 
 internal void
-debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, const char *text, v2 p, f32 scale)
+debug_text_reset()
+{
+}
+
+internal void
+debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, const char *text, v2 top_left_rel_p_px, f32 scale)
 {
     const char *c=text;
+    b32 first_glyph_in_line = true;
     while(*c != '\0')
     {
         f32 x_advance_px = 
-            push_glyph(platform_render_push_buffer, assets, V3(1, 1, 1), p, (u8)*c, scale);
+            push_glyph(platform_render_push_buffer, assets, V3(1, 1, 1), top_left_rel_p_px, (u8)*c, scale, first_glyph_in_line);
 
         f32 kerning_advance = 0;
         if(*(c+1) != '\0')
@@ -446,7 +452,8 @@ debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAsset
             kerning_advance = get_font_kerning(&assets->font_asset, *c, *(c+1));
         }
 
-        p.x += scale*(x_advance_px+kerning_advance);
+        first_glyph_in_line = false;
+        top_left_rel_p_px.x += scale*(x_advance_px+kerning_advance);
         c++;
     }
 }
@@ -457,7 +464,7 @@ DebugRecord game_debug_records[__COUNTER__];
 
 #include <stdio.h>
 internal void
-output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, v2 p)
+output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, v2 top_left_rel_p_px)
 {
 #if HB_DEBUG
     for(u32 record_index = 0;
@@ -478,11 +485,14 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
                     "%s(%s(%u)): %ucy, %uh, %ucy/h ", function, file, line, cycle_count, hit_count, cycle_count/hit_count);
 
             // TODO(gh) Do we wanna keep this scale value?
-            f32 scale = 0.5f;
-            debug_text_line(platform_render_push_buffer, assets, buffer, p, scale);
-            //debug_text_line(platform_render_push_buffer, assets, "To", p, scale);
+            f32 scale = 0.4f;
+            debug_text_line(platform_render_push_buffer, assets, buffer, top_left_rel_p_px, scale);
+
+            //debug_text_line(platform_render_push_buffer, assets, "Togpli", top_left_rel_p_px, scale);
             // TODO(gh) I don't like the fact that this function has to 'know' what font asset it is using..
-            p.y += scale*assets->font_asset.newline_advance_px;
+            top_left_rel_p_px.y += scale*(assets->font_asset.ascent_from_baseline + 
+                                        assets->font_asset.descent_from_baseline + 
+                                        assets->font_asset.line_gap);
 
             atomic_exchange(&record->hit_count_cycle_count, 0);
         }

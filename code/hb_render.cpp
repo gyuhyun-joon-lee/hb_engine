@@ -429,23 +429,34 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
 // TODO(gh) Change this with textured quad? Because we have to have some kind of texture system
 // that is visible from the game code someday!
 internal f32
-push_glyph(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, v2 p_px, u32 glyph, f32 scale)
+push_glyph(PlatformRenderPushBuffer *render_push_buffer, GameAssets *assets, v3 color, 
+            v2 top_left_rel_p_px, u32 glyph, f32 scale, b32 first_glyph_in_line)
 {
     RenderEntryGlyph *entry = push_render_element(render_push_buffer, RenderEntryGlyph);
 
     entry->header.type = RenderEntryType_Glyph;
     entry->header.size = sizeof(*entry);
 
-    assert(glyph >= assets->font_asset.start_glyph && glyph <= assets->font_asset.end_glyph);
+    FontAsset *font_asset = &assets->font_asset;
+
+    assert(glyph >= font_asset->start_glyph && glyph <= font_asset->end_glyph);
     // This is what we should be using to get the information about the glyph, 
     // as our font info does not start from ascii 0
-    u32 glyphID = glyph - assets->font_asset.start_glyph;
+    u32 glyphID = glyph - font_asset->start_glyph;
 
-    GlyphAssetInfo *glyph_info = assets->font_asset.glyph_infos + glyphID;
-    entry->texture_handle = assets->font_asset.font_bitmap.handle;
+    GlyphAssetInfo *glyph_info = font_asset->glyph_infos + glyphID;
+    entry->texture_handle = font_asset->font_bitmap.handle;
     entry->color = color;
 
-    v2 min_px = p_px + scale*V2(glyph_info->x_offset_px, glyph_info->y_offset_from_baseline_px);
+    // TODO(gh) Do we wanna pull this out?
+    v2 bottom_left_rel_p_px = V2(top_left_rel_p_px.x, render_push_buffer->window_height - top_left_rel_p_px.y);
+    v2 min_px = (bottom_left_rel_p_px - V2(0, scale*font_asset->ascent_from_baseline)) + 
+                scale*V2(0, glyph_info->y_offset_from_baseline_px);
+    if(!first_glyph_in_line)
+    {
+        min_px += scale*V2(glyph_info->x_offset_px, 0);
+    }
+    
     v2 max_px = min_px + scale*glyph_info->dim_px;
 
     // TODO(gh) For now p_px assumes that the center is the bottom-left corner of the screen,

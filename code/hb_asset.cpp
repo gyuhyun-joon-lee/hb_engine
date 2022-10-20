@@ -81,11 +81,12 @@ load_font(const char *file_path, PlatformAPI *platform_api, void *device,
     free(char_infos);
 
 #if 1
-    // glyph_infos are already relative to the pixel height that we provided,
-    // but some information such as kerning is not, which means we have to
-    // calculate them seperately.
     stbtt_fontinfo font_info = {};
     stbtt_InitFont(&font_info, font_data.memory, 0);
+
+    // glyph_infos are already relative to the pixel height that we provided,
+    // but some information such as kerning, ascent, descent are not scaled properly, which means we have to
+    // calculate them seperately.
     f32 font_scale = stbtt_ScaleForPixelHeight(&font_info, desired_font_height_px);
 
     for(u32 i = 0;
@@ -119,8 +120,10 @@ load_font(const char *file_path, PlatformAPI *platform_api, void *device,
     int descent;
     int line_gap;
     stbtt_GetFontVMetrics(&font_info, &ascent, &descent, &line_gap);
-    // The math is directly from stb_truetype.h
-    font_asset->newline_advance_px = font_scale*(ascent-descent+line_gap);
+
+    font_asset->ascent_from_baseline = font_scale * ascent;
+    font_asset->descent_from_baseline = -1.0f*font_scale * descent; // stb library gives us negative value, but we want positive value for this
+    font_asset->line_gap = font_scale*line_gap;
 #endif
 }
 
