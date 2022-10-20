@@ -184,7 +184,7 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
             f32 xf = (x+d->offset_x) / (f32)d->total_x_count;
             f32 yf = y / (f32)d->total_y_count;
 
-            u32 high_frequency = 23;
+            u32 high_frequency = 32;
             u32 low_frequency = high_frequency/3;
             // u32 frequency = 32;
             // f32 wind_strength = 1.6f;
