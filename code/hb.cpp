@@ -439,23 +439,31 @@ debug_reset_text_to_top_left(v2 *p)
 }
 
 internal void
-debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, const char *text, v2 top_left_rel_p_px, f32 scale)
+debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, FontAsset *font_asset, const char *text, v2 top_left_rel_p_px, f32 scale)
 {
     const char *c=text;
-    b32 first_glyph_in_line = true;
     while(*c != '\0')
     {
-        f32 x_advance_px = 
-            push_glyph(platform_render_push_buffer, assets, V3(1, 1, 1), top_left_rel_p_px, (u8)*c, scale, first_glyph_in_line);
-
-        f32 kerning_advance = 0;
-        if(*(c+1) != '\0')
+        if(*c != ' ')
         {
-            kerning_advance = get_font_kerning(&assets->font_asset, *c, *(c+1));
+            // The texture that we got does not have bearing integrated,
+            // which means we have to offset the entry based on the left bearing 
+            f32 left_bearing_px = get_glyph_left_bearing_px(font_asset, scale, *c);
+            push_glyph(platform_render_push_buffer, font_asset, 
+                    V3(1, 1, 1), top_left_rel_p_px + V2(left_bearing_px, 0), *c, scale);
         }
 
-        first_glyph_in_line = false;
-        top_left_rel_p_px.x += scale*(x_advance_px+kerning_advance);
+        // NOTE(gh) check out https://freetype.org/freetype2/docs/tutorial/step2.html
+        // for the terms
+
+        f32 x_advance_px = get_glyph_x_advance_px(font_asset, scale, *c);
+        if(*(c+1) != '\0')
+        {
+            f32 kerning = get_glyph_kerning(font_asset, scale, *(c), *(c+1));
+            x_advance_px += (kerning);
+        }
+
+        top_left_rel_p_px.x += x_advance_px;
         c++;
     }
 }
@@ -463,6 +471,7 @@ debug_text_line(PlatformRenderPushBuffer *platform_render_push_buffer, GameAsset
 internal void
 debug_newline(v2 *top_down_p, f32 scale, FontAsset *font_asset)
 {
+    top_down_p->x = 0;
     // TODO(gh) I don't like the fact that this function has to 'know' what font asset it is using..
     top_down_p->y += scale*(font_asset->ascent_from_baseline + 
                             font_asset->descent_from_baseline + 
@@ -483,6 +492,35 @@ DebugRecord game_debug_records[__COUNTER__];
 internal void
 output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, v2 top_left_rel_p_px)
 {
+    FontAsset *font_asset = &assets->debug_font_asset;
+    {
+        f32 scale = 1.5f;
+        // This does not take account of kerning, but
+        // kanji might not have kerning at all
+        push_glyph(platform_render_push_buffer, font_asset, 
+                    V3(1, 1, 1), top_left_rel_p_px, 0x8349, scale);
+        top_left_rel_p_px.x += get_glyph_x_advance_px(font_asset, scale, 0x8349);
+
+        top_left_rel_p_px.x += get_glyph_x_advance_px(font_asset, scale, ' ');
+
+        push_glyph(platform_render_push_buffer, font_asset, 
+                    V3(1, 1, 1), top_left_rel_p_px, 0x30a8, scale);
+        top_left_rel_p_px.x += get_glyph_x_advance_px(font_asset, scale, 0x8349);
+
+        push_glyph(platform_render_push_buffer, font_asset, 
+                    V3(1, 1, 1), top_left_rel_p_px, 0x30f3, scale);
+        top_left_rel_p_px.x += get_glyph_x_advance_px(font_asset, scale, 0x8349);
+
+        push_glyph(platform_render_push_buffer, font_asset, 
+                    V3(1, 1, 1), top_left_rel_p_px, 0x30b8, scale);
+        top_left_rel_p_px.x += get_glyph_x_advance_px(font_asset, scale, 0x8349);
+
+        push_glyph(platform_render_push_buffer, font_asset, 
+                    V3(1, 1, 1), top_left_rel_p_px, 0x30f3, scale);
+        top_left_rel_p_px.x += get_glyph_x_advance_px(font_asset, scale, 0x8349);
+
+        debug_newline(&top_left_rel_p_px, scale, font_asset);
+    }
 #if HB_DEBUG
     for(u32 record_index = 0;
             record_index < array_count(game_debug_records);
@@ -503,10 +541,10 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 
             // TODO(gh) Do we wanna keep this scale value?
             f32 scale = 0.5f;
-            debug_text_line(platform_render_push_buffer, assets, buffer, top_left_rel_p_px, scale);
+            debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
+            //debug_text_line(platform_render_push_buffer, assets, "Togplil", top_left_rel_p_px, scale);
 
-            //debug_text_line(platform_render_push_buffer, assets, "Togpli", top_left_rel_p_px, scale);
-            debug_newline(&top_left_rel_p_px, scale, &assets->font_asset);
+            debug_newline(&top_left_rel_p_px, scale, &assets->debug_font_asset);
 
             atomic_exchange(&record->hit_count_cycle_count, 0);
         }

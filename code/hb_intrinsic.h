@@ -162,8 +162,8 @@ pointer_diff(void *start, void *end)
 inline void
 zero_memory(void *memory, u64 size)
 {
-    // TODO/gh: What if there's no neon support
-#if HB_ARM
+    // TODO(gh) Is this actually faster than memset?
+#if 0
     u8 *byte = (u8 *)memory;
     uint8x16_t zero_128 = vdupq_n_u8(0);
 

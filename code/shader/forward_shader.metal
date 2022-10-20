@@ -136,6 +136,7 @@ forward_render_font_frag(FontVertexOutput vertex_output [[stage_in]],
     // font bitmap texel is 1 byte, so we will only use x
     // TODO(gh) We can divide the value by 255 here, or normalize it pre-hand
     float4 result = float4(vertex_output.color, font_texture.sample(s, vertex_output.texcoord).x/255.0f);
+    //float4 result = float4(1, 0, 0, 1);
 
     return result;
 }
