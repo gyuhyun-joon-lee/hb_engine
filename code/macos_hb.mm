@@ -32,6 +32,7 @@
 
 #include "hb_metal.cpp"
 
+
 // TODO(gh): Get rid of global variables?
 global v2 last_mouse_p;
 global v2 mouse_diff;
@@ -576,7 +577,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                     m4x4 model = M4x4();
                     model = transpose(model); // make the matrix column-major
 
-                    metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
+                    metal_set_vertex_buffer(shadowmap_render_encoder, (id<MTLBuffer>)entry->vertex_buffer_handle, 0, 0);
                     metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
                     metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
@@ -585,7 +586,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                     // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
                     metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
-                                      render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+                                      (id<MTLBuffer>)entry->index_buffer_handle, 0, entry->index_count);
                 }
             }break;
 
@@ -895,15 +896,15 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_vertex_bytes(g_buffer_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
                 metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
                 metal_set_vertex_buffer(g_buffer_render_encoder, 
-                                        render_context->combined_vertex_buffer.buffer, 
-                                        entry->vertex_buffer_offset, 2);
+                                        (id<MTLBuffer>)entry->vertex_buffer_handle, 
+                                        0, 2);
                 metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
 
                 metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
                 metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
 
                 metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
-                        render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+                        (id<MTLBuffer>)entry->index_buffer_handle, 0, entry->index_count);
             }break;
 
             case RenderEntryType_Grass:
@@ -1283,6 +1284,8 @@ int main(void)
     platform_api.free_file_memory = debug_macos_free_file_memory;
     platform_api.allocate_and_acquire_texture_handle = metal_allocate_and_acquire_texture_handle;
     platform_api.write_to_entire_texture = metal_write_to_entire_texture;
+    platform_api.allocate_and_acquire_buffer_handle = metal_allocate_and_acquire_buffer_handle;
+    platform_api.write_to_entire_buffer = metal_write_to_entire_buffer;
 
     PlatformMemory platform_memory = {};
 

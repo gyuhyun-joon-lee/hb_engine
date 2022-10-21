@@ -321,6 +321,7 @@ push_line(PlatformRenderPushBuffer *render_push_buffer, v3 start, v3 end, v3 col
 internal u32
 push_data(void *dst_buffer, u64 *dst_used, u64 dst_size, void *src, u32 src_size)
 {
+    TIMED_BLOCK();
     u32 original_used = *dst_used;
 
     void *dst = (u8 *)dst_buffer + original_used;
@@ -330,77 +331,6 @@ push_data(void *dst_buffer, u64 *dst_used, u64 dst_size, void *src, u32 src_size
     assert(*dst_used <= dst_size);
 
     return original_used;
-}
-
-// TODO(gh) not sure how this will hold up when the scene gets complicated(with a lot or vertices)
-// so keep an eye on this method
-internal u32
-push_vertex_data(PlatformRenderPushBuffer *render_push_buffer, VertexPN *vertices, u32 vertex_count)
-{
-    u32 result = push_data(render_push_buffer->combined_vertex_buffer, 
-                            &render_push_buffer->combined_vertex_buffer_used, 
-                            render_push_buffer->combined_vertex_buffer_size,
-                            vertices, sizeof(vertices[0]) * vertex_count);
-
-    // returns original used vertex buffer
-    return result;
-}
-
-internal u32
-push_index_data(PlatformRenderPushBuffer *render_push_buffer, u32 *indices, u32 index_count)
-{
-    u32 result = push_data(render_push_buffer->combined_index_buffer, 
-                            &render_push_buffer->combined_index_buffer_used, 
-                            render_push_buffer->combined_index_buffer_size,
-                            indices, sizeof(indices[0]) * index_count);
-
-    // returns original used index buffer
-    return result;
-}
- 
-internal void
-push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
-          VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
-{
-    TIMED_BLOCK();
-    RenderEntryMeshPN *entry = push_render_element(render_push_buffer, RenderEntryMeshPN);
-
-    entry->header.type = RenderEntryType_MeshPN;
-    entry->header.size = sizeof(*entry);
-
-    entry->p = p;
-    entry->dim = dim;
-
-    entry->should_cast_shadow = should_cast_shadow;
-    
-    entry->color = color;
-
-    entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);
-    entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);
-    entry->index_count = index_count;
-}
-
-internal void
-push_grass(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
-          VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count, b32 should_cast_shadow)
-{
-    RenderEntryGrass *entry = push_render_element(render_push_buffer, RenderEntryGrass);
-
-    assert(render_push_buffer->used <= render_push_buffer->total_size);
-    assert(vertex_count != 0 && index_count != 0);
-
-    entry->header.type = RenderEntryType_Grass;
-    entry->header.size = sizeof(*entry);
-
-    entry->p = p;
-    entry->dim = dim;
-    entry->color = color;
-
-    entry->should_cast_shadow = should_cast_shadow;
-
-    entry->vertex_buffer_offset = push_vertex_data(render_push_buffer, vertices, vertex_count);
-    entry->index_buffer_offset = push_index_data(render_push_buffer, indices, index_count);
-    entry->index_count = index_count;
 }
 
 internal void
@@ -424,6 +354,35 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
                                             render_push_buffer->combined_index_buffer_size,
                                             indices, sizeof(indices[0]) * index_count);
     entry->index_count = index_count;
+}
+
+internal void
+push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
+            GameAssets *asset, PlatformAPI *platform_api, 
+          VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count, 
+          u32 *mesh_assetID, b32 should_cast_shadow)
+{
+    TIMED_BLOCK();
+    RenderEntryMeshPN *entry = push_render_element(render_push_buffer, RenderEntryMeshPN);
+
+    entry->header.type = RenderEntryType_MeshPN;
+    entry->header.size = sizeof(*entry);
+
+    // TODO(gh) entity should not have vertices directly, the asset system should be able to 
+    // get the vertex and index information using tag and match vector
+    MeshAsset *mesh_asset = get_mesh_asset(asset, platform_api, render_push_buffer->device, mesh_assetID, 
+                                            vertices, vertex_count, indices, index_count);
+    entry->vertex_buffer_handle = mesh_asset->vertex_buffer_handle;
+    entry->vertex_count = mesh_asset->vertex_count;
+    entry->index_buffer_handle = mesh_asset->index_buffer_handle;
+    entry->index_count = mesh_asset->index_count;
+
+    entry->p = p;
+    entry->dim = dim;
+
+    entry->should_cast_shadow = should_cast_shadow;
+    
+    entry->color = color;
 }
 
 // TODO(gh) Change this with textured quad? Because we have to have some kind of texture system

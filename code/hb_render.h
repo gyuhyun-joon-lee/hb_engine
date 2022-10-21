@@ -12,7 +12,7 @@
 struct VertexPN
 {
     v3 p;
-    v3 normal;
+    v3 n;
 };
 
 struct GrassGrid
@@ -159,17 +159,16 @@ struct RenderEntryMeshPN
 {
     RenderEntryHeader header;
 
+    void *vertex_buffer_handle;
+    u32 vertex_count;
+    void *index_buffer_handle;
+    u32 index_count;
+
     v3 p;
     v3 dim;
     v3 color;
 
     b32 should_cast_shadow;
-
-    // TODO(gh) Make this as a struct?
-    // NOTE(gh) offset to the combined vertex & index buffer
-    u32 vertex_buffer_offset;
-    u32 index_buffer_offset;
-    u32 index_count;
 };
 
 struct RenderEntryLine

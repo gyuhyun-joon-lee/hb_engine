@@ -100,9 +100,9 @@ add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
         result->vertices[i].p.y = cube_vertices[6*i+1];
         result->vertices[i].p.z = cube_vertices[6*i+2];
 
-        result->vertices[i].normal.x = cube_vertices[6*i+3];
-        result->vertices[i].normal.y = cube_vertices[6*i+4];
-        result->vertices[i].normal.z = cube_vertices[6*i+5];
+        result->vertices[i].n.x = cube_vertices[6*i+3];
+        result->vertices[i].n.y = cube_vertices[6*i+4];
+        result->vertices[i].n.z = cube_vertices[6*i+5];
     }
 
     result->index_count = result->vertex_count;
@@ -118,7 +118,6 @@ add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
     return result;
 }
 
-// NOTE(gh) creates 512 x 512 grid
 internal Entity *
 add_floor_entity(GameState *game_state, MemoryArena *arena, v3 left_bottom_p, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count)
 {
@@ -129,108 +128,10 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 left_bottom_p, v2
     result->x_quad_count = x_quad_count;
     result->y_quad_count = y_quad_count;
 
-    f32 quad_width = dim.x / (f32)x_quad_count;
-    f32 quad_height = dim.y / (f32)y_quad_count;
-
-    u32 x_vertex_count = x_quad_count + 1;
-    u32 y_vertex_count = y_quad_count + 1;
-    u32 total_vertex_count = x_vertex_count * y_vertex_count;
-
-    result->vertex_count = total_vertex_count;
-    result->vertices = push_array(arena, VertexPN, result->vertex_count);
-
-    u32 populated_vertex_count = 0;
-    for(u32 y = 0;
-            y < y_vertex_count;
-            ++y)
-    {
-        f32 py = left_bottom_p.y + y * quad_height;
-        f32 yf = (f32)y/(f32)(y_vertex_count-1); // -1 so that xf range from 0 to 1
-
-        for(u32 x = 0;
-                x < x_vertex_count;
-                ++x)
-        {
-            if(x == x_vertex_count-1)
-            {
-                int a = 1;
-            }
-            f32 px = left_bottom_p.x + x * quad_width;
-            f32 xf = (f32)x/((f32)x_vertex_count - 1); // -1 so that xf range from 0 to 1
-            u32 frequency = 4;
-
-            f32 pz = 10.0f * perlin_noise01(game_state->permutations255, frequency*xf, frequency*yf, 0, frequency);
-
-            result->vertices[populated_vertex_count].p = V3(px, py, pz);
-            result->vertices[populated_vertex_count].normal = V3(0, 0, 0);
-
-            populated_vertex_count++;
-        }
-    }
-    assert(populated_vertex_count == result->vertex_count);
-
-    // three indices per triangle * 2 triangles per quad * total quad count
-    result->index_count = 3 * 2 * (x_quad_count * y_quad_count);
-    result->indices = push_array(arena, u32, result->index_count);
-
-    u32 populated_index_count = 0;
-    for(u32 y = 0;
-            y < y_quad_count;
-            ++y)
-    {
-        for(u32 x = 0;
-                x < x_quad_count;
-                ++x)
-        {
-            /*
-               NOTE(gh) Given certain cycle, we will construct the mesh like this
-               v2-----v3
-               |       |
-               |       |
-               |       |
-               v0-----v1 -> indices : 012, 132
-            */
-            u32 i0 = y*(x_quad_count + 1) + x;
-            u32 i1 = i0 + 1;
-            u32 i2 = i0 + x_quad_count + 1;
-            u32 i3 = i2 + 1;
-
-            result->indices[populated_index_count++] = i0;
-            result->indices[populated_index_count++] = i1;
-            result->indices[populated_index_count++] = i2;
-
-            result->indices[populated_index_count++] = i1;
-            result->indices[populated_index_count++] = i3;
-            result->indices[populated_index_count++] = i2;
-
-            // TODO(gh) properly calculate normals(normal histogram?)
-            v3 p0 = result->vertices[i0].p;
-            v3 p1 = result->vertices[i1].p;
-            v3 p2 = result->vertices[i2].p;
-            v3 p3 = result->vertices[i3].p;
-
-            v3 first_normal = normalize(cross(p1-p0, p2-p0));
-            v3 second_normal = normalize(cross(p2-p3, p1-p3));
-
-            result->vertices[i0].normal += first_normal;
-            result->vertices[i1].normal += first_normal + second_normal;
-            result->vertices[i2].normal += first_normal + second_normal;
-
-            result->vertices[i3].normal = second_normal;
-        }
-    }
-    assert(result->index_count == populated_index_count);
-
-    for(u32 vertex_index = 0;
-            vertex_index < result->vertex_count;
-            ++vertex_index)
-    {
-        result->vertices[vertex_index].normal = normalize(result->vertices[vertex_index].normal);
-    }
+    generate_floor_mesh(result, arena, left_bottom_p, dim, x_quad_count, y_quad_count);
 
     return result;
 }
-
 
 /*
    If the grass blade looks like this,
@@ -299,14 +200,14 @@ populate_grass_vertices(v3 p0,
             vertices[2*i+1].p = point_on_bezier_curve + blade_width * orthogonal_normal;
 
             v3 normal = normalize(cross(quadratic_bezier_first_derivative(p0, modified_p1, modified_p2, t), orthogonal_normal));
-            vertices[2*i].normal = normal;
-            vertices[2*i+1].normal = normal;
+            vertices[2*i].n = normal;
+            vertices[2*i+1].n = normal;
         }
         else
         {
             // add tip
             vertices[vertex_count - 1].p = modified_p2 + 0.5f*blade_width*orthogonal_normal;
-            vertices[vertex_count - 1].normal = normalize(cross(quadratic_bezier_first_derivative(p0, modified_p1, modified_p2, 1.0f), orthogonal_normal));
+            vertices[vertex_count - 1].n = normalize(cross(quadratic_bezier_first_derivative(p0, modified_p1, modified_p2, 1.0f), orthogonal_normal));
         }
     }
 }

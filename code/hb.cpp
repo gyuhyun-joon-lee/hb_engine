@@ -18,11 +18,11 @@
 #include "hb_ray.cpp"
 #include "hb_simulation.cpp"
 #include "hb_noise.cpp"
+#include "hb_mesh_generation.cpp"
 #include "hb_entity.cpp"
+#include "hb_asset.cpp"
 #include "hb_render.cpp"
 #include "hb_image_loader.cpp"
-#include "hb_asset.cpp"
-#include "hb_mesh_generation.cpp"
 
 // TODO(gh) not a great idea
 #include <time.h>
@@ -68,32 +68,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         generate_sphere_mesh(&game_state->transient_arena, 10.0f, 256, 128);
 
-        u32 permutations255[] = 
-        { 
-            151,160,137,91,90,15,                 
-            131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,    
-            190, 6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,
-            88,237,149,56,87,174,20,125,136,171,168, 68,175,74,165,71,134,139,48,27,166,
-            77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,
-            102,143,54, 65,25,63,161, 1,216,80,73,209,76,132,187,208, 89,18,169,200,196,
-            135,130,116,188,159,86,164,100,109,198,173,186, 3,64,52,217,226,250,124,123,
-            5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,
-            223,183,170,213,119,248,152, 2,44,154,163, 70,221,153,101,155,167, 43,172,9,
-            129,22,39,253, 19,98,108,110,79,113,224,232,178,185, 112,104,218,246,97,228,
-            251,34,242,193,238,210,144,12,191,179,162,241, 81,51,145,235,249,14,239,107,
-            49,192,214, 31,181,199,106,157,184, 84,204,176,115,121,50,45,127, 4,150,254,
-            138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180
-        };
-        // TODO(gh) Better way to handle this?
-        game_state->permutations255 = push_array(&game_state->transient_arena, u32, array_count(permutations255));
-
-        for(u32 i = 0;
-                i < array_count(permutations255);
-                ++i)
-        {
-            game_state->permutations255[i] = permutations255[i];
-        }
-
         v2 grid_dim = V2(100, 100); // TODO(gh) just temporary, need to 'gather' the floors later
         game_state->grass_grid_count_x = 6;
         game_state->grass_grid_count_y = 4;
@@ -133,7 +107,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     Camera *debug_camera = &game_state->debug_camera;
 
     Camera *render_camera = game_camera;
-    // render_camera = debug_camera;
+    //render_camera = debug_camera;
     b32 show_perlin_noise_grid = false;
 
     if(render_camera == debug_camera)
@@ -224,7 +198,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         data->one_past_end_y = grid->grass_count_x;
         data->time_elasped_from_start = platform_input->time_elasped_from_start;
         data->perlin_noise_buffer = grid->perlin_noise_buffer;
-        data->permutations255 = game_state->permutations255;
         thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_update_perlin_noise_buffer_callback, (void *)data);
 
         assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
@@ -294,7 +267,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
-    platform_render_push_buffer->enable_grass_rendering = true;
+    platform_render_push_buffer->enable_grass_rendering = false;
     platform_render_push_buffer->enable_show_perlin_noise_grid = show_perlin_noise_grid;
 
     for(u32 entity_index = 0;
@@ -308,14 +281,17 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_AABB:
             case EntityType_Cube:
             {
+                // TODO(gh) Don't pass platform api, device, mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
-                          entity->vertices, entity->vertex_count, entity->indices, entity->index_count, false);
+                          &game_state->assets, platform_api,  
+                          entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
+                          &entity->mesh_assetID, false);
             }break;
         }
     }
 
-    // NOTE(gh) push forward rendering elements
+    // NOTE(gh) push forward render entries
     b32 enable_show_game_camera_frustum = (render_camera != game_camera);
     if(enable_show_game_camera_frustum)
     {
@@ -407,12 +383,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     end_temp_memory(&perlin_noise_temp_memory);
 
-#if 1
-    char *string = "Let's see if we can render this";
-
-#endif
-
-
     // TODO(gh) simplify variables that can effect the wind 
     // maybe with world unit speed
     game_state->time_until_offset_x_inc += platform_input->dt_per_frame;
@@ -477,7 +447,6 @@ debug_newline(v2 *top_down_p, f32 scale, FontAsset *font_asset)
                             font_asset->descent_from_baseline + 
                             font_asset->line_gap);
 }
-
 
 /*
     grass : hiragana U+8349

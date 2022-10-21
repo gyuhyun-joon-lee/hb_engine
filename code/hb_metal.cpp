@@ -174,7 +174,6 @@ metal_set_scissor_rect(id<MTLRenderCommandEncoder> render_encoder, u32 x, u32 y,
 }
 
 // NOTE(joon) creates a shared memory between CPU and GPU
-// TODO(joon) Do we want the buffer to be more than 4GB?
 inline MetalSharedBuffer
 metal_make_shared_buffer(id<MTLDevice> device, u64 max_size)
 {
@@ -203,6 +202,25 @@ metal_make_shared_buffer(id<MTLDevice> device, void *source, u64 max_size)
     metal_write_shared_buffer(&result, source, max_size);
 
     return result;
+}
+
+internal
+PLATFORM_ALLOCATE_AND_ACQUIRE_BUFFER_HANDLE(metal_allocate_and_acquire_buffer_handle)
+{
+    // TODO(gh) We are using the pre-built MetalSharedBuffer routine,
+    // any reason we want some separation?
+    MetalSharedBuffer shared_buffer = metal_make_shared_buffer((id<MTLDevice>)device, size);
+    void *result = shared_buffer.buffer;
+    assert(result);
+
+    return result;
+}
+
+internal
+PLATFORM_WRITE_TO_ENTIRE_BUFFER(metal_write_to_entire_buffer)
+{
+    void *dst = [(id<MTLBuffer>)buffer_handle contents];
+    memcpy(dst, src, src_size);
 }
 
 inline MetalManagedBuffer
@@ -512,10 +530,6 @@ PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(metal_allocate_and_acquire_texture_
             pixel_format = MTLPixelFormatR8Uint;
         }break;
 
-        case 4:
-        {
-            // TODO(gh) fill this in
-        }break;
         default:
         {
             invalid_code_path;
@@ -526,6 +540,7 @@ PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(metal_allocate_and_acquire_texture_
                                                     MTLTextureUsageShaderRead, MTLStorageModeShared);
 
     void *result = (void *)texture2D.texture;
+    assert(result);
     return result;
 }
 

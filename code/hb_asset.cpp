@@ -25,6 +25,38 @@ load_texture_asset(PlatformAPI *platform_api, void *device, void *src, i32 width
     return result;
 }
 
+// TODO(gh) Only loads VertexPN vertices
+// TODO(gh) Don't love that we need to pass and update the assetID, make this a tag-based search
+internal MeshAsset *
+get_mesh_asset(GameAssets *asset, PlatformAPI *platform_api, void *device, u32 *assetID, VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+{
+    MeshAsset *result = 0;
+    if(*assetID == 0)
+    {
+        *assetID = asset->populated_mesh_asset++;
+        result = asset->mesh_assets + *assetID;
+        // We shoud load the asset
+        u64 vertex_buffer_size = sizeof(vertices[0])*vertex_count;
+        result->vertex_buffer_handle = platform_api->allocate_and_acquire_buffer_handle(device, vertex_buffer_size);
+        result->vertex_count = vertex_count;
+        platform_api->write_to_entire_buffer(result->vertex_buffer_handle, vertices, vertex_buffer_size);
+
+        u64 index_buffer_size = sizeof(indices[0])*index_count;
+        result->index_buffer_handle = platform_api->allocate_and_acquire_buffer_handle(device, index_buffer_size);
+        result->index_count = index_count;
+        platform_api->write_to_entire_buffer(result->index_buffer_handle, indices, index_buffer_size);
+    }
+    else
+    {
+        // The asset has already been loaded 
+        result = asset->mesh_assets + *assetID;
+    }
+
+    assert(result != 0);
+
+    return result;
+}
+
 internal void
 begin_load_font(LoadFontInfo *load_font_info, FontAsset *font_asset, const char *file_path, PlatformAPI *platform_api, void *device, u32 max_glyph_count, f32 desired_font_height_px)
 {
@@ -48,16 +80,12 @@ begin_load_font(LoadFontInfo *load_font_info, FontAsset *font_asset, const char 
     font_asset->line_gap = load_font_info->font_scale*line_gap;
 
     // TODO(gh) We should get rid of these mallocs, for sure.
-    // TODO(gh) memset to 0?
     u32 codepoint_to_glyphID_table_size = sizeof(u32) * MAX_UNICODE_CODEPOINT;
     font_asset->codepoint_to_glyphID_table = (u16 *)malloc(sizeof(u16) * MAX_UNICODE_CODEPOINT);
     zero_memory(font_asset->codepoint_to_glyphID_table, codepoint_to_glyphID_table_size);
+
     font_asset->glyph_assets = (GlyphAsset *)malloc(sizeof(GlyphAsset) * max_glyph_count);
     font_asset->kerning_advances = (f32 *)malloc(sizeof(f32) * max_glyph_count * max_glyph_count);
-
-    // glyph_infos are already relative to the pixel height that we provided,
-    // but some information such as kerning, ascent, descent are not scaled properly, which means we have to
-    // calculate them seperately.
 }
 
 #if 1 

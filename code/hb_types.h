@@ -56,7 +56,7 @@ typedef double r64;
 #define invalid_code_path assert(0)
 
 #define global static
-#define global_variable global
+#define global_variable static
 #define local_persist static
 #define internal static
 

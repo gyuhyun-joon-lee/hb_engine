@@ -10,11 +10,26 @@
 
 struct TextureAsset
 {
-    void *handle;
+    void *handle; // handle to the bitmap in GPU
 
+    // TODO(gh) Also keep the bitmap memory 
+    // so that we can re-load the texture when the
+    // asset gets unloaded from the GPU, or keep the offset
+    // to the pakced asset file?
     i32 width;
     i32 height;
     i32 bytes_per_pixel;
+};
+
+// TODO(gh) Always assumes that the type of the mesh
+// is VertexPN, and index is u32
+struct MeshAsset
+{
+    void *vertex_buffer_handle; 
+    void *index_buffer_handle; 
+
+    u32 vertex_count;
+    u32 index_count;
 };
 
 struct GlyphAsset
@@ -69,7 +84,10 @@ struct LoadFontInfo
 
 struct GameAssets
 {
+    // TODO(gh) Put device and platform api here?
     FontAsset debug_font_asset;
+    u32 populated_mesh_asset;
+    MeshAsset mesh_assets[256];
 };
 
 #endif

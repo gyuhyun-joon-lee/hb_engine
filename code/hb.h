@@ -32,8 +32,6 @@ struct GameState
     u32 offset_x;
     f32 time_until_offset_x_inc;
 
-    u32 *permutations255;
-
     GameAssets assets;
 
     // TODO(gh) More structured light information

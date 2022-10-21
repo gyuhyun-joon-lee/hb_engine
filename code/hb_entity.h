@@ -45,12 +45,13 @@ struct Entity
     v2 tilt_direction; // only x and y values, z == 0
     u32 hash;
 
+    // TODO(gh) Remove this, 
+    //and maybe have a pointer or ID to the asset
+    u32 mesh_assetID; // 0 means that the asset has not been loaded to the GPU
     u32 x_quad_count;
     u32 y_quad_count;
-
     VertexPN *vertices;
     u32 vertex_count;
-
     // TODO(gh) We don't really need to hold the indices, 
     // as long as we have the cpu-visible index buffer and the offset.
     // For the ray cast, we can use the same buffer.

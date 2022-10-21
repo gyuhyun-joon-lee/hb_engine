@@ -39,6 +39,12 @@ typedef PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(platform_allocate_and_acqui
 #define PLATFORM_WRITE_TO_ENTIRE_TEXTURE(name) void (name)(void *texture_handle, void *src, i32 width, i32 height, i32 bytes_per_pixel)
 typedef PLATFORM_WRITE_TO_ENTIRE_TEXTURE(platform_write_to_entire_texture);
 
+#define PLATFORM_ALLOCATE_AND_ACQUIRE_BUFFER_HANDLE(name) void *(name)(void *device, u64 size)
+typedef PLATFORM_ALLOCATE_AND_ACQUIRE_BUFFER_HANDLE(platform_allocate_and_acquire_buffer_handle);
+
+#define PLATFORM_WRITE_TO_ENTIRE_BUFFER(name) void (name)(void *buffer_handle, void *src, u64 src_size)
+typedef PLATFORM_WRITE_TO_ENTIRE_BUFFER(platform_write_to_entire_buffer);
+
 struct PlatformAPI
 {
     platform_read_file *read_file;
@@ -47,6 +53,9 @@ struct PlatformAPI
 
     platform_allocate_and_acquire_texture_handle *allocate_and_acquire_texture_handle;
     platform_write_to_entire_texture *write_to_entire_texture;
+
+    platform_allocate_and_acquire_buffer_handle *allocate_and_acquire_buffer_handle;
+    platform_write_to_entire_buffer *write_to_entire_buffer;
     // platform_atomic_compare_and_exchange32() *atomic_compare_and_exchange32;
     // platform_atomic_compare_and_exchange64() *atomic_compare_and_exchange64;
 };
@@ -283,6 +292,8 @@ struct PlatformRenderPushBuffer
     u32 used;
 
     // NOTE(gh) Cleared every frame, includes vertex, index buffer per frame 
+    // ONLY USED FOR SMALL MESHES, WHICH THEIR MESH INFORMATION IS NOT KNOWN AT BUILD TIME
+    // Good example would be a game frustum(but this can also be replaced with push_quad call)
     void *combined_vertex_buffer;
     u64 combined_vertex_buffer_size;
     u64 combined_vertex_buffer_used;
