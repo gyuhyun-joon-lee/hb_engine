@@ -92,18 +92,18 @@ struct GridInfo
 #endif
 };
 
-// Original implementation : 16 floats
+// Original implementation : 16 floats = 64 bytes
 struct GrassInstanceData
 {
 #if INSIDE_METAL_SHADER
     packed_float3 center;
 
     uint hash;
-    float blade_width;
-    float length;
-    float tilt;
+    float blade_width; // can be a half
+    float length; // can be a half
+    float tilt; // can be a half
     packed_float2 facing_direction;
-    float bend;
+    float bend; // can be a half
     float wiggliness;
     packed_float3 color;
     float pad[2];

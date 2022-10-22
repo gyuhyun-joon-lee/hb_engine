@@ -32,7 +32,6 @@
 
 #include "hb_metal.cpp"
 
-
 // TODO(gh): Get rid of global variables?
 global v2 last_mouse_p;
 global v2 mouse_diff;

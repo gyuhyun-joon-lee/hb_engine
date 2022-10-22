@@ -458,11 +458,6 @@ debug_newline(v2 *top_down_p, f32 scale, FontAsset *font_asset)
                             font_asset->line_gap);
 }
 
-/*
-    grass : hiragana U+8349
-    engine : U+30A8 U+30F3 U+30B8 U+30F3
-*/
-
 // NOTE(gh) This counter value will be inserted at at the end of the compilation, meaning this array will be large enough
 // to contain all the records that we time_blocked in other codes
 DebugRecord game_debug_records[__COUNTER__];
