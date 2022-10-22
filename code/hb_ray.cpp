@@ -956,6 +956,7 @@ render_raytraced_image_tile(raytracer_data *data)
 }
 #endif
 
+#if 0
 // TODO(gh) Should be a way to optimize this...
 // TODO(gh) Later, we would want to gather arbitrary meshes
 internal void
@@ -1041,50 +1042,7 @@ raycast_to_populate_floor_z_buffer(Entity *floor, void *floor_z_buffer)
 
     assert(floor_z_count == floor->x_quad_count * floor->y_quad_count);
 }
-
-// TODO(gh) Any way to make this faster?
-internal f32
-raycast_to_floor_mesh(Entity *floor, v2 p)
-{
-    // TODO(gh) Is it possible to miss the target? If so, what should we do?
-    f32 result = 0.0f;
-    for(u32 i = 0;
-            i < floor->index_count;
-            i += 3)
-    {
-        u32 i0 = floor->indices[i];
-        u32 i1 = floor->indices[i+1];
-        u32 i2 = floor->indices[i+2];
-
-        v3 p0 = floor->vertices[i0].p; 
-        v3 p1 = floor->vertices[i1].p; 
-        v3 p2 = floor->vertices[i2].p; 
-
-        v3 edge01 = p1 - p0;
-        v3 edge02 = p2 - p0;
-
-        // Again, don't care about z
-        f32 u = dot(edge01.xy, p - p0.xy) / length(edge01.xy);
-        f32 v = dot(edge02.xy, p - p0.xy) / length(edge02.xy);
-
-        // NOTE(gh) check the bary centric coordinate
-        if(u >= 0.0f && v >= 0.0f && (u+v) <= 1.0f)
-        {
-            f32 z = p0.z + edge01.z*u + edge02.z*v;
-
-            if(z > result)
-            {
-                // Update the result if z was higher than the result,
-                // meaning that we found the higher ground
-                result = z;
-            }
-        }
-    }
-
-    return result;
-}
-
-
+#endif
 
 
 

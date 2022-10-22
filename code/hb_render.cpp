@@ -220,9 +220,10 @@ rhs_to_lhs(m4x4 m)
 }
 
 // TODO(gh) Later we would want to minimize passing the platform buffer here
-// TODO(gh) Make the grass count more configurable?
+// TODO(gh) pass center & dim, instead of min & max?
 internal void
-init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, Entity *floor, RandomSeries *series, GrassGrid *grass_grid, u32 grass_count_x, u32 grass_count_y, v2 min, v2 max)
+init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, Entity *floor, RandomSeries *series, 
+                GrassGrid *grass_grid, u32 grass_count_x, u32 grass_count_y, v2 min, v2 max)
 {
     grass_grid->grass_count_x = grass_count_x;
     grass_grid->grass_count_y = grass_count_y;
@@ -241,7 +242,13 @@ init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, Entity *floor, Ran
         render_push_buffer->giant_buffer_used += grass_grid->floor_z_buffer_size;
         assert(render_push_buffer->giant_buffer_used <= render_push_buffer->giant_buffer_size);
 
-        raycast_to_populate_floor_z_buffer(floor, grass_grid->floor_z_buffer);
+        // TODO(gh) temp code, need to do proper raycast later
+        for(u32 grass_index = 0;
+                grass_index < grass_count_x * grass_count_y;
+                ++grass_index)
+        {
+            *(f32 *)grass_grid->floor_z_buffer = 0;
+        }
 
         grass_grid->updated_floor_z_buffer = true;
     }

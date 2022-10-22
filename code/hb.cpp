@@ -66,8 +66,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // Really far away camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
-        generate_sphere_mesh(&game_state->transient_arena, 10.0f, 256, 128);
-
         v2 grid_dim = V2(100, 100); // TODO(gh) just temporary, need to 'gather' the floors later
         game_state->grass_grid_count_x = 6;
         game_state->grass_grid_count_y = 4;
@@ -89,14 +87,17 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 v2 min = floor_left_bottom_p + hadamard(grid_dim, V2(x, y));
                 v2 max = min + grid_dim;
+                v3 center = V3(0.5f*(min + max), 0);
 
                 Entity *floor_entity = 
-                    add_floor_entity(game_state, &game_state->transient_arena, V3(min, 0), grid_dim, V3(0.25f, 0.1f, 0.04f), grass_on_floor_count_x, grass_on_floor_count_y);
+                    add_floor_entity(game_state, &game_state->transient_arena, center, grid_dim, V3(0.25f, 0.1f, 0.04f), grass_on_floor_count_x, grass_on_floor_count_y);
 
                 GrassGrid *grid = game_state->grass_grids + y*game_state->grass_grid_count_x + x;
                 init_grass_grid(platform_render_push_buffer, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
             }
         }
+
+        add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 10), 10.0f, V3(1, 0, 0));
 
         load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
 
@@ -267,7 +268,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
-    platform_render_push_buffer->enable_grass_rendering = false;
+    platform_render_push_buffer->enable_grass_rendering = true;
     platform_render_push_buffer->enable_show_perlin_noise_grid = show_perlin_noise_grid;
 
     for(u32 entity_index = 0;
@@ -280,6 +281,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_Floor:
             case EntityType_AABB:
             case EntityType_Cube:
+            case EntityType_Sphere:
             {
                 // TODO(gh) Don't pass platform api, device, mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 

@@ -574,7 +574,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
                 if(entry->should_cast_shadow)
                 {
-                    m4x4 model = M4x4();
+                    m4x4 model = st_m4x4(entry->p, entry->dim);
                     model = transpose(model); // make the matrix column-major
 
                     metal_set_vertex_buffer(shadowmap_render_encoder, (id<MTLBuffer>)entry->vertex_buffer_handle, 0, 0);
@@ -883,7 +883,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 RenderEntryMeshPN *entry = (RenderEntryMeshPN *)((u8 *)render_push_buffer->base + consumed);
                 consumed += sizeof(*entry);
 
-                m4x4 model = M4x4();
+                m4x4 model = st_m4x4(entry->p, entry->dim);
                 model = transpose(model); // make the matrix column-major
 
                 PerObjectData per_object_data = {};

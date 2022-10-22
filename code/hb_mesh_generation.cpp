@@ -3,14 +3,15 @@
  */
 // This where we custum generate the meshes
 
+// latitude = horizontal, longitude = vertical
 internal void
-generate_sphere_mesh(MemoryArena *arena, f32 r, u32 latitude_div_count, u32 longitude_div_count)
+generate_sphere_mesh(Entity *entity, MemoryArena *arena, f32 r, u32 latitude_div_count, u32 longitude_div_count)
 {
-    u32 vertex_count = (longitude_div_count+1)*latitude_div_count;
-    VertexPN *vertices = push_array(arena, VertexPN, vertex_count);
+    entity->vertex_count = (longitude_div_count+1)*latitude_div_count;
+    entity->vertices = push_array(arena, VertexPN, entity->vertex_count);
 
-    u32 index_count = 2*3*longitude_div_count*latitude_div_count;
-    u32 *indices = push_array(arena, u32, index_count);
+    entity->index_count = 2*3*longitude_div_count*latitude_div_count;
+    entity->indices = push_array(arena, u32, entity->index_count);
 
     f32 latitude_advance_rad = (2.0f*pi_32) / latitude_div_count;
     f32 longitude_advance_rad = pi_32 / longitude_div_count;
@@ -28,10 +29,11 @@ generate_sphere_mesh(MemoryArena *arena, f32 r, u32 latitude_div_count, u32 long
                 x < latitude_div_count;
                 ++x)
         {
-            VertexPN *vertex = vertices + populated_vertex_count++;
+            VertexPN *vertex = entity->vertices + populated_vertex_count;
             vertex->p = V3(r*cosf(latitude)*cosf(longitude), 
                             r*sinf(latitude)*cosf(longitude), 
                             z);
+            vertex->n = normalize(vertex->p);
 
             if(y != longitude_div_count)
             {
@@ -46,32 +48,37 @@ generate_sphere_mesh(MemoryArena *arena, f32 r, u32 latitude_div_count, u32 long
                 u32 i0 = populated_vertex_count;
                 u32 i1 = latitude_div_count*y + (i0+1)%latitude_div_count; // loop
                 u32 i2 = i0+latitude_div_count;
-                u32 i3 = (latitude_div_count+1)*y + (i2+1)%latitude_div_count; // loop
+                u32 i3 = latitude_div_count*(y+1) + (i2+1)%latitude_div_count; // loop
 
-                indices[populated_index_count++] = i0;
-                indices[populated_index_count++] = i1;
-                indices[populated_index_count++] = i2;
+                entity->indices[populated_index_count++] = i0;
+                entity->indices[populated_index_count++] = i1;
+                entity->indices[populated_index_count++] = i2;
 
-                indices[populated_index_count++] = i1;
-                indices[populated_index_count++] = i3;
-                indices[populated_index_count++] = i2;
+                entity->indices[populated_index_count++] = i1;
+                entity->indices[populated_index_count++] = i3;
+                entity->indices[populated_index_count++] = i2;
             }
 
+            populated_vertex_count++;
             latitude += latitude_advance_rad;
         }
 
         longitude += longitude_advance_rad;
     }
 
-    assert(populated_vertex_count == vertex_count);
-    assert(populated_index_count == index_count);
+    assert(populated_vertex_count == entity->vertex_count);
+    assert(populated_index_count == entity->index_count);
 }
  
+// NOTE(gh) The center of this is always (0, 0, 0),
+// and the render code will offset the entire mesh using model matrix
 internal void
-generate_floor_mesh(Entity *entity, MemoryArena *arena, v3 left_bottom_p, v2 dim, u32 x_quad_count, u32 y_quad_count)
+generate_floor_mesh(Entity *entity, MemoryArena *arena, v2 dim, u32 x_quad_count, u32 y_quad_count)
 {
     f32 quad_width = dim.x / (f32)x_quad_count;
     f32 quad_height = dim.y / (f32)y_quad_count;
+
+    v2 left_bottom_p = -0.5f*dim;
 
     u32 x_vertex_count = x_quad_count + 1;
     u32 y_vertex_count = y_quad_count + 1;

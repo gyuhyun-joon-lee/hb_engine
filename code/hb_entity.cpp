@@ -119,16 +119,32 @@ add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 }
 
 internal Entity *
-add_floor_entity(GameState *game_state, MemoryArena *arena, v3 left_bottom_p, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count)
+add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count)
 {
     Entity *result = add_entity(game_state, EntityType_Floor, Entity_Flag_Collides);
-    result->p = left_bottom_p + V3(0.5f*dim, 0);
-    result->dim = V3(dim, 0);
+
+    // This is render p and dim, not the acutal dim
+    result->p = center; 
+    result->dim = V3(1, 1, 1);
+
     result->color = color;
     result->x_quad_count = x_quad_count;
     result->y_quad_count = y_quad_count;
 
-    generate_floor_mesh(result, arena, left_bottom_p, dim, x_quad_count, y_quad_count);
+    generate_floor_mesh(result, arena, dim, x_quad_count, y_quad_count);
+
+    return result;
+}
+
+internal Entity *
+add_sphere_entity(GameState *game_state, MemoryArena *arena, v3 center, f32 radius, v3 color)
+{
+    Entity *result = add_entity(game_state, EntityType_Sphere, Entity_Flag_Collides);
+
+    result->p = center;
+    result->dim = radius*V3(1, 1, 1);
+    result->color = color;
+    generate_sphere_mesh(result, &game_state->transient_arena, 0.5f, 256, 128);
 
     return result;
 }

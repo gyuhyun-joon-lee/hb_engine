@@ -10,6 +10,7 @@ enum EntityType
     EntityType_Null,
     EntityType_AABB,
     EntityType_Floor,
+    EntityType_Sphere,
     EntityType_Cube,
     EntityType_Grass,
 };
@@ -45,11 +46,9 @@ struct Entity
     v2 tilt_direction; // only x and y values, z == 0
     u32 hash;
 
-    // TODO(gh) Remove this, 
-    //and maybe have a pointer or ID to the asset
+    // TODO(gh) Don't love this, this means the entities that are sharing the 
+    //same mesh will end up loading the same mesh into the GPU more than once!!
     u32 mesh_assetID; // 0 means that the asset has not been loaded to the GPU
-    u32 x_quad_count;
-    u32 y_quad_count;
     VertexPN *vertices;
     u32 vertex_count;
     // TODO(gh) We don't really need to hold the indices, 
@@ -57,6 +56,9 @@ struct Entity
     // For the ray cast, we can use the same buffer.
     u32 *indices; 
     u32 index_count;
+
+    u32 x_quad_count;
+    u32 y_quad_count;
 
     // TODO(gh) some kind of entity system, 
     // so that we don't have to store entity_specific things in all of the entities
