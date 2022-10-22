@@ -144,7 +144,8 @@ add_sphere_entity(GameState *game_state, MemoryArena *arena, v3 center, f32 radi
     result->p = center;
     result->dim = radius*V3(1, 1, 1);
     result->color = color;
-    generate_sphere_mesh(result, &game_state->transient_arena, 0.5f, 256, 128);
+
+    generate_sphere_mesh(result, &game_state->transient_arena, 1.0f, 256, 128);
 
     return result;
 }

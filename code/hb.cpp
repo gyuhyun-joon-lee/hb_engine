@@ -97,7 +97,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
         }
 
-        add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 10), 10.0f, V3(1, 0, 0));
+        add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
         load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
 
@@ -279,6 +279,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         switch(entity->type)
         {
             case EntityType_Floor:
+            {
+                // TODO(gh) Don't pass platform api, device, mesh asset ID!!!
+                push_mesh_pn(platform_render_push_buffer, 
+                          entity->p, entity->dim, entity->color, 
+                          &game_state->assets, platform_api,  
+                          entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
+                          &entity->mesh_assetID, false);
+            }break;
             case EntityType_AABB:
             case EntityType_Cube:
             case EntityType_Sphere:
@@ -288,7 +296,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                           entity->p, entity->dim, entity->color, 
                           &game_state->assets, platform_api,  
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
-                          &entity->mesh_assetID, false);
+                          &entity->mesh_assetID, true);
             }break;
         }
     }
