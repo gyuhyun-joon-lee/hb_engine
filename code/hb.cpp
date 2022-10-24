@@ -103,7 +103,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         v3 vector_field_dim = V3(game_state->grass_grid_count_x * grass_on_floor_count_x, 
                                 game_state->grass_grid_count_y * grass_on_floor_count_y, 
                                 grass_on_floor_count_x);
-        //game_state->vector_field = platform_api->allocate_and_acquire_texture2D_handle(platform_render_push_buffer->device, width, height, bytes_per_pixel);
+        // game_state->vector_field = platform_api->allocate_and_acquire_texture3D_handle(platform_render_push_buffer->device, vector_field_dim.x, vector_field_dim.y, vector_field_dim.z, 12);
 
         load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
 

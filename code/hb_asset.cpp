@@ -6,10 +6,10 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-internal TextureAsset
+internal TextureAsset2D
 load_texture_asset(PlatformAPI *platform_api, void *device, void *src, i32 width, i32 height, i32 bytes_per_pixel)
 {
-    TextureAsset result = {};
+    TextureAsset2D result = {};
 
     assert(device && src);
 

@@ -8,7 +8,7 @@
 #define MAX_UNICODE_CODEPOINT 0x10FFFF
 #define MAX_SUPPORTED_GLYPH_COUNT 2048
 
-struct TextureAsset
+struct TextureAsset2D
 {
     void *handle; // handle to the bitmap in GPU
 
@@ -18,6 +18,15 @@ struct TextureAsset
     // to the pakced asset file?
     i32 width;
     i32 height;
+    i32 bytes_per_pixel;
+};
+
+struct TextureAsset3D
+{
+    void *handle;
+    i32 width;
+    i32 height;
+    i32 depth;
     i32 bytes_per_pixel;
 };
 
@@ -46,7 +55,7 @@ struct GlyphAsset
     // TODO(gh) glyph to codepoint table?
     u32 unicode_codepoint;
 
-    TextureAsset texture;
+    TextureAsset2D texture;
 };
 
 struct FontAsset

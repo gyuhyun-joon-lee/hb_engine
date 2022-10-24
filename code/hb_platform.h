@@ -61,8 +61,12 @@ struct PlatformAPI
     platform_allocate_and_acquire_texture2D_handle *allocate_and_acquire_texture2D_handle;
     platform_write_to_entire_texture2D *write_to_entire_texture2D;
 
+    platform_allocate_and_acquire_texture3D_handle *allocate_and_acquire_texture3D_handle;
+    platform_write_to_entire_texture3D *write_to_entire_texture3D;
+
     platform_allocate_and_acquire_buffer_handle *allocate_and_acquire_buffer_handle;
     platform_write_to_entire_buffer *write_to_entire_buffer;
+
     // platform_atomic_compare_and_exchange32() *atomic_compare_and_exchange32;
     // platform_atomic_compare_and_exchange64() *atomic_compare_and_exchange64;
 };

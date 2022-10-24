@@ -329,7 +329,7 @@ void grass_object_function(object_data Payload *payloadOutput [[payload]],
         float center_y = object_function_input->min.y + object_function_input->one_thread_worth_dim.y * ((float)thread_position_in_grid.y + 0.5f);
 
         payloadOutput->per_grass_data[thread_index].center = packed_float3(center_x, center_y, z);
-        payloadOutput->per_grass_data[thread_index].blade_width = 0.195f;
+        payloadOutput->per_grass_data[thread_index].blade_width = 0.135f;
         payloadOutput->per_grass_data[thread_index].length = length;
 
         float noise = perlin_noise_values[thread_position_in_grid.y * thread_count_per_grid.x + thread_position_in_grid.x];
@@ -605,18 +605,14 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
 
         float3 original_p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
         float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade, think it should be (y, -x)?
-        float3 blade_normal = normalize(cross(p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
-        float3 original_p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
+        float3 blade_normal = normalize(cross(original_p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
+        float3 original_p1 = p0 + (2.5f/4.0f) * (original_p2 - p0) + bend * blade_normal;
 
         float3 force = 5 * noise * float3(1, 0, 0);
 
         grass_instance_buffer[grass_instance_index].p0 = packed_float3(p0);
-        grass_instance_buffer[grass_instance_index].p1 = packed_float3(p1);
-        grass_instance_buffer[grass_instance_index].p2 = packed_float3(p2);
-        
-        grass_instance_buffer[grass_instance_index].p0 = packed_float3(p0);
-        grass_instance_buffer[grass_instance_index].p1 = packed_float3(p1);
-        grass_instance_buffer[grass_instance_index].p2 = packed_float3(p2);
+        grass_instance_buffer[grass_instance_index].p1 = packed_float3(original_p1);
+        grass_instance_buffer[grass_instance_index].p2 = packed_float3(original_p2);
 
         grass_instance_buffer[grass_instance_index].orthogonal_normal = packed_float3(orthogonal_normal);
         grass_instance_buffer[grass_instance_index].hash = hash; 

@@ -543,6 +543,7 @@ PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE2D_HANDLE(metal_allocate_and_acquire_textur
     return result;
 }
 
+// TODO(gh) We can also make this to share the same memory with a buffer
 internal MetalTexture3D 
 metal_make_texture3D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, i32 depth,
                   MTLTextureUsage usage, MTLStorageMode storage_mode)
@@ -570,7 +571,7 @@ metal_make_texture3D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 widt
 }
 
 internal
-PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(metal_allocate_and_acquire_texture3D)
+PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(metal_allocate_and_acquire_texture3D_handle)
 {
     // This assumes that every asset has pre-known _unnormalized_ pixel format such as RBGA8 or R8... 
     MTLPixelFormat pixel_format = MTLPixelFormatInvalid;
@@ -595,6 +596,21 @@ PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(metal_allocate_and_acquire_textur
     void *result = (void *)texture.texture;
     assert(result);
     return result;
+}
+
+internal
+PLATFORM_WRITE_TO_ENTIRE_TEXTURE3D(metal_write_to_entire_texture3D)
+{
+    MTLRegion region = MTLRegionMake3D(0, 0, 0, width, height, depth);
+
+    u32 bytes_per_row = width*bytes_per_pixel;
+    u32 bytes_per_image = width*height*bytes_per_pixel;
+    [(id<MTLTexture>) texture_handle replaceRegion:region 
+                                      mipmapLevel:1
+                                            slice:0
+                                        withBytes:src
+                                      bytesPerRow:bytes_per_row
+                                    bytesPerImage:bytes_per_image];
 }
 
 inline id<MTLDepthStencilState>

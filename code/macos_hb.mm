@@ -1288,6 +1288,8 @@ int main(void)
     platform_api.free_file_memory = debug_macos_free_file_memory;
     platform_api.allocate_and_acquire_texture2D_handle = metal_allocate_and_acquire_texture2D_handle;
     platform_api.write_to_entire_texture2D = metal_write_to_entire_texture2D;
+    platform_api.allocate_and_acquire_texture3D_handle = metal_allocate_and_acquire_texture3D_handle;
+    platform_api.write_to_entire_texture3D = metal_write_to_entire_texture3D;
     platform_api.allocate_and_acquire_buffer_handle = metal_allocate_and_acquire_buffer_handle;
     platform_api.write_to_entire_buffer = metal_write_to_entire_buffer;
 
