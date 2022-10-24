@@ -14,13 +14,13 @@ load_texture_asset(PlatformAPI *platform_api, void *device, void *src, i32 width
     assert(device && src);
 
     // Allocate the space in GPU and get the handle
-    result.handle = platform_api->allocate_and_acquire_texture_handle(device, width, height, bytes_per_pixel);
+    result.handle = platform_api->allocate_and_acquire_texture2D_handle(device, width, height, bytes_per_pixel);
     result.width = width;
     result.height = height;
     result.bytes_per_pixel = bytes_per_pixel;
 
     // Load the file into texture
-    platform_api->write_to_entire_texture(result.handle, src, width, height, bytes_per_pixel);
+    platform_api->write_to_entire_texture2D(result.handle, src, width, height, bytes_per_pixel);
 
     return result;
 }

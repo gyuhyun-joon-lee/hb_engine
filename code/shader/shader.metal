@@ -540,6 +540,27 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     }
 }
 
+#if 0
+struct ControlPoints
+{
+    packed_float3 p1;
+    packed_float3 p2;
+};
+
+packed_float3
+get_collided_control_points(constant ControlPoints *control_points, 
+                            packed_float3 p0, packed_float3 p2,
+                            packed_float3 sphere_center, packed_float3 sphere_r)
+{
+    float slope = (p2.y - p0.y) / (p2.x - p0.x);
+    float perpendicular_slope = -1/slope;
+
+
+}
+#endif
+
+#define target_seconds_per_frame = (1/60.0f);
+
 kernel void
 fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 device GrassInstanceData *grass_instance_buffer [[buffer(1)]],
@@ -547,29 +568,30 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 const device float *floor_z_values [[buffer (3)]],
                                 const device GridInfo *grid_info [[buffer (4)]],
                                 constant float4x4 *game_proj_view [[buffer (5)]],
+                                constant SphereInfo *sphere_info [[buffer (6)]],
                                 uint2 thread_count_per_grid [[threads_per_grid]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {
     uint grass_index = thread_count_per_grid.x*thread_position_in_grid.y + thread_position_in_grid.x;
     float z = floor_z_values[grass_index];
-    float3 center = packed_float3(grid_info->min, 0) + 
+    float3 p0 = packed_float3(grid_info->min, 0) + 
                     packed_float3(grid_info->one_thread_worth_dim.x*thread_position_in_grid.x, 
                                   grid_info->one_thread_worth_dim.y*thread_position_in_grid.y, 
                                   z);
     
     // TODO(gh) better hash function for each grass?
-    float noise = perlin_noise_values[grass_index];
-    uint hash = 10000000*(wang_hash(grass_index)/(float)0xffffffff);
-    float random01 = (float)hash/(float)(10000000);
-    float length = 2.8f + random01;
-    float tilt = clamp(1.9f + 0.7f*random01 + noise, 0.0f, length - 0.01f);
+    half noise = (half)perlin_noise_values[grass_index];
+    uint hash = 10000*(wang_hash(grass_index)/(float)0xffffffff);
+    half random01 = (half)hash/(half)(10000);
+    half length = 2.8h + random01;
+    half tilt = clamp(1.9h + 0.7h*random01 + (half)noise, 0.0h, length - 0.01h);
 
     // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
     // Also, we can make the length smaller based on the facing direction
     // These pad values are not well thought out, just throwing those in
     float3 length_pad = 0.6f*float3(length, length, 0.0f);
-    float3 min = center - length_pad;
-    float3 max = center + length_pad;
+    float3 min = p0 - length_pad;
+    float3 max = p0 + length_pad;
     max.z += tilt + 1.0f;
      
     if(is_inside_frustum(game_proj_view, min, max))
@@ -577,15 +599,30 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         // TODO(gh) should check if this is really 'atomic'
         uint grass_instance_index = atomic_fetch_add_explicit(grass_count, 1, memory_order_relaxed);
 
-        grass_instance_buffer[grass_instance_index].center = center;
+        float2 facing_direction = float2(cos((float)hash), sin((float)hash));
+        half stride = sqrt(length*length - tilt*tilt); // only horizontal length of the blade
+        half bend = 0.7h + 0.2h*random01;
+
+        float3 original_p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
+        float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade, think it should be (y, -x)?
+        float3 blade_normal = normalize(cross(p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
+        float3 original_p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
+
+        float3 force = 5 * noise * float3(1, 0, 0);
+
+        grass_instance_buffer[grass_instance_index].p0 = packed_float3(p0);
+        grass_instance_buffer[grass_instance_index].p1 = packed_float3(p1);
+        grass_instance_buffer[grass_instance_index].p2 = packed_float3(p2);
+        
+        grass_instance_buffer[grass_instance_index].p0 = packed_float3(p0);
+        grass_instance_buffer[grass_instance_index].p1 = packed_float3(p1);
+        grass_instance_buffer[grass_instance_index].p2 = packed_float3(p2);
+
+        grass_instance_buffer[grass_instance_index].orthogonal_normal = packed_float3(orthogonal_normal);
         grass_instance_buffer[grass_instance_index].hash = hash; 
-        grass_instance_buffer[grass_instance_index].blade_width = 0.195f;
-        grass_instance_buffer[grass_instance_index].length = length;
-        grass_instance_buffer[grass_instance_index].tilt = tilt;
-        grass_instance_buffer[grass_instance_index].facing_direction = packed_float2(cos((float)hash), sin((float)hash));
-        grass_instance_buffer[grass_instance_index].bend = 0.7f + 0.2f*random01;
-        grass_instance_buffer[grass_instance_index].wiggliness = 2 + random01;
-        grass_instance_buffer[grass_instance_index].color = packed_float3(random01, 0.784f, 0.2f);
+        grass_instance_buffer[grass_instance_index].blade_width = 0.195h;
+        grass_instance_buffer[grass_instance_index].wiggliness = 2.0h + random01;
+        grass_instance_buffer[grass_instance_index].color = packed_half3(random01, 0.784h, 0.2h);
     }
 }
 
@@ -635,25 +672,14 @@ calculate_grass_vertex(const device GrassInstanceData *grass_instance_data,
                         uint grass_divide_count,
                         float time_elasped)
 {
-    float blade_width = grass_instance_data->blade_width;
-    float length = grass_instance_data->length; // length of the blade
-    float tilt = grass_instance_data->tilt; // z value of the tip
-    float stride = sqrt(length*length - tilt*tilt); // only horizontal length of the blade
-    packed_float2 facing_direction = grass_instance_data->facing_direction;
-    float bend = grass_instance_data->bend;
-    float wiggliness = grass_instance_data->wiggliness;
+    half blade_width = grass_instance_data->blade_width;
+    half wiggliness = grass_instance_data->wiggliness;
     uint hash = grass_instance_data->hash;
 
-    float3 p0 = grass_instance_data->center;
-
-    float3 p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
-    float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade, think it should be (y, -x)?
-
-    float3 blade_normal = normalize(cross(p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
-    
-    // TODO(gh) bend value is a bit unintuitive, because this is not represented in world unit.
-    // But if bend value is 0, it means the grass will be completely flat
-    float3 p1 = p0 + (2.5f/4.0f) * (p2 - p0) + bend * blade_normal;
+    const packed_float3 p0 = grass_instance_data->p0;
+    const packed_float3 p1 = grass_instance_data->p1;
+    const packed_float3 p2 = grass_instance_data->p2;
+    const packed_float3 orthogonal_normal = grass_instance_data->orthogonal_normal;
 
     float t = (float)(thread_index / 2) / (float)grass_divide_count;
     float hash_value = hash*pi_32;
@@ -675,7 +701,7 @@ calculate_grass_vertex(const device GrassInstanceData *grass_instance_data,
         // TODO(gh) Clean this up! 
         // TODO(gh) Original method do it in view angle, any reason to do that
         // (grass possibly facing the direction other than z)?
-        bool should_shift_thread_mod_1 = (dot(orthogonal_normal, *camera_p - grass_instance_data->center) < 0);
+        bool should_shift_thread_mod_1 = (dot(orthogonal_normal, *camera_p - p0) < 0);
         float shift = 0.08f;
         if(thread_index%2 == 1)
         {
@@ -699,7 +725,8 @@ calculate_grass_vertex(const device GrassInstanceData *grass_instance_data,
     result.clip_p = (*proj_view) * float4(world_p, 1.0f);
     result.p = world_p;
     result.N = normalize(cross(quadratic_bezier_first_derivative(p0, modified_p1, modified_p2, t), orthogonal_normal));
-    result.color = grass_instance_data->color;
+    // TODO(gh) Also make this as a half?
+    result.color = packed_float3(grass_instance_data->color);
     result.depth = result.clip_p.z / result.clip_p.w;
     float4 p_in_light_coordinate = (*light_proj_view) * float4(world_p, 1.0f);
     result.p_in_light_coordinate = p_in_light_coordinate.xyz / p_in_light_coordinate.w;

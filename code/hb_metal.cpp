@@ -482,7 +482,7 @@ metal_make_render_pipeline(id<MTLDevice> device,
 }
 
 internal
-PLATFORM_WRITE_TO_ENTIRE_TEXTURE(metal_write_to_entire_texture)
+PLATFORM_WRITE_TO_ENTIRE_TEXTURE2D(metal_write_to_entire_texture2D)
 {
     MTLRegion region = MTLRegionMake2D(0, 0, width, height);
     [(id<MTLTexture>)texture_handle replaceRegion:region
@@ -491,9 +491,9 @@ PLATFORM_WRITE_TO_ENTIRE_TEXTURE(metal_write_to_entire_texture)
           bytesPerRow:width*bytes_per_pixel];
 }
 
-// TODO(gh)
-// TODO(gh) Should we make this more general, or should we keep this for clarification?
-inline MetalTexture2D
+// TODO(gh) Should we make this more general and merge with the texture3D path, 
+// or should we keep this for clarification?
+internal MetalTexture2D
 metal_make_texture2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, 
                   MTLTextureUsage usage, MTLStorageMode storage_mode)
 {
@@ -518,10 +518,9 @@ metal_make_texture2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 widt
 }
 
 internal
-PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(metal_allocate_and_acquire_texture_handle)
+PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE2D_HANDLE(metal_allocate_and_acquire_texture2D_handle)
 {
     // This assumes that every asset has pre-known _unnormalized_ pixel format such as RBGA8 or R8... 
-    // 
     MTLPixelFormat pixel_format = MTLPixelFormatInvalid;
     switch(bytes_per_pixel)
     {
@@ -540,6 +539,60 @@ PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(metal_allocate_and_acquire_texture_
                                                     MTLTextureUsageShaderRead, MTLStorageModeShared);
 
     void *result = (void *)texture2D.texture;
+    assert(result);
+    return result;
+}
+
+internal MetalTexture3D 
+metal_make_texture3D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 width, i32 height, i32 depth,
+                  MTLTextureUsage usage, MTLStorageMode storage_mode)
+{
+    MTLTextureDescriptor *descriptor = [[MTLTextureDescriptor alloc] init];
+
+    descriptor.textureType = MTLTextureType3D;
+    descriptor.width = width;
+    descriptor.height = height;
+    descriptor.depth = depth;
+    descriptor.usage |= usage;
+    descriptor.storageMode =  storage_mode;
+    descriptor.mipmapLevelCount = 1;
+
+    id<MTLTexture> texture  = [device newTextureWithDescriptor:descriptor];
+    [descriptor release];
+
+    MetalTexture3D result = {};
+    result.texture = texture;
+    result.width = width;
+    result.height = height;
+    result.depth = depth;
+
+    return result;
+}
+
+internal
+PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(metal_allocate_and_acquire_texture3D)
+{
+    // This assumes that every asset has pre-known _unnormalized_ pixel format such as RBGA8 or R8... 
+    MTLPixelFormat pixel_format = MTLPixelFormatInvalid;
+    switch(bytes_per_pixel)
+    {
+        case 12:
+        case 16:
+        {
+            pixel_format = MTLPixelFormatRGBA32Float;
+        }break;
+
+        default:
+        {
+            invalid_code_path;
+        };
+    }
+
+    // TODO(gh) Maybe we want more texture types later?
+    MetalTexture3D texture = metal_make_texture3D((id<MTLDevice>)device, pixel_format, width, height, depth, 
+                                                MTLTextureUsageShaderRead, MTLStorageModeShared);
+
+    void *result = (void *)texture.texture;
     assert(result);
     return result;
 }

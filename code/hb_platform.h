@@ -33,11 +33,18 @@ typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
 
 // TODO(gh) Also make one that releases texture handle
-#define PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(name) void *(name)(void *device, i32 width, i32 height, i32 bytes_per_pixel)
-typedef PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE_HANDLE(platform_allocate_and_acquire_texture_handle);
+#define PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE2D_HANDLE(name) void *(name)(void *device, i32 width, i32 height, i32 bytes_per_pixel)
+typedef PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE2D_HANDLE(platform_allocate_and_acquire_texture2D_handle);
 
-#define PLATFORM_WRITE_TO_ENTIRE_TEXTURE(name) void (name)(void *texture_handle, void *src, i32 width, i32 height, i32 bytes_per_pixel)
-typedef PLATFORM_WRITE_TO_ENTIRE_TEXTURE(platform_write_to_entire_texture);
+#define PLATFORM_WRITE_TO_ENTIRE_TEXTURE2D(name) void (name)(void *texture_handle, void *src, i32 width, i32 height, i32 bytes_per_pixel)
+typedef PLATFORM_WRITE_TO_ENTIRE_TEXTURE2D(platform_write_to_entire_texture2D);
+
+// TODO(gh) Also make one that releases texture handle
+#define PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(name) void *(name)(void *device, i32 width, i32 height, i32 depth, i32 bytes_per_pixel)
+typedef PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(platform_allocate_and_acquire_texture3D_handle);
+
+#define PLATFORM_WRITE_TO_ENTIRE_TEXTURE3D(name) void (name)(void *texture_handle, void *src, i32 width, i32 height, i32 depth, i32 bytes_per_pixel)
+typedef PLATFORM_WRITE_TO_ENTIRE_TEXTURE3D(platform_write_to_entire_texture3D);
 
 #define PLATFORM_ALLOCATE_AND_ACQUIRE_BUFFER_HANDLE(name) void *(name)(void *device, u64 size)
 typedef PLATFORM_ALLOCATE_AND_ACQUIRE_BUFFER_HANDLE(platform_allocate_and_acquire_buffer_handle);
@@ -51,8 +58,8 @@ struct PlatformAPI
     platform_write_entire_file *write_entire_file;
     platform_free_file_memory *free_file_memory;
 
-    platform_allocate_and_acquire_texture_handle *allocate_and_acquire_texture_handle;
-    platform_write_to_entire_texture *write_to_entire_texture;
+    platform_allocate_and_acquire_texture2D_handle *allocate_and_acquire_texture2D_handle;
+    platform_write_to_entire_texture2D *write_to_entire_texture2D;
 
     platform_allocate_and_acquire_buffer_handle *allocate_and_acquire_buffer_handle;
     platform_write_to_entire_buffer *write_to_entire_buffer;
@@ -326,6 +333,10 @@ struct PlatformRenderPushBuffer
     f32 render_camera_fov;
 
     v3 clear_color;
+
+    // TODO(gh) Placeholder : Need to think where should we put this info
+    v3 sphere_center;
+    f32 sphere_r;
 
     // Configurations
     b32 enable_shadow;

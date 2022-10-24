@@ -71,6 +71,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->grass_grid_count_y = 4;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
+        // TODO(gh) Beware that when you change this value, you also need to change the size of grass instance buffer
+        // and the indirect command count(for now)
+        u32 grass_on_floor_count_x = 256;
+        u32 grass_on_floor_count_y = 256;
+
         v2 floor_left_bottom_p = hadamard(-V2(game_state->grass_grid_count_x/2, game_state->grass_grid_count_y/2), grid_dim);
         for(u32 y = 0;
                 y < game_state->grass_grid_count_y;
@@ -80,11 +85,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     x < game_state->grass_grid_count_x;
                     ++x)
             {
-                // TODO(gh) Beware that when you change this value, you also need to change the size of grass instance buffer
-                // and the indirect command count(for now)
-                u32 grass_on_floor_count_x = 256;
-                u32 grass_on_floor_count_y = 256;
-
                 v2 min = floor_left_bottom_p + hadamard(grid_dim, V2(x, y));
                 v2 max = min + grid_dim;
                 v3 center = V3(0.5f*(min + max), 0);
@@ -98,6 +98,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
 
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
+
+        // NOTE(gh) For now, vector field offers one vector per grass, but we can change it later
+        v3 vector_field_dim = V3(game_state->grass_grid_count_x * grass_on_floor_count_x, 
+                                game_state->grass_grid_count_y * grass_on_floor_count_y, 
+                                grass_on_floor_count_x);
+        //game_state->vector_field = platform_api->allocate_and_acquire_texture2D_handle(platform_render_push_buffer->device, width, height, bytes_per_pixel);
 
         load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
 
@@ -155,31 +161,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         render_camera->p += -camera_speed*camera_right_dir;
     }
 
-    // NOTE(gh) update entity start
-    for(u32 entity_index = 0;
-            entity_index < game_state->entity_count;
-            ++entity_index)
-    {
-        Entity *entity = game_state->entities + entity_index;
-        switch(entity->type)
-        {
-            case EntityType_Floor:
-            case EntityType_AABB:
-                {
-                }break;
-        }
-    }
-
     u32 update_perlin_noise_buffer_data_count = game_state->grass_grid_count_x * game_state->grass_grid_count_y;
-#if 1
     TempMemory perlin_noise_temp_memory = 
         start_temp_memory(&game_state->transient_arena, 
                 sizeof(ThreadUpdatePerlinNoiseBufferData)*update_perlin_noise_buffer_data_count);
     ThreadUpdatePerlinNoiseBufferData *update_perlin_noise_buffer_data = 
         push_array(&perlin_noise_temp_memory, ThreadUpdatePerlinNoiseBufferData, update_perlin_noise_buffer_data_count);
-#endif
 
-#if 1
     u32 update_perlin_noise_buffer_data_used_count = 0;
     // TODO(gh) populate the perlin noise buffer in each grid, but should the perlin noise be one giant thing 
     // on top of the map?
@@ -203,7 +191,27 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
     }
-#endif
+
+    // NOTE(gh) update entity start
+    for(u32 entity_index = 0;
+            entity_index < game_state->entity_count;
+            ++entity_index)
+    {
+        Entity *entity = game_state->entities + entity_index;
+        switch(entity->type)
+        {
+            case EntityType_Floor:
+            case EntityType_AABB:
+            {
+            }break;
+
+            case EntityType_Sphere:
+            {
+                platform_render_push_buffer->sphere_center = entity->p;
+                platform_render_push_buffer->sphere_r = entity->dim.x;
+            }break;
+        }
+    }
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1

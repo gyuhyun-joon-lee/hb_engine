@@ -758,6 +758,10 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 grid_info.max = grid->max;
                 grid_info.one_thread_worth_dim = one_thread_worth_dim;
 
+                SphereInfo sphere_info = {};
+                sphere_info.center = render_push_buffer->sphere_center;
+                sphere_info.r = render_push_buffer->sphere_r;
+
                 id<MTLComputeCommandEncoder> fill_grass_instance_compute_encoder = [command_buffer computeCommandEncoder];
                 NSString *a = @"Fill Grass Instance Data";
                 fill_grass_instance_compute_encoder.label = [a stringByAppendingFormat:@"%u", grass_grid_index];
@@ -771,6 +775,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 3);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 4);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 5);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &sphere_info, sizeof(sphere_info), 6);
 
                 metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
                 metal_memory_barrier_with_scope(fill_grass_instance_compute_encoder, MTLBarrierScopeBuffers);
@@ -1281,8 +1286,8 @@ int main(void)
     platform_api.read_file = debug_macos_read_file;
     platform_api.write_entire_file = debug_macos_write_entire_file;
     platform_api.free_file_memory = debug_macos_free_file_memory;
-    platform_api.allocate_and_acquire_texture_handle = metal_allocate_and_acquire_texture_handle;
-    platform_api.write_to_entire_texture = metal_write_to_entire_texture;
+    platform_api.allocate_and_acquire_texture2D_handle = metal_allocate_and_acquire_texture2D_handle;
+    platform_api.write_to_entire_texture2D = metal_write_to_entire_texture2D;
     platform_api.allocate_and_acquire_buffer_handle = metal_allocate_and_acquire_buffer_handle;
     platform_api.write_to_entire_buffer = metal_write_to_entire_buffer;
 
@@ -1537,7 +1542,7 @@ int main(void)
     metal_render_context.grass_start_count_buffer = metal_make_shared_buffer(device, sizeof(u32));
     metal_render_context.grass_count_buffer = metal_make_shared_buffer(device, sizeof(u32));
     // TODO(gh) Should be able to change this based on the game code grass count
-    metal_render_context.grass_instance_buffer = metal_make_shared_buffer(device, 32*sizeof(GrassInstanceData)*256*256);
+    metal_render_context.grass_instance_buffer = metal_make_shared_buffer(device, 24*sizeof(GrassInstanceData)*256*256);
 
     metal_render_context.grass_index_buffer = metal_make_shared_buffer(device, sizeof(u32)*39);
 

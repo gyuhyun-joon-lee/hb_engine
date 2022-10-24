@@ -43,6 +43,14 @@ struct MetalTexture2D
     // TODO(gh) maybe also store usage and storage mode?
 };
 
+struct MetalTexture3D
+{
+    id<MTLTexture> texture;
+    i32 width;
+    i32 height;
+    i32 depth;
+};
+
 struct MetalTimestamp
 {
     u64 cpu;

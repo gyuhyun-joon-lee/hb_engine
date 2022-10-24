@@ -34,6 +34,8 @@ struct GameState
 
     GameAssets assets;
 
+    TextureAsset vector_field;
+
     // TODO(gh) More structured light information
 
     // TODO(gh) some sort of asset system
