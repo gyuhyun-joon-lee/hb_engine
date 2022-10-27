@@ -102,7 +102,7 @@ singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
 
     result.position = float4(vertex_output.p, 0.0f);
     result.normal = float4(vertex_output.N, shadow_factor); // also storing the shadow factor to the unused 4th component
-    result.color = float4(vertex_output.color, 0.0f);
+    result.color = float4(vertex_output.color, 1.0f);
     // result.depth = vertex_output.depth; 
    
     return result;
@@ -156,7 +156,7 @@ singlepass_deferred_lighting_frag(DeferredLightingVertexOutput vertex_output [[s
     constexpr sampler s = sampler(coord::normalized, address::clamp_to_zero, filter::linear);
     float3 p = g_buffer_position.sample(s, vertex_output.texcoord).xyz;
     float4 N = g_buffer_normal.sample(s, vertex_output.texcoord);
-    float3 color = g_buffer_color.sample(s, vertex_output.texcoord).xyz;
+    float4 color = g_buffer_color.sample(s, vertex_output.texcoord);
 
     float3 L = normalize(vertex_output.light_p - p);
 
@@ -169,7 +169,7 @@ singlepass_deferred_lighting_frag(DeferredLightingVertexOutput vertex_output [[s
     }
     float diffuse = shadow_factor * max(dot(N.xyz, L), 0.5f);
 
-    float4 result = float4(color * (ambient + diffuse), 1.0f);
+    float4 result = float4(color.xyz * (ambient + diffuse), color.w);
 
     return result;
 }

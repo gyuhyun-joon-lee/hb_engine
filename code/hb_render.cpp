@@ -426,11 +426,12 @@ push_glyph(PlatformRenderPushBuffer *render_push_buffer, FontAsset *font_asset, 
     entry->texcoord_max = V2(1, 1);
 }
 
+// NOTE(gh) This is NOT the recommended way to draw things, use push_mesh_pn for larger meshes!
 internal void
-push_debug_arrow(PlatformRenderPushBuffer *render_push_buffer, v3 color, VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+push_arbitrary_mesh(PlatformRenderPushBuffer *render_push_buffer, v3 color, VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
 {
-    RenderEntryDebugArrow *entry = push_render_element(render_push_buffer, RenderEntryDebugArrow);
-    entry->header.type = RenderEntryType_DebugArrow;
+    RenderEntryArbitraryMesh *entry = push_render_element(render_push_buffer, RenderEntryArbitraryMesh);
+    entry->header.type = RenderEntryType_ArbitraryMesh;
     entry->header.size = sizeof(*entry);
 
     entry->color = color;

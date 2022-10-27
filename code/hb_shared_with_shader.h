@@ -19,7 +19,6 @@ struct PerObjectData
 {
 #if INSIDE_METAL_SHADER
     float4x4 model;
-    // TODO(gh) should we use packed_float3?
     float3 color;
 #elif INSIDE_VULKAN_SHADER
 #else 

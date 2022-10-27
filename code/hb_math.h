@@ -246,6 +246,18 @@ length(v3 a)
     return sqrtf(a.x*a.x + a.y*a.y + a.z*a.z);
 }
 
+inline v3
+abs(v3 a)
+{
+    v3 result = {};
+
+    result.x = abs(a.x);
+    result.y = abs(a.y);
+    result.z = abs(a.z);
+
+    return result; 
+}
+
 inline v3&
 operator+=(v3 &v, v3 a)
 {

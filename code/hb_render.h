@@ -142,7 +142,7 @@ enum RenderEntryType
     RenderEntryType_Grass,
     RenderEntryType_Frustum,
     RenderEntryType_Glyph,
-    RenderEntryType_DebugArrow,
+    RenderEntryType_ArbitraryMesh,
 };
 
 // TODO(gh) Do we have enough reason to keep this header?
@@ -224,7 +224,8 @@ struct RenderEntryGlyph
     v2 texcoord_max;
 };
 
-struct RenderEntryDebugArrow
+// NOTE(gh) SLOW!!!! Do NOT use this for shipping code!
+struct RenderEntryArbitraryMesh
 {
     RenderEntryHeader header;
     v3 color; 

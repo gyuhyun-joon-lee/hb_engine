@@ -875,7 +875,6 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
     metal_set_depth_stencil_state(g_buffer_render_encoder, render_context->depth_state);
     metal_set_cull_mode(g_buffer_render_encoder, MTLCullModeBack); 
 
-    u32 arrow_count = 0;
     for(u32 consumed = 0;
             consumed < render_push_buffer->used;
             )
@@ -913,12 +912,10 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                         (id<MTLBuffer>)entry->index_buffer_handle, 0, entry->index_count);
             }break;
 
-            case RenderEntryType_DebugArrow:
+            case RenderEntryType_ArbitraryMesh:
             {
-                RenderEntryDebugArrow *entry = (RenderEntryDebugArrow *)((u8 *)render_push_buffer->base + consumed);
+                RenderEntryArbitraryMesh *entry = (RenderEntryArbitraryMesh *)((u8 *)render_push_buffer->base + consumed);
                 consumed += sizeof(*entry);
-
-                arrow_count++;
 #if 1
                 m4x4 model = M4x4();
 
@@ -941,34 +938,6 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
                         render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
 #endif
-            }break;
-
-            case RenderEntryType_Grass:
-            {
-                RenderEntryGrass *entry = (RenderEntryGrass *)((u8 *)render_push_buffer->base + consumed);
-                consumed += sizeof(*entry);
-
-                m4x4 model = M4x4();
-                model = transpose(model); // make the matrix column-major
-
-                PerObjectData per_object_data = {};
-                per_object_data.model = model;
-                per_object_data.color = entry->color;
-
-                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
-
-                metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
-                metal_set_vertex_buffer(g_buffer_render_encoder, 
-                                        render_context->combined_vertex_buffer.buffer, 
-                                        entry->vertex_buffer_offset, 2);
-                metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
-
-                metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
-
-                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
-
-                metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
-                        render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
             }break;
 
             default:
@@ -1756,8 +1725,8 @@ int main(void)
         metal_render_context.grass_double_buffer_fence[i] = metal_make_fence(device);
     }
     
-    metal_render_context.combined_vertex_buffer = metal_make_shared_buffer(device, megabytes(256));
-    metal_render_context.combined_index_buffer = metal_make_shared_buffer(device, megabytes(256));
+    metal_render_context.combined_vertex_buffer = metal_make_shared_buffer(device, megabytes(8));
+    metal_render_context.combined_index_buffer = metal_make_shared_buffer(device, megabytes(4));
 
     metal_render_context.giant_buffer = metal_make_shared_buffer(device, gigabytes(1));
 
@@ -1817,7 +1786,7 @@ int main(void)
     PlatformRenderPushBuffer *debug_platform_render_push_buffer = 0;
 #if HB_DEBUG 
     PlatformRenderPushBuffer _debug_platform_render_push_buffer = {};
-    _debug_platform_render_push_buffer.total_size = megabytes(1);
+    _debug_platform_render_push_buffer.total_size = megabytes(8);
     _debug_platform_render_push_buffer.base = (u8 *)malloc(_debug_platform_render_push_buffer.total_size);
     // TODO(gh) Make sure to update this value whenever we resize the window
     _debug_platform_render_push_buffer.window_width = window_width;

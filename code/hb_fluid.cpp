@@ -28,7 +28,7 @@
    By definition, divergence of zero-divergence vector field is 0, so div(w) = laplacian(pressure), which is also a poisson equation.
 */
 
-#define swap(ptr0, ptr1) {void *temp = (void*)(ptr0); ptr1 = ptr0; *(void **)(&ptr0) = temp;}
+#define swap(ptr0, ptr1) {void *temp = (void*)(ptr0); ptr0 = ptr1; *(void **)(&ptr1) = temp;}
 
 internal void
 initialize_fluid_cube(FluidCube *fluid_cube, MemoryArena *arena, u32 cell_count_x, u32 cell_count_y, u32 cell_count_z, f32 cell_dim, f32 viscosity)
@@ -37,28 +37,30 @@ initialize_fluid_cube(FluidCube *fluid_cube, MemoryArena *arena, u32 cell_count_
     fluid_cube->cell_count = V3u(cell_count_x, cell_count_y, cell_count_z); 
     fluid_cube->cell_dim = cell_dim; 
 
-    u32 total_cell_count = cell_count_x*cell_count_y*cell_count_z;
+    fluid_cube->total_cell_count = cell_count_x*cell_count_y*cell_count_z;
+    fluid_cube->stride = sizeof(f32)*fluid_cube->total_cell_count;
 
-    fluid_cube->v_x = push_array(arena, f32, 2*total_cell_count); 
-    fluid_cube->v_y = push_array(arena, f32, 2*total_cell_count); 
-    fluid_cube->v_z = push_array(arena, f32, 2*total_cell_count); 
-    fluid_cube->densities = push_array(arena, f32, 2*total_cell_count); 
-    fluid_cube->pressures = push_array(arena, f32, total_cell_count); 
-    zero_memory(fluid_cube->v_x, sizeof(f32)*2*total_cell_count);
-    zero_memory(fluid_cube->v_y, sizeof(f32)*2*total_cell_count);
-    zero_memory(fluid_cube->v_z, sizeof(f32)*2*total_cell_count);
-    zero_memory(fluid_cube->densities, sizeof(f32)*2*total_cell_count);
-    zero_memory(fluid_cube->pressures, sizeof(f32)*total_cell_count);
+    fluid_cube->v_x = push_array(arena, f32, 2*fluid_cube->total_cell_count); 
+    fluid_cube->v_y = push_array(arena, f32, 2*fluid_cube->total_cell_count); 
+    fluid_cube->v_z = push_array(arena, f32, 2*fluid_cube->total_cell_count); 
+    fluid_cube->densities = push_array(arena, f32, 2*fluid_cube->total_cell_count); 
+    fluid_cube->pressures = push_array(arena, f32, fluid_cube->total_cell_count); 
+
+    zero_memory(fluid_cube->v_x, 2*fluid_cube->stride);
+    zero_memory(fluid_cube->v_y, 2*fluid_cube->stride);
+    zero_memory(fluid_cube->v_z, 2*fluid_cube->stride);
+    zero_memory(fluid_cube->densities, 2*fluid_cube->stride);
+    zero_memory(fluid_cube->pressures, fluid_cube->stride);
 
     fluid_cube->v_x_source = fluid_cube->v_x;
-    fluid_cube->v_x_dest = fluid_cube->v_x_source + total_cell_count;
+    fluid_cube->v_x_dest = fluid_cube->v_x_source + fluid_cube->total_cell_count;
     fluid_cube->v_y_source = fluid_cube->v_y;
-    fluid_cube->v_y_dest = fluid_cube->v_y_source + total_cell_count;
+    fluid_cube->v_y_dest = fluid_cube->v_y_source + fluid_cube->total_cell_count;
     fluid_cube->v_z_source = fluid_cube->v_z;
-    fluid_cube->v_z_dest = fluid_cube->v_z_source + total_cell_count;
+    fluid_cube->v_z_dest = fluid_cube->v_z_source + fluid_cube->total_cell_count;
 
     fluid_cube->density_source = fluid_cube->densities;
-    fluid_cube->density_dest = fluid_cube->density_source + total_cell_count;
+    fluid_cube->density_dest = fluid_cube->density_source + fluid_cube->total_cell_count;
 }
 
 // simply returns the index using x, y, z coordinate
@@ -70,8 +72,9 @@ get_index(v3u cell_count, u32 cell_x, u32 cell_y, u32 cell_z)
     return result;
 }
 
+// NOTE(gh) The source can be force, density, temperature... whatever you want the fluid to carry.
 internal void
-add_force(f32 *dest, f32 *source, f32 *force, v3u cell_count, f32 dt)
+add_source(f32 *dest, f32 *source, f32 *force, v3u cell_count, f32 dt)
 {
     for(u32 cell_z = 1;
             cell_z < cell_count.z-1;
@@ -87,12 +90,7 @@ add_force(f32 *dest, f32 *source, f32 *force, v3u cell_count, f32 dt)
             {
                 u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
 
-                if(force[ID] != 0.0f)
-                {
-                    int a = 1;
-                }
-
-                dest[get_index(cell_count, cell_x, cell_y, cell_z)] = source[ID] + dt*force[ID];  
+                dest[ID] = source[ID] + dt*force[ID];  
             }
         }
     }
@@ -122,13 +120,6 @@ void set_boundary_values(f32 *dest, v3u cell_count, ElementTypeForBoundary eleme
                     {
                         dest[get_index(cell_count, cell_x, cell_y, 0)] = -dest[get_index(cell_count, cell_x, cell_y, 1)];
                         dest[get_index(cell_count, cell_x, cell_y, cell_count.z-1)] = -dest[get_index(cell_count, cell_x, cell_y, cell_count.z-2)];
-
-                        if((cell_x == cell_count.x/2) && 
-                            (cell_y == cell_count.y/2) &&
-                            (cell_z == cell_count.z-2))
-                        {
-                            int a = 1;
-                        }
                     }break;
 
                     case ElementTypeForBoundary_yz:
@@ -216,54 +207,51 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
 
                 v3 cell_based_u = v / cell_dim;
 
-                // TODO(gh) Should we do 0.5f for xyz here?
                 v3 p_offset = dt*cell_based_u;
-                v3 p = V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f) - p_offset;
-
-                if(element_type == ElementTypeForBoundary_xy && v.z != 0.0f)
-                {
-                    int a = 1;
-                }
+                // TODO(gh) Original implementation doesn't do this, but shouldn't 
+                // we offset by 0.5f for xyz here, because we need to start at the center of the cell?
+                v3 p = V3(cell_x, cell_y, cell_z) - p_offset;
 
                 // clip p
-                if(p.x < cell_dim + 0.5f)
+                if(p.x < 0.5f)
                 {
-                    p.x = cell_dim + 0.5f;
+                    p.x = 0.5f;
                 }
                 else if(p.x > cell_count.x - 1.5f)
                 {
                     p.x = cell_count.x - 1.5f;
                 }
 
-                if(p.y < cell_dim + 0.5f)
+                if(p.y < 0.5f)
                 {
-                    p.y = cell_dim + 0.5f;
+                    p.y = 0.5f;
                 }
                 else if(p.y > cell_count.y - 1.5f)
                 {
                     p.y = cell_count.y - 1.5f;
                 }
                 
-                if(p.z < cell_dim + 0.5f)
+                if(p.z < 0.5f)
                 {
-                    p.z = cell_dim + 0.5f;
+                    p.z = 0.5f;
                 }
                 else if(p.z > cell_count.z - 1.5f)
                 {
                     p.z = cell_count.z - 1.5f;
                 }
 
+#if 1
                 u32 x0 = (u32)p.x;
                 u32 x1 = x0+1;
-                f32 xf = p.x - x0 - 0.5f;
+                f32 xf = p.x - x0;
 
                 u32 y0 = (u32)p.y;
                 u32 y1 = y0+1;
-                f32 yf = p.y - y0 - 0.5f;
+                f32 yf = p.y - y0;
 
                 u32 z0 = (u32)p.z;
                 u32 z1 = z0+1;
-                f32 zf = p.z - z0 - 0.5f;
+                f32 zf = p.z - z0;
 
                 f32 lerp_x0 = lerp(source[get_index(cell_count, x0, y0, z0)], xf, source[get_index(cell_count, x1, y0, z0)]);
                 f32 lerp_x1 = lerp(source[get_index(cell_count, x0, y1, z0)], xf, source[get_index(cell_count, x1, y1, z0)]);
@@ -274,7 +262,7 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                 f32 lerp_y1 = lerp(lerp_x2, yf, lerp_x3);
 
                 f32 lerp_xyz = lerp(lerp_y0, zf, lerp_y1);
-
+#endif
                 dest[ID] = lerp_xyz; 
             }
         }
@@ -290,10 +278,10 @@ diffuse(f32 *dest, f32 *source, v3u cell_count, f32 cell_dim, f32 viscosity, f32
     // NOTE(gh) This is a solution for a poisson equation (I - v*dt*laplacian)dest = source 
     // using Jacobi iteration.
     // Jacobi iteration is in a form of 
-    // dest = (a*source+dest[-1,0,0]+dest[1,0,0]+dest[0,-1,0]+dest[0,1,0],+dest[0,0,-1]+dest[0,0,1])/(6+a), 
+    // dest = (a*source+dest[-1,0,0]+dest[1,0,0]+dest[0,-1,0]+dest[0,1,0]+dest[0,0,-1]+dest[0,0,1])/(6+a), 
     // where a = (dx^2)/(viscosity*dt).
     for(u32 iter = 0;
-            iter < 40; // requires 40 to 80 iteration to make the error unnoticable
+            iter < 80; // requires 40 to 80 iteration to make the error unnoticable
             ++iter)
     {
         for(u32 cell_z = 1;
@@ -310,32 +298,18 @@ diffuse(f32 *dest, f32 *source, v3u cell_count, f32 cell_dim, f32 viscosity, f32
                 {
                     u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
 
-                    if((cell_x == cell_count.x/2) && 
-                        (cell_y == cell_count.y/2) &&
-                        (cell_z == cell_count.z-2) &&
-                        element_type == ElementTypeForBoundary_xy)
-                    {
-                        int a = 1;
-                    }
+                    f32 dest_pos_x = dest[get_index(cell_count, cell_x+1, cell_y, cell_z)];
+                    f32 dest_neg_x = dest[get_index(cell_count, cell_x-1, cell_y, cell_z)];
 
-                    // NOTE(gh) To simplify the naming, we assume that 111 means the current cell.
-                    f32 dest_011 = dest[get_index(cell_count, cell_x-1, cell_y, cell_z)];
-                    f32 dest_211 = dest[get_index(cell_count, cell_x+1, cell_y, cell_z)];
+                    f32 dest_pos_y = dest[get_index(cell_count, cell_x, cell_y+1, cell_z)];
+                    f32 dest_neg_y = dest[get_index(cell_count, cell_x, cell_y-1, cell_z)];
 
-                    f32 dest_101 = dest[get_index(cell_count, cell_x, cell_y-1, cell_z)];
-                    f32 dest_121 = dest[get_index(cell_count, cell_x, cell_y+1, cell_z)];
-
-                    f32 dest_110 = dest[get_index(cell_count, cell_x, cell_y, cell_z-1)];
-                    f32 dest_112 = dest[get_index(cell_count, cell_x, cell_y, cell_z+1)];
+                    f32 dest_pos_z = dest[get_index(cell_count, cell_x, cell_y, cell_z+1)];
+                    f32 dest_neg_z = dest[get_index(cell_count, cell_x, cell_y, cell_z-1)];
 
                     // TODO(gh) Not sure if we should be using cell_dim or the whole cube dim here
                     f32 a = (cell_dim*cell_dim)/(viscosity*dt);
-                    dest[ID] = (a*source[ID] + dest_011+dest_211+dest_101+dest_121+dest_110+dest_112)/(6+a);
-
-                    if(dest[ID] != 0)
-                    {
-                        int a = 1;
-                    }
+                    dest[ID] = (a*source[ID] + dest_pos_x+dest_neg_x+dest_pos_y+dest_neg_y+dest_pos_z+dest_neg_z)/(6+a);
                 }
             }
         }
@@ -370,21 +344,42 @@ project(f32 *x, f32 *y, f32 *z, f32 *pressures, v3u cell_count, f32 cell_dim, f3
                         ++cell_x)
                 {
                     u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
-                    f32 p011 = pressures[get_index(cell_count, cell_x-1, cell_y, cell_z)];
-                    f32 p211 = pressures[get_index(cell_count, cell_x+1, cell_y, cell_z)];
 
-                    f32 p101 = pressures[get_index(cell_count, cell_x, cell_y-1, cell_z)];
-                    f32 p121 = pressures[get_index(cell_count, cell_x, cell_y+1, cell_z)];
+                    u32 pos_xID = get_index(cell_count, cell_x+1, cell_y, cell_z);
+                    u32 neg_xID = get_index(cell_count, cell_x-1, cell_y, cell_z);
 
-                    f32 p110 = pressures[get_index(cell_count, cell_x, cell_y, cell_z-1)];
-                    f32 p112 = pressures[get_index(cell_count, cell_x, cell_y, cell_z+1)];
-                    f32 divergence = (p211+p121+p112-p011-p101-p110)/(2*cell_dim);
+                    u32 pos_yID = get_index(cell_count, cell_x, cell_y+1, cell_z);
+                    u32 neg_yID = get_index(cell_count, cell_x, cell_y-1, cell_z);
+
+                    u32 pos_zID = get_index(cell_count, cell_x, cell_y, cell_z+1);
+                    u32 neg_zID = get_index(cell_count, cell_x, cell_y, cell_z-1);
+
+                    f32 pos_x = x[pos_xID];
+                    f32 neg_x = x[neg_xID];
+
+                    f32 pos_y = y[pos_yID];
+                    f32 neg_y = y[neg_yID];
+
+                    f32 pos_z = z[pos_zID];
+                    f32 neg_z = z[neg_zID];
+                    
+                    f32 divergence = (pos_x+pos_y+pos_z-neg_x-neg_y-neg_z)/(2*cell_dim);
+
+                    f32 p_pos_x = pressures[get_index(cell_count, cell_x+1, cell_y, cell_z)];
+                    f32 p_neg_x = pressures[get_index(cell_count, cell_x-1, cell_y, cell_z)];
+
+                    f32 p_pos_y = pressures[get_index(cell_count, cell_x, cell_y+1, cell_z)];
+                    f32 p_neg_y = pressures[get_index(cell_count, cell_x, cell_y-1, cell_z)];
+
+                    f32 p_pos_z = pressures[get_index(cell_count, cell_x, cell_y, cell_z+1)];
+                    f32 p_neg_z = pressures[get_index(cell_count, cell_x, cell_y, cell_z-1)];
 
                     // TODO(gh) Once this works, we can simplify this more
-                    pressures[ID] = (p011+p211+p101+p121+p110+p112 - divergence*cell_dim*cell_dim)/6;
+                    pressures[ID] = (p_pos_x+p_neg_x+p_pos_y+p_neg_y+p_pos_z+p_neg_z - divergence*cell_dim*cell_dim)/6;
                 }
             }
         }
+         
         set_boundary_values(pressures, cell_count, ElementTypeForBoundary_Continuous);
     }
 

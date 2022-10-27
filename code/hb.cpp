@@ -101,16 +101,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
-        // NOTE(gh) For now, vector field offers one vector per grass, but we can change it later
-        v3 vector_field_dim = V3(game_state->grass_grid_count_x * grass_on_floor_count_x, 
-                                game_state->grass_grid_count_y * grass_on_floor_count_y, 
-                                grass_on_floor_count_x);
-        // game_state->vector_field = platform_api->allocate_and_acquire_texture3D_handle(platform_render_push_buffer->device, vector_field_dim.x, vector_field_dim.y, vector_field_dim.z, 12);
-
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
-        u32 fluid_cell_count_x = 16;
-        u32 fluid_cell_count_y = 16;
-        u32 fluid_cell_count_z = 8;
+        u32 fluid_cell_count_x = 12;
+        u32 fluid_cell_count_y = 12;
+        u32 fluid_cell_count_z = 12;
         initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
                             fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 1, 1);
 
@@ -226,43 +220,54 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     // NOTE(gh) Fluid simulation
     // TODO(gh) Do wee need to add source to the density, too?
     FluidCube *fluid_cube = &game_state->fluid_cube;
-    swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
-    swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
-    swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
-    swap(fluid_cube->density_dest, fluid_cube->density_source);
+    local_persist b32 added_density = false;
     
-    //if(platform_input->time_elasped_from_start < 5)
+    zero_memory(fluid_cube->v_x_source, fluid_cube->stride);
+    zero_memory(fluid_cube->v_y_source, fluid_cube->stride);
+    zero_memory(fluid_cube->v_z_source, fluid_cube->stride);
+    zero_memory(fluid_cube->density_source, fluid_cube->stride);
+    // if(((u32)platform_input->time_elasped_from_start) % 4 == 0)
     {
-        u32 ID = get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, fluid_cube->cell_count.y/2, game_state->debug_fluid_force_z);
-        fluid_cube->v_x_source[ID] = 2;
-        fluid_cube->v_y_source[ID] = 3;
-        fluid_cube->v_z_source[ID] = -4;
+        u32 center_x = fluid_cube->cell_count.x/2;
+        u32 center_y = fluid_cube->cell_count.y/2;
 
-        game_state->debug_fluid_force_z++;
-        if(game_state->debug_fluid_force_z == fluid_cube->cell_count.z-2)
+        for(i32 z = fluid_cube->cell_count.z-2;
+                z < fluid_cube->cell_count.z-1;
+                ++z)
         {
-            game_state->debug_fluid_force_z = 1;
+            for(i32 y = -3;
+                    y <= 3;
+                    ++y)
+            {
+                for(i32 x = -3;
+                        x <= 3;
+                        ++x)
+                {
+                    u32 ID = get_index(fluid_cube->cell_count, center_x+x, center_y+y, z);
+
+                    fluid_cube->v_x_source[ID] = 10;
+                    fluid_cube->v_y_source[ID] = 10;
+                    fluid_cube->v_z_source[ID] = 0;
+
+                    if(!added_density)
+                    {
+                        fluid_cube->density_source[ID] = 100;
+                    }
+                }
+            }
         }
+        
+        added_density = true;
     }
 
-    // velocity
-#if 1
-    // NOTE(gh) At first, bottom half holds the source input, and dest hold the previous value
+    // NOTE(gh) At first, source holds the source force, and dest holds the previous value
     // adding force will overwrite the new value to dest 
-    add_force(fluid_cube->v_x_dest, fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, platform_input->dt_per_frame);
-    add_force(fluid_cube->v_y_dest, fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, platform_input->dt_per_frame);
-    add_force(fluid_cube->v_z_dest, fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, platform_input->dt_per_frame);
 
-    swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
-    swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
-    swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
+    // velocity
+    add_source(fluid_cube->v_x_dest, fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, platform_input->dt_per_frame);
+    add_source(fluid_cube->v_y_dest, fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, platform_input->dt_per_frame);
+    add_source(fluid_cube->v_z_dest, fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, platform_input->dt_per_frame);
 
-    advect(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_yz);
-    advect(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_zx);
-    advect(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
     swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
     swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
     swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
@@ -274,16 +279,31 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     diffuse(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
             fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
 
+    swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
+    swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
+    swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
+
+    advect(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_yz);
+    advect(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_zx);
+    advect(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
+
     project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->cell_count, fluid_cube->cell_dim, fluid_cube->viscosity, platform_input->dt_per_frame);
 
     // density
-    // TODO(gh) Add something to the density, too?
+    add_source(fluid_cube->density_dest, fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, platform_input->dt_per_frame);
+
+    swap(fluid_cube->density_dest, fluid_cube->density_source);
+
     advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
             fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
+
     swap(fluid_cube->density_dest, fluid_cube->density_source);
+
     diffuse(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
             fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
-#endif
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
@@ -380,7 +400,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
-
     b32 enable_fluid_arrow_rendering = true;
 
     if(enable_fluid_arrow_rendering)
@@ -399,12 +418,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 {
                     v3 center = 3.0f*fluid_cube->cell_dim*V3(cell_x, cell_y, cell_z);
 
-                    if((cell_x == fluid_cube->cell_count.x/2) && 
-                        (cell_y == fluid_cube->cell_count.y/2) &&
-                        (cell_z == fluid_cube->cell_count.z-2))
-                    {
-                        int a = 1;
-                    }
                     f32 v_x = fluid_cube->v_x_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
                     f32 v_y = fluid_cube->v_y_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
                     f32 v_z = fluid_cube->v_z_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
@@ -412,7 +425,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     v3 color = V3(0.5f, 0.5f, 0.5f);
 
                     f32 scale = 0.15;
-                    v3 v = 10.0f*V3(v_x, v_y, v_z);
+                    v3 v = V3(v_x, v_y, v_z);
                     if(compare_with_epsilon(length_square(v), 0))
                     {
                         scale = 0;
@@ -420,17 +433,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     else
                     {
                         color = V3(1, 0, 0);
+                        color = abs(normalize(v));
                     }
 
                     if(cell_x == 0 || (cell_x == fluid_cube->cell_count.x-1) || 
-                        cell_y == 0 || (cell_y == fluid_cube->cell_count.y-1) ||
-                        cell_z == 0 || (cell_z == fluid_cube->cell_count.z-1))
+                            cell_y == 0 || (cell_y == fluid_cube->cell_count.y-1) ||
+                            cell_z == 0 || (cell_z == fluid_cube->cell_count.z-1))
                     {
-                        if((cell_z == 0 || (cell_z == fluid_cube->cell_count.z-1)) && scale != 0)
-                        {
-                            int a = 1;
-                        }
-                        color = V3(0, 0, 1);
+                        color = V3(1, 0, 0);
                     }
 
                     // TODO(gh) Doesn't work when v == up vector, and what if the length of v is too small?
@@ -464,100 +474,109 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         0, 2, 4, 
                     };
 
-                    push_debug_arrow(platform_render_push_buffer, color, arrow_vertices, array_count(arrow_vertices), arrow_indices, array_count(arrow_indices));
+                    push_arbitrary_mesh(platform_render_push_buffer, color, arrow_vertices, array_count(arrow_vertices), arrow_indices, array_count(arrow_indices));
                 }
             }
         }
     }
 
-    // NOTE(gh) push forward render entries
-    b32 enable_show_game_camera_frustum = (render_camera != game_camera);
-    if(enable_show_game_camera_frustum)
+    if(debug_platform_render_push_buffer)
     {
-        CameraFrustum game_camera_frustum = {};
-        get_camera_frustum(game_camera, &game_camera_frustum, platform_render_push_buffer->width_over_height);
+        init_render_push_buffer(debug_platform_render_push_buffer, render_camera, game_camera,
+                0, 0, 0, V3(0, 0, 0), false);
 
-        /*
-           NOTE(gh)
-           When looked from the camera p
-           near
-           0     1
-           -------
-           |     |
-           |     |
-           -------
-           2     3
-
-           far
-           4     5
-           -------
-           |     |
-           |     |
-           -------
-           6     7
-        */
-        v3 frustum_vertices[] = 
+        // NOTE(gh) push forward render entries
+        b32 enable_show_game_camera_frustum = (render_camera != game_camera);
+        if(enable_show_game_camera_frustum)
         {
-            game_camera_frustum.near[0],
-            game_camera_frustum.near[1],
-            game_camera_frustum.near[2],
-            game_camera_frustum.near[3],
+            CameraFrustum game_camera_frustum = {};
+            get_camera_frustum(game_camera, &game_camera_frustum, platform_render_push_buffer->width_over_height);
 
-            game_camera_frustum.far[0],
-            game_camera_frustum.far[1],
-            game_camera_frustum.far[2],
-            game_camera_frustum.far[3],
-        };
+            /*
+               NOTE(gh)
+               When looked from the camera p
+               near
+               0     1
+               -------
+               |     |
+               |     |
+               -------
+               2     3
 
-        u32 frustum_indices[] =
-        {
-            // top
-            0, 1, 4,
-            1, 5, 4,
+               far
+               4     5
+               -------
+               |     |
+               |     |
+               -------
+               6     7
+               */
+            v3 frustum_vertices[] = 
+            {
+                game_camera_frustum.near[0],
+                game_camera_frustum.near[1],
+                game_camera_frustum.near[2],
+                game_camera_frustum.near[3],
 
-            // right
-            1, 3, 5,
-            3, 7, 5,
+                game_camera_frustum.far[0],
+                game_camera_frustum.far[1],
+                game_camera_frustum.far[2],
+                game_camera_frustum.far[3],
+            };
 
-            // left
-            2, 0, 6,
-            0, 4, 6,
+            u32 frustum_indices[] =
+            {
+                // top
+                0, 1, 4,
+                1, 5, 4,
 
-            // bottom
-            6, 7, 2,
-            7, 3, 2,
+                // right
+                1, 3, 5,
+                3, 7, 5,
 
-            // near
-            2, 3, 0,
-            3, 1, 0,
+                // left
+                2, 0, 6,
+                0, 4, 6,
 
-            //far
-            7, 6, 5,
-            6, 4, 5,
-        };
+                // bottom
+                6, 7, 2,
+                7, 3, 2,
 
-        push_frustum(platform_render_push_buffer, V3(0, 0.2f, 1), 
+                // near
+                2, 3, 0,
+                3, 1, 0,
+
+                //far
+                7, 6, 5,
+                6, 4, 5,
+            };
+
+            push_frustum(debug_platform_render_push_buffer, V3(0, 0.2f, 1), 
                     frustum_vertices, array_count(frustum_vertices),
                     frustum_indices, array_count(frustum_indices));
 
-        v3 line_color = V3(0, 1, 1);
+            v3 line_color = V3(0, 1, 1);
 
-        push_line(platform_render_push_buffer, game_camera_frustum.near[0], game_camera_frustum.near[1], line_color);
-        push_line(platform_render_push_buffer, game_camera_frustum.near[1], game_camera_frustum.near[3], line_color);
-        push_line(platform_render_push_buffer, game_camera_frustum.near[2], game_camera_frustum.near[3], line_color);
-        push_line(platform_render_push_buffer, game_camera_frustum.near[2], game_camera_frustum.near[0], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.near[0], game_camera_frustum.near[1], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.near[1], game_camera_frustum.near[3], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.near[2], game_camera_frustum.near[3], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.near[2], game_camera_frustum.near[0], line_color);
 
-        push_line(platform_render_push_buffer, game_camera_frustum.far[0], game_camera_frustum.far[1], line_color);
-        push_line(platform_render_push_buffer, game_camera_frustum.far[1], game_camera_frustum.far[3], line_color);
-        push_line(platform_render_push_buffer, game_camera_frustum.far[3], game_camera_frustum.far[2], line_color);
-        push_line(platform_render_push_buffer, game_camera_frustum.far[2], game_camera_frustum.far[0], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.far[0], game_camera_frustum.far[1], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.far[1], game_camera_frustum.far[3], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.far[3], game_camera_frustum.far[2], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.far[2], game_camera_frustum.far[0], line_color);
 
-        push_line(platform_render_push_buffer, game_camera_frustum.near[0], game_camera_frustum.far[0], line_color);
-        push_line(platform_render_push_buffer, game_camera_frustum.near[1], game_camera_frustum.far[1], line_color);
-        push_line(platform_render_push_buffer, game_camera_frustum.near[2], game_camera_frustum.far[2], line_color);
-        push_line(platform_render_push_buffer, game_camera_frustum.near[3], game_camera_frustum.far[3], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.near[0], game_camera_frustum.far[0], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.near[1], game_camera_frustum.far[1], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.near[2], game_camera_frustum.far[2], line_color);
+            push_line(debug_platform_render_push_buffer, game_camera_frustum.near[3], game_camera_frustum.far[3], line_color);
+        }
+
+        // TODO(gh) This prevents us from timing the game update and render loop itself 
+        output_debug_records(debug_platform_render_push_buffer, &game_state->assets, V2(0, 0));
     }
-
+    
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue);
 
     end_temp_memory(&perlin_noise_temp_memory);
@@ -569,14 +588,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         game_state->offset_x++;
         game_state->time_until_offset_x_inc = 0;
-    }
-
-    if(debug_platform_render_push_buffer)
-    {
-        init_render_push_buffer(debug_platform_render_push_buffer, render_camera, game_camera,
-                                0, 0, 0, V3(0, 0, 0), false);
-        // TODO(gh) This prevents us from timing the game update and render loop itself 
-        output_debug_records(debug_platform_render_push_buffer, &game_state->assets, V2(0, 0));
     }
 }
 
