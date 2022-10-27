@@ -78,6 +78,7 @@ init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 fov_in_degree,
 internal m4x4 
 camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_axis)
 {
+    TIMED_BLOCK();
     m4x4 result = {};
 
     // NOTE(gh) to pack the rotation & translation into one matrix(with an order of translation and the rotation),

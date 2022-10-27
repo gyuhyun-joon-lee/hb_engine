@@ -10,6 +10,7 @@
 #include "hb_render.h"
 #include "hb_simulation.h"
 #include "hb_entity.h"
+#include "hb_fluid.h"
 #include "hb_asset.h"
 #include "hb_platform.h"
 #include "hb_debug.h"
@@ -23,6 +24,7 @@
 #include "hb_asset.cpp"
 #include "hb_render.cpp"
 #include "hb_image_loader.cpp"
+#include "hb_fluid.cpp"
 
 // TODO(gh) not a great idea
 #include <time.h>
@@ -67,7 +69,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
         v2 grid_dim = V2(100, 100); // TODO(gh) just temporary, need to 'gather' the floors later
-        game_state->grass_grid_count_x = 6;
+        game_state->grass_grid_count_x = 4;
         game_state->grass_grid_count_y = 4;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
@@ -104,6 +106,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                 game_state->grass_grid_count_y * grass_on_floor_count_y, 
                                 grass_on_floor_count_x);
         // game_state->vector_field = platform_api->allocate_and_acquire_texture3D_handle(platform_render_push_buffer->device, vector_field_dim.x, vector_field_dim.y, vector_field_dim.z, 12);
+
+        // TODO(gh) This means we have one vector per every 10m, which is not ideal.
+        initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 32, 32, 16, 1, 10);
 
         load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
 
@@ -212,6 +217,50 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
+
+#if 1
+    // NOTE(gh) Fluid simulation
+    // TODO(gh) Do wee need to add source to the density, too?
+    FluidCube *fluid_cube = &game_state->fluid_cube;
+
+    // velocity
+    // NOTE(gh) At first, bottom half holds the source input, and dest hold the previous value
+    // adding force will overwrite the new value to dest 
+    add_force(fluid_cube->v_x_dest, fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, platform_input->dt_per_frame);
+    add_force(fluid_cube->v_y_dest, fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, platform_input->dt_per_frame);
+    add_force(fluid_cube->v_z_dest, fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, platform_input->dt_per_frame);
+
+    swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
+    swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
+    swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
+
+    advect(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_x);
+    advect(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_y);
+    advect(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_z);
+    swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
+    swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
+    swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
+
+    diffuse(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
+            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_x);
+    diffuse(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
+            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_y);
+    diffuse(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
+            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_z);
+
+    project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->cell_count, fluid_cube->cell_dim, fluid_cube->viscosity, platform_input->dt_per_frame);
+
+    // density
+    // TODO(gh) Add something to the density, too?
+    advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
+    swap(fluid_cube->density_dest, fluid_cube->density_source);
+    diffuse(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
+            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
+#endif
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
@@ -504,6 +553,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
         debug_newline(&top_left_rel_p_px, scale, font_asset);
     }
 #if HB_DEBUG
+    u64 total_cycle_count = 0;
     for(u32 record_index = 0;
             record_index < array_count(game_debug_records);
             ++record_index)
@@ -516,6 +566,8 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
             u32 line = record->line;
             u32 hit_count = record->hit_count_cycle_count >> 32;
             u32 cycle_count = (u32)(record->hit_count_cycle_count & 0xffffffff);
+
+            total_cycle_count += cycle_count;
 
             char buffer[512] = {};
             snprintf(buffer, array_count(buffer),
@@ -530,6 +582,15 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 
             atomic_exchange(&record->hit_count_cycle_count, 0);
         }
+    }
+
+    {
+        char buffer[512] = {};
+        snprintf(buffer, array_count(buffer),
+                "total cycle count : %llu", total_cycle_count);
+        // TODO(gh) Do we wanna keep this scale value?
+        f32 scale = 0.5f;
+        debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
     }
 #endif
 }
