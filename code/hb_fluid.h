@@ -27,7 +27,6 @@ struct FluidCube
     f32 *v_z;
     f32 *densities;
     f32 *pressures; // Used implicitly by the projection
-    u32 stride;
 };
 
 enum ElementTypeForBoundary
@@ -35,9 +34,9 @@ enum ElementTypeForBoundary
     // These values require the boundary to be an exact negative value of the neighbor.
     // For example, v0jk.x = -v1jk.x, vi0k.y = -vi1k.y, and so one.
     // This counteracts the fluid from going outside the boundary.
-    ElementTypeForBoundary_x,
-    ElementTypeForBoundary_y,
-    ElementTypeForBoundary_z,
+    ElementTypeForBoundary_xy, // should negate in xy plane(i.e z value)
+    ElementTypeForBoundary_yz,
+    ElementTypeForBoundary_zx,
 
     // For these values, we are setting the same value as the neighbor.
     // For example, d0jk = d1jk

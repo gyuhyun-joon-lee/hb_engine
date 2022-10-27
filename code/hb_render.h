@@ -142,6 +142,7 @@ enum RenderEntryType
     RenderEntryType_Grass,
     RenderEntryType_Frustum,
     RenderEntryType_Glyph,
+    RenderEntryType_DebugArrow,
 };
 
 // TODO(gh) Do we have enough reason to keep this header?
@@ -222,5 +223,16 @@ struct RenderEntryGlyph
     v2 texcoord_min; 
     v2 texcoord_max;
 };
+
+struct RenderEntryDebugArrow
+{
+    RenderEntryHeader header;
+    v3 color; 
+
+    // NOTE(gh) offset to the combined vertex & index buffer
+    u32 vertex_buffer_offset;
+    u32 index_buffer_offset;
+    u32 index_count;
+}; 
 
 #endif

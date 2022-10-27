@@ -58,7 +58,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 game_state->mass_agg_arena.total_size,
                 megabytes(16));
 
-        game_state->game_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 1.0f, 1000.0f);
+        game_state->game_camera = init_fps_camera(V3(0, -10, 22), 1.0f, 135, 1.0f, 1000.0f);
         game_state->game_camera.pitch += 1.5f;
         game_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
         // Close camera
@@ -108,9 +108,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // game_state->vector_field = platform_api->allocate_and_acquire_texture3D_handle(platform_render_push_buffer->device, vector_field_dim.x, vector_field_dim.y, vector_field_dim.z, 12);
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
-        initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 32, 32, 16, 1, 10);
+        u32 fluid_cell_count_x = 16;
+        u32 fluid_cell_count_y = 16;
+        u32 fluid_cell_count_z = 8;
+        initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
+                            fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 1, 1);
 
         load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
+        game_state->debug_fluid_force_z = 1;
 
         game_state->is_initialized = true;
     }
@@ -218,12 +223,30 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-#if 1
     // NOTE(gh) Fluid simulation
     // TODO(gh) Do wee need to add source to the density, too?
     FluidCube *fluid_cube = &game_state->fluid_cube;
+    swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
+    swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
+    swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
+    swap(fluid_cube->density_dest, fluid_cube->density_source);
+    
+    //if(platform_input->time_elasped_from_start < 5)
+    {
+        u32 ID = get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, fluid_cube->cell_count.y/2, game_state->debug_fluid_force_z);
+        fluid_cube->v_x_source[ID] = 2;
+        fluid_cube->v_y_source[ID] = 3;
+        fluid_cube->v_z_source[ID] = -4;
+
+        game_state->debug_fluid_force_z++;
+        if(game_state->debug_fluid_force_z == fluid_cube->cell_count.z-2)
+        {
+            game_state->debug_fluid_force_z = 1;
+        }
+    }
 
     // velocity
+#if 1
     // NOTE(gh) At first, bottom half holds the source input, and dest hold the previous value
     // adding force will overwrite the new value to dest 
     add_force(fluid_cube->v_x_dest, fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, platform_input->dt_per_frame);
@@ -235,21 +258,21 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
 
     advect(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_x);
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_yz);
     advect(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_y);
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_zx);
     advect(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_z);
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
     swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
     swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
     swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
 
     diffuse(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_x);
+            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_yz);
     diffuse(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_y);
+            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_zx);
     diffuse(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_z);
+            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
 
     project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->cell_count, fluid_cube->cell_dim, fluid_cube->viscosity, platform_input->dt_per_frame);
 
@@ -325,7 +348,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
-    platform_render_push_buffer->enable_grass_rendering = true;
+    platform_render_push_buffer->enable_grass_rendering = false;
     platform_render_push_buffer->enable_show_perlin_noise_grid = show_perlin_noise_grid;
 
     for(u32 entity_index = 0;
@@ -355,6 +378,95 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
                           &entity->mesh_assetID, true);
             }break;
+        }
+    }
+
+    b32 enable_fluid_arrow_rendering = true;
+
+    if(enable_fluid_arrow_rendering)
+    {
+        for(u32 cell_z = 0;
+                cell_z < fluid_cube->cell_count.z;
+                ++cell_z)
+        {
+            for(u32 cell_y = 0;
+                    cell_y < fluid_cube->cell_count.y;
+                    ++cell_y)
+            {
+                for(u32 cell_x = 0;
+                        cell_x < fluid_cube->cell_count.x;
+                        ++cell_x)
+                {
+                    v3 center = 3.0f*fluid_cube->cell_dim*V3(cell_x, cell_y, cell_z);
+
+                    if((cell_x == fluid_cube->cell_count.x/2) && 
+                        (cell_y == fluid_cube->cell_count.y/2) &&
+                        (cell_z == fluid_cube->cell_count.z-2))
+                    {
+                        int a = 1;
+                    }
+                    f32 v_x = fluid_cube->v_x_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
+                    f32 v_y = fluid_cube->v_y_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
+                    f32 v_z = fluid_cube->v_z_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
+
+                    v3 color = V3(0.5f, 0.5f, 0.5f);
+
+                    f32 scale = 0.15;
+                    v3 v = 10.0f*V3(v_x, v_y, v_z);
+                    if(compare_with_epsilon(length_square(v), 0))
+                    {
+                        scale = 0;
+                    }
+                    else
+                    {
+                        color = V3(1, 0, 0);
+                    }
+
+                    if(cell_x == 0 || (cell_x == fluid_cube->cell_count.x-1) || 
+                        cell_y == 0 || (cell_y == fluid_cube->cell_count.y-1) ||
+                        cell_z == 0 || (cell_z == fluid_cube->cell_count.z-1))
+                    {
+                        if((cell_z == 0 || (cell_z == fluid_cube->cell_count.z-1)) && scale != 0)
+                        {
+                            int a = 1;
+                        }
+                        color = V3(0, 0, 1);
+                    }
+
+                    // TODO(gh) Doesn't work when v == up vector, and what if the length of v is too small?
+                    v3 right = V3();
+                    if(v.x == 0 && v.y == 0 && v.z != 0.0f)
+                    {
+                        right = scale*normalize(cross(v, V3(1, 0, 0)));
+                    }
+                    else
+                    {
+                        right = scale*normalize(cross(v, V3(0, 0, 1)));
+                    }
+
+                    v3 up = scale*normalize(cross(right, v));
+                    VertexPN arrow_vertices[] = 
+                    {
+                        {{center - right - up}, {1, 0, 0}},
+                        {{center + right - up}, {1, 0, 0}},
+                        {{center - right + up}, {1, 0, 0}},
+                        {{center + right + up},{1, 0, 0}},
+                        {{center + v}, {1, 0, 0}},
+                    };
+
+                    u32 arrow_indices[] = 
+                    {
+                        0, 3, 2,
+                        0, 1, 3,
+                        2, 3, 4, 
+                        3, 1, 4, 
+                        0, 4, 1, 
+                        0, 2, 4, 
+                    };
+
+                    push_debug_arrow(platform_render_push_buffer, color, arrow_vertices, array_count(arrow_vertices), arrow_indices, array_count(arrow_indices));
+                }
+            }
         }
     }
 
@@ -593,6 +705,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
         debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
     }
 #endif
+
 }
 
 

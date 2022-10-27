@@ -426,6 +426,27 @@ push_glyph(PlatformRenderPushBuffer *render_push_buffer, FontAsset *font_asset, 
     entry->texcoord_max = V2(1, 1);
 }
 
+internal void
+push_debug_arrow(PlatformRenderPushBuffer *render_push_buffer, v3 color, VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+{
+    RenderEntryDebugArrow *entry = push_render_element(render_push_buffer, RenderEntryDebugArrow);
+    entry->header.type = RenderEntryType_DebugArrow;
+    entry->header.size = sizeof(*entry);
+
+    entry->color = color;
+
+    entry->vertex_buffer_offset = push_data(render_push_buffer->combined_vertex_buffer, 
+                                            &render_push_buffer->combined_vertex_buffer_used, 
+                                            render_push_buffer->combined_vertex_buffer_size,
+                                            vertices, sizeof(vertices[0]) * vertex_count);
+
+    entry->index_buffer_offset = push_data(render_push_buffer->combined_index_buffer, 
+                                            &render_push_buffer->combined_index_buffer_used, 
+                                            render_push_buffer->combined_index_buffer_size,
+                                            indices, sizeof(indices[0]) * index_count);
+    entry->index_count = index_count; 
+}
+
 
 
 

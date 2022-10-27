@@ -447,6 +447,7 @@ DEBUG_metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer 
     {
         render_context->forward_renderpass.colorAttachments[0].texture = drawable_texture;
         id<MTLRenderCommandEncoder> forward_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->forward_renderpass];
+        forward_render_encoder.label = @"DEBUG Render";
 
         metal_set_viewport(forward_render_encoder, 0, 0, window_width, window_height, 0, 1);
         metal_set_scissor_rect(forward_render_encoder, 0, 0, window_width, window_height);
@@ -874,6 +875,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
     metal_set_depth_stencil_state(g_buffer_render_encoder, render_context->depth_state);
     metal_set_cull_mode(g_buffer_render_encoder, MTLCullModeBack); 
 
+    u32 arrow_count = 0;
     for(u32 consumed = 0;
             consumed < render_push_buffer->used;
             )
@@ -909,6 +911,36 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
                 metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
                         (id<MTLBuffer>)entry->index_buffer_handle, 0, entry->index_count);
+            }break;
+
+            case RenderEntryType_DebugArrow:
+            {
+                RenderEntryDebugArrow *entry = (RenderEntryDebugArrow *)((u8 *)render_push_buffer->base + consumed);
+                consumed += sizeof(*entry);
+
+                arrow_count++;
+#if 1
+                m4x4 model = M4x4();
+
+                PerObjectData per_object_data = {};
+                per_object_data.model = model;
+                per_object_data.color = entry->color;
+
+                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
+
+                metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
+                metal_set_vertex_buffer(g_buffer_render_encoder, 
+                                        render_context->combined_vertex_buffer.buffer, 
+                                        entry->vertex_buffer_offset, 2);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
+
+                metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
+
+                metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
+
+                metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
+                        render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+#endif
             }break;
 
             case RenderEntryType_Grass:
@@ -1078,44 +1110,6 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                     metal_draw_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 
                                     render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
 
-                }break;
-
-                case RenderEntryType_Glyph:
-                {
-                    RenderEntryGlyph *entry = (RenderEntryGlyph *)((u8 *)render_push_buffer->base + consumed);
-                    consumed += header->size; 
-
-                    // TODO(gh) Not that efficient, but good enough for now
-                    v2 vertices[] = 
-                    {
-                        entry->min,
-                        entry->max,
-                        V2(entry->min.x, entry->max.y),
-
-                        entry->min,
-                        V2(entry->max.x, entry->min.y),
-                        entry->max,
-                    };
-
-                    // Top-down
-                    v2 texcoords[] = 
-                    {
-                        V2(entry->texcoord_min.x, entry->texcoord_max.y),
-                        V2(entry->texcoord_max.x, entry->texcoord_min.y),
-                        V2(entry->texcoord_min.x, entry->texcoord_min.y),
-
-                        V2(entry->texcoord_min.x, entry->texcoord_max.y),
-                        V2(entry->texcoord_max.x, entry->texcoord_max.y),
-                        V2(entry->texcoord_max.x, entry->texcoord_min.y),
-                    };
-
-                    metal_set_render_pipeline(forward_render_encoder, render_context->forward_render_font_pipeline);
-                    metal_set_vertex_bytes(forward_render_encoder, vertices, array_size(vertices), 0);
-                    metal_set_vertex_bytes(forward_render_encoder, texcoords, array_size(texcoords), 1);
-                    metal_set_vertex_bytes(forward_render_encoder, &entry->color, sizeof(entry->color), 2);
-                    metal_set_fragment_texture(forward_render_encoder, (id<MTLTexture>)entry->texture_handle, 0);
-
-                    metal_draw_non_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
                 }break;
 
                 default:
