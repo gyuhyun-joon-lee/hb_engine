@@ -31,8 +31,9 @@
 #define swap(ptr0, ptr1) {void *temp = (void*)(ptr0); ptr0 = ptr1; *(void **)(&ptr1) = temp;}
 
 internal void
-initialize_fluid_cube(FluidCube *fluid_cube, MemoryArena *arena, u32 cell_count_x, u32 cell_count_y, u32 cell_count_z, f32 cell_dim, f32 viscosity)
+initialize_fluid_cube(FluidCube *fluid_cube, MemoryArena *arena, v3 left_bottom_p, u32 cell_count_x, u32 cell_count_y, u32 cell_count_z, f32 cell_dim, f32 viscosity)
 {
+    fluid_cube->left_bottom_p = left_bottom_p;
     fluid_cube->viscosity = viscosity;
     fluid_cube->cell_count = V3u(cell_count_x, cell_count_y, cell_count_z); 
     fluid_cube->cell_dim = cell_dim; 
@@ -76,16 +77,17 @@ get_index(v3u cell_count, u32 cell_x, u32 cell_y, u32 cell_z)
 internal void
 add_source(f32 *dest, f32 *source, f32 *force, v3u cell_count, f32 dt)
 {
-    for(u32 cell_z = 1;
-            cell_z < cell_count.z-1;
+    // NOTE(gh) Original implementation allows force to be applied to the boundary?
+    for(u32 cell_z = 0;
+            cell_z < cell_count.z;
             ++cell_z)
     {
-        for(u32 cell_y = 1;
-                cell_y < cell_count.y-1;
+        for(u32 cell_y = 0;
+                cell_y < cell_count.y;
                 ++cell_y)
         {
-            for(u32 cell_x = 1;
-                    cell_x < cell_count.x-1;
+            for(u32 cell_x = 0;
+                    cell_x < cell_count.x;
                     ++cell_x)
             {
                 u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
@@ -240,7 +242,6 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                     p.z = cell_count.z - 1.5f;
                 }
 
-#if 1
                 u32 x0 = (u32)p.x;
                 u32 x1 = x0+1;
                 f32 xf = p.x - x0;
@@ -262,7 +263,7 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                 f32 lerp_y1 = lerp(lerp_x2, yf, lerp_x3);
 
                 f32 lerp_xyz = lerp(lerp_y0, zf, lerp_y1);
-#endif
+
                 dest[ID] = lerp_xyz; 
             }
         }
@@ -281,7 +282,7 @@ diffuse(f32 *dest, f32 *source, v3u cell_count, f32 cell_dim, f32 viscosity, f32
     // dest = (a*source+dest[-1,0,0]+dest[1,0,0]+dest[0,-1,0]+dest[0,1,0]+dest[0,0,-1]+dest[0,0,1])/(6+a), 
     // where a = (dx^2)/(viscosity*dt).
     for(u32 iter = 0;
-            iter < 80; // requires 40 to 80 iteration to make the error unnoticable
+            iter < 128; // requires 40 to 80 iteration to make the error unnoticable
             ++iter)
     {
         for(u32 cell_z = 1;
@@ -298,6 +299,7 @@ diffuse(f32 *dest, f32 *source, v3u cell_count, f32 cell_dim, f32 viscosity, f32
                 {
                     u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
 
+                    // NOTE(gh) using dest instead of source!
                     f32 dest_pos_x = dest[get_index(cell_count, cell_x+1, cell_y, cell_z)];
                     f32 dest_neg_x = dest[get_index(cell_count, cell_x-1, cell_y, cell_z)];
 
@@ -309,7 +311,9 @@ diffuse(f32 *dest, f32 *source, v3u cell_count, f32 cell_dim, f32 viscosity, f32
 
                     // TODO(gh) Not sure if we should be using cell_dim or the whole cube dim here
                     f32 a = (cell_dim*cell_dim)/(viscosity*dt);
-                    dest[ID] = (a*source[ID] + dest_pos_x+dest_neg_x+dest_pos_y+dest_neg_y+dest_pos_z+dest_neg_z)/(6+a);
+
+                    f32 diffuse = (a*source[ID] + dest_pos_x+dest_neg_x+dest_pos_y+dest_neg_y+dest_pos_z+dest_neg_z)/(6+a);
+                    dest[ID] = diffuse;
                 }
             }
         }
@@ -318,17 +322,44 @@ diffuse(f32 *dest, f32 *source, v3u cell_count, f32 cell_dim, f32 viscosity, f32
     }
 }
 
+internal f32 
+get_divergence(f32 *x, f32 *y, f32 *z, v3u cell_count, f32 cell_dim, u32 cell_x, u32 cell_y, u32 cell_z)
+{
+    u32 pos_xID = get_index(cell_count, cell_x+1, cell_y, cell_z);
+    u32 neg_xID = get_index(cell_count, cell_x-1, cell_y, cell_z);
+
+    u32 pos_yID = get_index(cell_count, cell_x, cell_y+1, cell_z);
+    u32 neg_yID = get_index(cell_count, cell_x, cell_y-1, cell_z);
+
+    u32 pos_zID = get_index(cell_count, cell_x, cell_y, cell_z+1);
+    u32 neg_zID = get_index(cell_count, cell_x, cell_y, cell_z-1);
+
+    f32 pos_x = x[pos_xID];
+    f32 neg_x = x[neg_xID];
+
+    f32 pos_y = y[pos_yID];
+    f32 neg_y = y[neg_yID];
+
+    f32 pos_z = z[pos_zID];
+    f32 neg_z = z[neg_zID];
+
+    f32 result = (pos_x+pos_y+pos_z-neg_x-neg_y-neg_z)/(2*cell_dim);
+
+    return result;
+}
+
 // NOTE(gh) Project only works for vector components such as velocity,
 // and components like density should not use this routine.
 internal void
-project(f32 *x, f32 *y, f32 *z, f32 *pressures, v3u cell_count, f32 cell_dim, f32 viscosity, f32 dt)
+project(f32 *x, f32 *y, f32 *z, f32 *pressures, v3u cell_count, f32 cell_dim, f32 dt)
 {
     TIMED_BLOCK();
     zero_memory(pressures, sizeof(f32)*cell_count.x*cell_count.y*cell_count.z);
+    set_boundary_values(pressures, cell_count, ElementTypeForBoundary_Continuous);
 
     // First, get the divergence
     for(u32 iter = 0;
-            iter < 40; // requires 40 to 80 iteration to make the error unnoticable
+            iter < 128; // requires 40 to 80 iteration to make the error unnoticable
             ++iter)
     {
         for(u32 cell_z = 1;
@@ -344,26 +375,8 @@ project(f32 *x, f32 *y, f32 *z, f32 *pressures, v3u cell_count, f32 cell_dim, f3
                         ++cell_x)
                 {
                     u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
-
-                    u32 pos_xID = get_index(cell_count, cell_x+1, cell_y, cell_z);
-                    u32 neg_xID = get_index(cell_count, cell_x-1, cell_y, cell_z);
-
-                    u32 pos_yID = get_index(cell_count, cell_x, cell_y+1, cell_z);
-                    u32 neg_yID = get_index(cell_count, cell_x, cell_y-1, cell_z);
-
-                    u32 pos_zID = get_index(cell_count, cell_x, cell_y, cell_z+1);
-                    u32 neg_zID = get_index(cell_count, cell_x, cell_y, cell_z-1);
-
-                    f32 pos_x = x[pos_xID];
-                    f32 neg_x = x[neg_xID];
-
-                    f32 pos_y = y[pos_yID];
-                    f32 neg_y = y[neg_yID];
-
-                    f32 pos_z = z[pos_zID];
-                    f32 neg_z = z[neg_zID];
                     
-                    f32 divergence = (pos_x+pos_y+pos_z-neg_x-neg_y-neg_z)/(2*cell_dim);
+                    f32 divergence = get_divergence(x, y, z, cell_count, cell_dim, cell_x, cell_y, cell_z);
 
                     f32 p_pos_x = pressures[get_index(cell_count, cell_x+1, cell_y, cell_z)];
                     f32 p_neg_x = pressures[get_index(cell_count, cell_x-1, cell_y, cell_z)];
@@ -418,5 +431,27 @@ project(f32 *x, f32 *y, f32 *z, f32 *pressures, v3u cell_count, f32 cell_dim, f3
     set_boundary_values(x, cell_count, ElementTypeForBoundary_yz);
     set_boundary_values(y, cell_count, ElementTypeForBoundary_zx);
     set_boundary_values(z, cell_count, ElementTypeForBoundary_xy);
+}
+
+internal void
+validate_divergence(f32 *x, f32 *y, f32 *z, v3u cell_count, f32 cell_dim)
+{
+    for(u32 cell_z = 1;
+            cell_z < cell_count.z-1;
+            ++cell_z)
+    {
+        for(u32 cell_y = 1;
+                cell_y < cell_count.y-1;
+                ++cell_y)
+        {
+            for(u32 cell_x = 1;
+                    cell_x < cell_count.x-1;
+                    ++cell_x)
+            {
+                f32 divergence = get_divergence(x, y, z, cell_count, cell_dim, cell_x, cell_y, cell_z);
+                assert(divergence < 0.5);
+            }
+        }
+    }
 }
 

@@ -106,7 +106,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         u32 fluid_cell_count_y = 12;
         u32 fluid_cell_count_z = 12;
         initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
-                            fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 1, 1);
+                            V3(0, 0, 0), fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 2, 3);
 
         load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
         game_state->debug_fluid_force_z = 1;
@@ -226,38 +226,38 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     zero_memory(fluid_cube->v_y_source, fluid_cube->stride);
     zero_memory(fluid_cube->v_z_source, fluid_cube->stride);
     zero_memory(fluid_cube->density_source, fluid_cube->stride);
-    // if(((u32)platform_input->time_elasped_from_start) % 4 == 0)
+    //if(((u32)platform_input->time_elasped_from_start) % 4 == 0)
     {
         u32 center_x = fluid_cube->cell_count.x/2;
         u32 center_y = fluid_cube->cell_count.y/2;
 
-        for(i32 z = fluid_cube->cell_count.z-2;
-                z < fluid_cube->cell_count.z-1;
+        for(i32 z = 1;
+                z < fluid_cube->cell_count.z - 1;
                 ++z)
         {
-            for(i32 y = -3;
-                    y <= 3;
+            for(i32 y = 1;
+                    y < 2;
                     ++y)
-            {
-                for(i32 x = -3;
-                        x <= 3;
+           {
+                for(i32 x = 1;
+                        x < fluid_cube->cell_count.x - 1;
                         ++x)
                 {
-                    u32 ID = get_index(fluid_cube->cell_count, center_x+x, center_y+y, z);
+                    u32 ID = get_index(fluid_cube->cell_count, x, y, z);
 
-                    fluid_cube->v_x_source[ID] = 10;
-                    fluid_cube->v_y_source[ID] = 10;
-                    fluid_cube->v_z_source[ID] = 0;
+                    fluid_cube->v_x_source[ID] = 0;
+                    fluid_cube->v_y_source[ID] = 30;
+                    fluid_cube->v_z_source[ID] = 30;
 
-                    if(!added_density)
+                    if(!added_density && (x == fluid_cube->cell_count.x/2) && 
+                        (z == fluid_cube->cell_count.z/2))
                     {
-                        fluid_cube->density_source[ID] = 100;
+                        fluid_cube->density_source[ID] = 3;
                     }
                 }
             }
         }
         
-        added_density = true;
     }
 
     // NOTE(gh) At first, source holds the source force, and dest holds the previous value
@@ -272,16 +272,22 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
     swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
 
-    diffuse(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_yz);
-    diffuse(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_zx);
-    diffuse(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
+    u32 diffuse_iter_count = 3;
+    for(u32 diffuse_iter = 0;
+            diffuse_iter < diffuse_iter_count;
+            ++diffuse_iter)
+    {
+        diffuse(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
+                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_yz);
+        diffuse(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
+                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_zx);
+        diffuse(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
+                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
 
-    swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
-    swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
-    swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
+        swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
+        swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
+        swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
+    }
 
     advect(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
             fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_yz);
@@ -290,20 +296,32 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     advect(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
             fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
 
-    project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->cell_count, fluid_cube->cell_dim, fluid_cube->viscosity, platform_input->dt_per_frame);
+    project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame);
+    validate_divergence(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->cell_count, fluid_cube->cell_dim);
+
+#if 0
+    printf("%.6f, %.6f, %.6f\n", fluid_cube->v_x_dest[get_index(fluid_cube->cell_count, 1, 2, 1)],
+                                 fluid_cube->v_y_dest[get_index(fluid_cube->cell_count, 1, 2, 1)],
+                                 fluid_cube->v_z_dest[get_index(fluid_cube->cell_count, 1, 2, 1)]);
+#endif
 
     // density
     add_source(fluid_cube->density_dest, fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, platform_input->dt_per_frame);
 
     swap(fluid_cube->density_dest, fluid_cube->density_source);
 
+    for(u32 diffuse_iter = 0;
+            diffuse_iter < 1;
+            ++diffuse_iter)
+    {
+        diffuse(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
+                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
+        swap(fluid_cube->density_dest, fluid_cube->density_source);
+    }
+    
     advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
             fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
 
-    swap(fluid_cube->density_dest, fluid_cube->density_source);
-
-    diffuse(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-            fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
@@ -368,8 +386,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
-    platform_render_push_buffer->enable_grass_rendering = false;
+    platform_render_push_buffer->enable_grass_rendering = true;
     platform_render_push_buffer->enable_show_perlin_noise_grid = show_perlin_noise_grid;
+
+    if(debug_platform_render_push_buffer)
+    {
+        init_render_push_buffer(debug_platform_render_push_buffer, render_camera, game_camera,
+                    0, 0, 0, V3(0, 0, 0), false);
+    }
 
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;
@@ -416,7 +440,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         cell_x < fluid_cube->cell_count.x;
                         ++cell_x)
                 {
-                    v3 center = 3.0f*fluid_cube->cell_dim*V3(cell_x, cell_y, cell_z);
+                    v3 left_bottom_p = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x, cell_y, cell_z);
 
                     f32 v_x = fluid_cube->v_x_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
                     f32 v_y = fluid_cube->v_y_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
@@ -426,6 +450,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                     f32 scale = 0.15;
                     v3 v = V3(v_x, v_y, v_z);
+                    // v3 v = 1*normalize(V3(v_x, v_y, v_z));
+
+                    if(cell_x == fluid_cube->cell_count.x-2 && 
+                        cell_y == fluid_cube->cell_count.y-2 &&    
+                        cell_z == fluid_cube->cell_count.z-2)
+                    {
+                        int a = 1;
+                    }
                     if(compare_with_epsilon(length_square(v), 0))
                     {
                         scale = 0;
@@ -457,11 +489,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     v3 up = scale*normalize(cross(right, v));
                     VertexPN arrow_vertices[] = 
                     {
-                        {{center - right - up}, {1, 0, 0}},
-                        {{center + right - up}, {1, 0, 0}},
-                        {{center - right + up}, {1, 0, 0}},
-                        {{center + right + up},{1, 0, 0}},
-                        {{center + v}, {1, 0, 0}},
+                        {{left_bottom_p - right - up}, {1, 0, 0}},
+                        {{left_bottom_p + right - up}, {1, 0, 0}},
+                        {{left_bottom_p - right + up}, {1, 0, 0}},
+                        {{left_bottom_p + right + up},{1, 0, 0}},
+                        {{left_bottom_p + v}, {1, 0, 0}},
                     };
 
                     u32 arrow_indices[] = 
@@ -480,11 +512,62 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
+    if(true)
+    {
+        for(u32 cell_z = 0;
+                cell_z < fluid_cube->cell_count.z;
+                ++cell_z)
+        {
+            for(u32 cell_y = 0;
+                    cell_y < fluid_cube->cell_count.y;
+                    ++cell_y)
+            {
+                for(u32 cell_x = 0;
+                        cell_x < fluid_cube->cell_count.x;
+                        ++cell_x)
+                {
+                    v3 left_bottom_p = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x, cell_y, cell_z);
+                    u32 ID = get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z);
+
+                    f32 density = fluid_cube->density_dest[ID];
+                    assert(density >= 0);
+
+                    f32 scale = fluid_cube->cell_dim*density;
+                    if(scale > 0.1f)
+                    {
+                        VertexPN cube_vertices[] = 
+                        {
+                            {{left_bottom_p + scale*V3(0, 0, 0)}, {1, 0, 0}},
+                            {{left_bottom_p + scale*V3(1, 0, 0)}, {1, 0, 0}},
+                            {{left_bottom_p + scale*V3(0, 1, 0)}, {1, 0, 0}},
+                            {{left_bottom_p + scale*V3(1, 1, 0)}, {1, 0, 0}},
+
+                            {{left_bottom_p + scale*V3(0, 0, 1)}, {1, 0, 0}},
+                            {{left_bottom_p + scale*V3(1, 0, 1)}, {1, 0, 0}},
+                            {{left_bottom_p + scale*V3(0, 1, 1)}, {1, 0, 0}},
+                            {{left_bottom_p + scale*V3(1, 1, 1)}, {1, 0, 0}},
+                        };
+
+                        u32 cube_indices[] = 
+                        {
+                            0, 1, 4, 1, 5, 4,
+                            1, 3, 5, 3, 4, 5,
+                            6, 4, 3, 6, 3, 2,
+                            4, 2, 0, 4, 6, 2,
+                            4, 5, 6, 5, 7, 6,
+                            2, 1, 0, 2, 3, 1,
+                        };
+
+                        push_arbitrary_mesh(platform_render_push_buffer, V3(1, 1, 1), cube_vertices, array_count(cube_vertices), cube_indices, array_count(cube_indices));
+                    }
+                }
+            }
+        }
+    }
+
+
     if(debug_platform_render_push_buffer)
     {
-        init_render_push_buffer(debug_platform_render_push_buffer, render_camera, game_camera,
-                0, 0, 0, V3(0, 0, 0), false);
-
         // NOTE(gh) push forward render entries
         b32 enable_show_game_camera_frustum = (render_camera != game_camera);
         if(enable_show_game_camera_frustum)
