@@ -46,12 +46,6 @@ typedef PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(platform_allocate_and_acq
 #define PLATFORM_WRITE_TO_ENTIRE_TEXTURE3D(name) void (name)(void *texture_handle, void *src, i32 width, i32 height, i32 depth, i32 bytes_per_pixel)
 typedef PLATFORM_WRITE_TO_ENTIRE_TEXTURE3D(platform_write_to_entire_texture3D);
 
-#define PLATFORM_ALLOCATE_AND_ACQUIRE_BUFFER_HANDLE(name) void *(name)(void *device, u64 size)
-typedef PLATFORM_ALLOCATE_AND_ACQUIRE_BUFFER_HANDLE(platform_allocate_and_acquire_buffer_handle);
-
-#define PLATFORM_WRITE_TO_ENTIRE_BUFFER(name) void (name)(void *buffer_handle, void *src, u64 src_size)
-typedef PLATFORM_WRITE_TO_ENTIRE_BUFFER(platform_write_to_entire_buffer);
-
 struct PlatformAPI
 {
     platform_read_file *read_file;
@@ -66,9 +60,6 @@ struct PlatformAPI
 
     platform_allocate_and_acquire_texture3D_handle *allocate_and_acquire_texture3D_handle;
     platform_write_to_entire_texture3D *write_to_entire_texture3D;
-
-    platform_allocate_and_acquire_buffer_handle *allocate_and_acquire_buffer_handle;
-    platform_write_to_entire_buffer *write_to_entire_buffer;
 
     // GPU operations
     // TODO(gh) Do we wanna put these here, or do we wanna move into seperate place?
@@ -259,6 +250,20 @@ typedef THREAD_WORK_CALLBACK(ThreadWorkCallback);
 enum GPUWorkType
 {
     GPUWorkType_Null,
+    GPUWorkType_AllocateBuffer,
+    GPUWorkType_WriteEntireBuffer,
+};
+struct ThreadAllocateBufferData
+{
+    void **handle_to_populate;
+    u64 size_to_allocate;
+};
+struct ThreadWriteEntireBufferData
+{
+    void *handle;
+
+    void *source;
+    u64 size_to_write;
 };
 
 // TODO(gh) task_with_memory
@@ -277,7 +282,7 @@ struct ThreadWorkItem
 #define PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(name) void name(ThreadWorkQueue *queue, b32 main_thread_should_do_work)
 typedef PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(platform_complete_all_thread_work_queue_items);
 
-#define PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(name) void name(ThreadWorkQueue *queue, ThreadWorkCallback *thread_work_callback, void *data)
+#define PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(name) void name(ThreadWorkQueue *queue, ThreadWorkCallback *thread_work_callback, u32 gpu_work_type, void *data)
 typedef PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(platform_add_thread_work_queue_item);
 
 #define PLATFORM_DO_THREAD_WORK_ITEM(name) b32 (name)(ThreadWorkQueue *queue, u32 thread_index)
@@ -369,7 +374,7 @@ struct PlatformRenderPushBuffer
     b32 enable_grass_rendering;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void (name)(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory, PlatformRenderPushBuffer *platform_render_push_buffer, PlatformRenderPushBuffer *debug_platform_render_push_buffer, ThreadWorkQueue *thread_work_queue)
+#define GAME_UPDATE_AND_RENDER(name) void (name)(PlatformAPI *platform_api, PlatformInput *platform_input, PlatformMemory *platform_memory, PlatformRenderPushBuffer *platform_render_push_buffer, PlatformRenderPushBuffer *debug_platform_render_push_buffer, ThreadWorkQueue *thread_work_queue, ThreadWorkQueue *gpu_work_queue)
 typedef GAME_UPDATE_AND_RENDER(UpdateAndRender);
 
 #ifdef __cplusplus

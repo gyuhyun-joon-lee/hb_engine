@@ -204,6 +204,7 @@ metal_make_shared_buffer(id<MTLDevice> device, void *source, u64 max_size)
     return result;
 }
 
+#if 0
 internal
 PLATFORM_ALLOCATE_AND_ACQUIRE_BUFFER_HANDLE(metal_allocate_and_acquire_buffer_handle)
 {
@@ -222,6 +223,7 @@ PLATFORM_WRITE_TO_ENTIRE_BUFFER(metal_write_to_entire_buffer)
     void *dst = [(id<MTLBuffer>)buffer_handle contents];
     memcpy(dst, src, src_size);
 }
+#endif
 
 inline MetalManagedBuffer
 metal_make_managed_buffer(id<MTLDevice> device, u64 size)

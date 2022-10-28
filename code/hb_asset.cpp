@@ -25,26 +25,55 @@ load_texture_asset(PlatformAPI *platform_api, void *device, void *src, i32 width
     return result;
 }
 
+
 // TODO(gh) Only loads VertexPN vertices
 // TODO(gh) Don't love that we need to pass and update the assetID, make this a tag-based search
 internal MeshAsset *
-get_mesh_asset(GameAssets *asset, PlatformAPI *platform_api, void *device, u32 *assetID, VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+get_mesh_asset(GameAssets *asset, ThreadWorkQueue *gpu_work_queue, u32 *assetID, VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
 {
     MeshAsset *result = 0;
     if(*assetID == 0)
     {
         *assetID = asset->populated_mesh_asset++;
         result = asset->mesh_assets + *assetID;
-        // We shoud load the asset
-        u64 vertex_buffer_size = sizeof(vertices[0])*vertex_count;
-        result->vertex_buffer_handle = platform_api->allocate_and_acquire_buffer_handle(device, vertex_buffer_size);
-        result->vertex_count = vertex_count;
-        platform_api->write_to_entire_buffer(result->vertex_buffer_handle, vertices, vertex_buffer_size);
+        
+        {
+            u64 vertex_buffer_size = sizeof(vertices[0])*vertex_count;
+            ThreadAllocateBufferData allocate_buffer_data = {};
+            allocate_buffer_data.handle_to_populate = &result->vertex_buffer_handle;
+            allocate_buffer_data.size_to_allocate = vertex_buffer_size;
+            gpu_work_queue->add_thread_work_queue_item(gpu_work_queue, 0, GPUWorkType_AllocateBuffer, &allocate_buffer_data);
+            // TODO(gh) Add some sort of fencing instead of waiting?
+            gpu_work_queue->complete_all_thread_work_queue_items(gpu_work_queue, false);
 
-        u64 index_buffer_size = sizeof(indices[0])*index_count;
-        result->index_buffer_handle = platform_api->allocate_and_acquire_buffer_handle(device, index_buffer_size);
-        result->index_count = index_count;
-        platform_api->write_to_entire_buffer(result->index_buffer_handle, indices, index_buffer_size);
+            ThreadWriteEntireBufferData write_entire_buffer_data = {};
+            write_entire_buffer_data.handle = result->vertex_buffer_handle;
+            write_entire_buffer_data.source = vertices;
+            write_entire_buffer_data.size_to_write = vertex_buffer_size;
+
+            gpu_work_queue->add_thread_work_queue_item(gpu_work_queue, 0, GPUWorkType_WriteEntireBuffer, &write_entire_buffer_data);
+            gpu_work_queue->complete_all_thread_work_queue_items(gpu_work_queue, false);
+            result->vertex_count = vertex_count;
+        }
+         
+        {
+            u64 index_buffer_size = sizeof(indices[0])*index_count;
+            ThreadAllocateBufferData allocate_buffer_data = {};
+            allocate_buffer_data.handle_to_populate = &result->index_buffer_handle;
+            allocate_buffer_data.size_to_allocate = index_buffer_size;
+            gpu_work_queue->add_thread_work_queue_item(gpu_work_queue, 0, GPUWorkType_AllocateBuffer, &allocate_buffer_data);
+            gpu_work_queue->complete_all_thread_work_queue_items(gpu_work_queue, false);
+
+            ThreadWriteEntireBufferData write_entire_buffer_data = {};
+            write_entire_buffer_data.handle = result->index_buffer_handle;
+            write_entire_buffer_data.source = indices;
+            write_entire_buffer_data.size_to_write = index_buffer_size;
+
+            gpu_work_queue->add_thread_work_queue_item(gpu_work_queue, 0, GPUWorkType_WriteEntireBuffer, &write_entire_buffer_data);
+            gpu_work_queue->complete_all_thread_work_queue_items(gpu_work_queue, false);
+            result->index_count = index_count;
+        }
+
     }
     else
     {

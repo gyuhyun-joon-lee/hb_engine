@@ -191,7 +191,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         data->one_past_end_y = grid->grass_count_x;
         data->time_elasped_from_start = platform_input->time_elasped_from_start;
         data->perlin_noise_buffer = grid->perlin_noise_buffer;
-        thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_update_perlin_noise_buffer_callback, (void *)data);
+        thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_update_perlin_noise_buffer_callback, 0, (void *)data);
 
         assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
     }
@@ -407,7 +407,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 // TODO(gh) Don't pass platform api, device, mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
-                          &game_state->assets, platform_api,  
+                          &game_state->assets, gpu_work_queue,  
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
                           &entity->mesh_assetID, false);
             }break;
@@ -418,7 +418,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 // TODO(gh) Don't pass platform api, device, mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
-                          &game_state->assets, platform_api,  
+                          &game_state->assets, gpu_work_queue,  
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
                           &entity->mesh_assetID, true);
             }break;

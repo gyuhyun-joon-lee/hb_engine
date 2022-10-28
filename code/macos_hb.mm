@@ -350,18 +350,7 @@ struct MacOSThread
     simd_random_series series;
 };
 
-// NOTE(gh) : use this to add what thread should do
-internal 
-THREAD_WORK_CALLBACK(print_string)
-{
-    char *stringToPrint = (char *)data;
-    printf("%s\n", stringToPrint);
-}
-
-// NOTE(gh): This is single producer multiple consumer - 
-// meaning, it _does not_ provide any thread safety
-// For example, if the two threads try to add the work item,
-// one item might end up over-writing the other one
+// NOTE(gh): Only main thread should add work item
 internal
 PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(macos_add_thread_work_item) 
 {
@@ -371,19 +360,41 @@ PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(macos_add_thread_work_item)
     assert(data); // TODO(gh) : There might be a work that does not need any data?
     ThreadWorkItem *item = queue->items + queue->add_index;
     item->callback = thread_work_callback;
+    assert(gpu_work_type == GPUWorkType_Null);
     item->data = data;
     item->written = true;
 
     queue->add_index = next_add_item_index;
-    queue->completion_goal++;
     write_barrier();
+    queue->completion_goal++;
 
     // increment the semaphore value by 1
     dispatch_semaphore_signal((dispatch_semaphore_t)queue->semaphore);
 }
 
+// TODO(gh) Not thrilled about this copy pasta
+internal
+PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(macos_add_gpu_work_item)
+{
+    u32 next_add_item_index = (queue->add_index+1) % array_count(queue->items);
+    assert(queue->work_index != next_add_item_index);
 
-PLATFORM_DO_THREAD_WORK_ITEM(do_main_work_item)
+    assert(data); // TODO(gh) : There might be a work that does not need any data?
+    ThreadWorkItem *item = queue->items + queue->add_index;
+    item->gpu_work_type = (GPUWorkType)gpu_work_type;
+    assert(thread_work_callback == 0);
+    item->data = data;
+    item->written = true;
+
+    queue->add_index = next_add_item_index;
+    write_barrier();
+    queue->completion_goal++;
+
+    // increment the semaphore value by 1
+    dispatch_semaphore_signal((dispatch_semaphore_t)queue->semaphore);
+}
+
+PLATFORM_DO_THREAD_WORK_ITEM(macos_do_main_work_item)
 {
     b32 did_work = false;
     int original_work_index = queue->work_index;
@@ -406,7 +417,7 @@ PLATFORM_DO_THREAD_WORK_ITEM(do_main_work_item)
     return did_work;
 }
 
-PLATFORM_DO_THREAD_WORK_ITEM(do_gpu_work_item)
+PLATFORM_DO_THREAD_WORK_ITEM(macos_do_gpu_work_item)
 {
     b32 did_work = false;
     int original_work_index = queue->work_index;
@@ -419,8 +430,27 @@ PLATFORM_DO_THREAD_WORK_ITEM(do_gpu_work_item)
         {
             ThreadWorkItem *item = queue->items + original_work_index;
 
+            // Using const for sanity
+            MetalRenderContext *const render_context = (MetalRenderContext *const)queue->render_context;
             switch(item->gpu_work_type)
             {
+                case GPUWorkType_AllocateBuffer:
+                {
+                    ThreadAllocateBufferData *d = (ThreadAllocateBufferData *)item->data;
+                    MetalSharedBuffer buffer = metal_make_shared_buffer(render_context->device, d->size_to_allocate);
+                    *(d->handle_to_populate) = (void *)buffer.buffer;
+                    
+                    int a = 1;
+                }break;
+
+                case GPUWorkType_WriteEntireBuffer:
+                {
+                    ThreadWriteEntireBufferData *d = (ThreadWriteEntireBufferData *)item->data;
+
+                    void *dest = [(id<MTLBuffer>)d->handle contents];
+                    memcpy(dest, d->source, d->size_to_write);
+                }break;
+
                 default:
                 {
                     invalid_code_path;
@@ -474,16 +504,21 @@ thread_proc(void *data)
 }
 
 internal void
-initialize_thread_work_queue(ThreadWorkQueue *queue, platform_do_thread_work_item *do_thread_work_item, u32 desired_thread_count, void *render_context = 0)
+initialize_thread_work_queue(ThreadWorkQueue *queue, 
+                            platform_add_thread_work_queue_item *add_work_queue_item, 
+                            platform_do_thread_work_item *do_thread_work_item, 
+                            u32 desired_thread_count, void *render_context = 0)
 {
     pthread_attr_t  attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     
-    queue->add_thread_work_queue_item = macos_add_thread_work_item;
+    queue->add_thread_work_queue_item = add_work_queue_item;
     queue->complete_all_thread_work_queue_items = macos_complete_all_thread_work_queue_items;
     queue->_do_thread_work_item = do_thread_work_item;
     queue->semaphore = dispatch_semaphore_create(0);
+
+    queue->render_context = render_context;
 
     for(u32 thread_index = 0;
             thread_index < desired_thread_count;
@@ -1253,7 +1288,7 @@ int main(void)
     RandomSeries random_series = start_random_series(rand()); 
 
     ThreadWorkQueue thread_work_queue = {};
-    initialize_thread_work_queue(&thread_work_queue, do_main_work_item, 8);
+    initialize_thread_work_queue(&thread_work_queue, macos_add_thread_work_item, macos_do_main_work_item, 8);
 
     // TODO(gh) studio display only shows half of the pixels(both width and height)?
     CGDirectDisplayID main_displayID = CGMainDisplayID();
@@ -1277,8 +1312,6 @@ int main(void)
     platform_api.write_to_entire_texture2D = metal_write_to_entire_texture2D;
     platform_api.allocate_and_acquire_texture3D_handle = metal_allocate_and_acquire_texture3D_handle;
     platform_api.write_to_entire_texture3D = metal_write_to_entire_texture3D;
-    platform_api.allocate_and_acquire_buffer_handle = metal_allocate_and_acquire_buffer_handle;
-    platform_api.write_to_entire_buffer = metal_write_to_entire_buffer;
 
     PlatformMemory platform_memory = {};
 
@@ -1790,7 +1823,7 @@ int main(void)
 
     // TODO(gh) To avoid multi threading chaos, we are limiting the thread count to 1
     ThreadWorkQueue gpu_work_queue = {};
-    initialize_thread_work_queue(&gpu_work_queue, do_gpu_work_item, 1, (void *)&metal_render_context);
+    initialize_thread_work_queue(&gpu_work_queue, macos_add_gpu_work_item, macos_do_gpu_work_item, 1, (void *)&metal_render_context);
 
     PlatformInput platform_input = {};
 
@@ -1862,7 +1895,7 @@ int main(void)
         {
             if(macos_game_code.update_and_render)
             {
-                macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer, debug_platform_render_push_buffer, &thread_work_queue);
+                macos_game_code.update_and_render(&platform_api, &platform_input, &platform_memory, &platform_render_push_buffer, debug_platform_render_push_buffer, &thread_work_queue, &gpu_work_queue);
             }
 
             // TODO(gh) Priority queue?
