@@ -1007,7 +1007,6 @@ clamp01(f32 value)
     return clamp(0.0f, value, 1.0f);
 }
 
-
 inline u32
 clamp(u32 min, u32 value, u32 max)
 {

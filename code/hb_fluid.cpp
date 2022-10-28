@@ -218,27 +218,27 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                 v3 p = V3(cell_x, cell_y, cell_z) - p_offset;
 
                 // clip p
-                if(p.x < 1.5f)
+                if(p.x < 0.5f)
                 {
-                    p.x = 1.5f;
+                    p.x = 0.5f;
                 }
-                else if(p.x > cell_count.x - 1.5f)
+                else if(p.x > cell_count.x - 1.5f) // we need one cell worth of padding for indexing
                 {
                     p.x = cell_count.x - 1.5f;
                 }
 
-                if(p.y < 1.5f)
+                if(p.y < 0.5f)
                 {
-                    p.y = 1.5f;
+                    p.y = 0.5f;
                 }
                 else if(p.y > cell_count.y - 1.5f)
                 {
                     p.y = cell_count.y - 1.5f;
                 }
                 
-                if(p.z < 1.5f)
+                if(p.z < 0.5f)
                 {
-                    p.z = 1.5f;
+                    p.z = 0.5f;
                 }
                 else if(p.z > cell_count.z - 1.5f)
                 {
@@ -267,10 +267,7 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
 
                 f32 lerp_xyz = lerp(lerp_y0, zf, lerp_y1);
 
-                // TODO(gh) This might be wrong...
                 dest[ID] = lerp_xyz; 
-
-                // dest[ID] = source[ID]; 
             }
         }
     }

@@ -102,9 +102,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
-        u32 fluid_cell_count_x = 12;
-        u32 fluid_cell_count_y = 12;
-        u32 fluid_cell_count_z = 12;
+        u32 fluid_cell_count_x = 32;
+        u32 fluid_cell_count_y = 32;
+        u32 fluid_cell_count_z = 16;
         initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
                             V3(0, 0, 0), fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 2, 3);
 
@@ -292,7 +292,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     zero_memory(fluid_cube->density_source, fluid_cube->stride);
     local_persist b32 added_density = false;
-    if(!added_density && platform_input->time_elasped_from_start < 100)
+    if(!added_density && platform_input->time_elasped_from_start > 8)
     {
         fluid_cube->density_source[get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, 1, fluid_cube->cell_count.z/2)] = 
             10000;
@@ -424,7 +424,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
-    b32 enable_fluid_arrow_rendering = false;
+    b32 enable_fluid_arrow_rendering = true;
 
     if(enable_fluid_arrow_rendering)
     {
@@ -448,24 +448,18 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                     v3 color = V3(0.5f, 0.5f, 0.5f);
 
-                    f32 scale = 0.15;
+                    f32 scale = 0.15f;
                     v3 v = V3(v_x, v_y, v_z);
-                    // v3 v = 1*normalize(V3(v_x, v_y, v_z));
+                    f32 v_scale = clamp(0.0f, length(v), 0.5f*fluid_cube->cell_dim);
+                    v = normalize(v);
 
-                    if(cell_x == fluid_cube->cell_count.x-2 && 
-                        cell_y == fluid_cube->cell_count.y-2 &&    
-                        cell_z == fluid_cube->cell_count.z-2)
-                    {
-                        int a = 1;
-                    }
                     if(compare_with_epsilon(length_square(v), 0))
                     {
                         scale = 0;
                     }
                     else
                     {
-                        color = V3(1, 0, 0);
-                        color = abs(normalize(v));
+                        color = abs(v);
                     }
 
                     if(cell_x == 0 || (cell_x == fluid_cube->cell_count.x-1) || 
@@ -493,7 +487,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         {{center + right - up}, {1, 0, 0}},
                         {{center - right + up}, {1, 0, 0}},
                         {{center + right + up},{1, 0, 0}},
-                        {{center + v}, {1, 0, 0}},
+                        {{center + v_scale*v}, {1, 0, 0}},
                     };
 
                     u32 arrow_indices[] = 
@@ -533,8 +527,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     f32 density = fluid_cube->density_dest[ID];
                     assert(density >= 0);
 
-                    f32 scale = fluid_cube->cell_dim*density;
-                    if(scale > 0.1f)
+                    f32 scale = clamp(0.0f, fluid_cube->cell_dim*density, 2.0f);
                     {
                         VertexPN cube_vertices[] = 
                         {
@@ -548,6 +541,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             {{center + 0.5f*scale*V3(-1, 1, 1)}, {1, 0, 0}},
                             {{center + 0.5f*scale*V3(1, 1, 1)}, {1, 0, 0}},
                         };
+
+                        for(u32 i = 0;
+                                i < array_count(cube_vertices);
+                                ++i)
+                        {
+                            VertexPN *vertex = cube_vertices + i;
+                            vertex->n = normalize(vertex->p - center);
+                        }
 
                         u32 cube_indices[] = 
                         {
@@ -782,7 +783,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 
             // TODO(gh) Do we wanna keep this scale value?
             f32 scale = 0.5f;
-            debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
+            // debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
             //debug_text_line(platform_render_push_buffer, assets, "Togplil", top_left_rel_p_px, scale);
 
             debug_newline(&top_left_rel_p_px, scale, &assets->debug_font_asset);
@@ -791,6 +792,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
         }
     }
 
+#if 0 
     {
         char buffer[512] = {};
         snprintf(buffer, array_count(buffer),
@@ -799,6 +801,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
         f32 scale = 0.5f;
         debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
     }
+#endif
 #endif
 
 }
