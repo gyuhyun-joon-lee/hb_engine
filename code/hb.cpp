@@ -243,8 +243,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 u32 ID = get_index(fluid_cube->cell_count, x, y, z);
 
                 fluid_cube->v_x_source[ID] = 0;
-                fluid_cube->v_y_source[ID] = 10;
-                fluid_cube->v_z_source[ID] = 10;
+                fluid_cube->v_y_source[ID] = 30;
+                fluid_cube->v_z_source[ID] = 30;
             }
         }
     }
@@ -292,9 +292,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     zero_memory(fluid_cube->density_source, fluid_cube->stride);
     local_persist b32 added_density = false;
-    if(!added_density && platform_input->time_elasped_from_start > 3)
+    if(!added_density && platform_input->time_elasped_from_start < 100)
     {
-        fluid_cube->density_source[get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, fluid_cube->cell_count.y/2, fluid_cube->cell_count.z-2)] = 100;
+        fluid_cube->density_source[get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, 1, fluid_cube->cell_count.z/2)] = 
+            10000;
         added_density = true;
     }
     
@@ -423,7 +424,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
-    b32 enable_fluid_arrow_rendering = true;
+    b32 enable_fluid_arrow_rendering = false;
 
     if(enable_fluid_arrow_rendering)
     {
@@ -439,7 +440,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         cell_x < fluid_cube->cell_count.x;
                         ++cell_x)
                 {
-                    v3 left_bottom_p = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x, cell_y, cell_z);
+                    v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f);
 
                     f32 v_x = fluid_cube->v_x_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
                     f32 v_y = fluid_cube->v_y_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
@@ -488,11 +489,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     v3 up = scale*normalize(cross(right, v));
                     VertexPN arrow_vertices[] = 
                     {
-                        {{left_bottom_p - right - up}, {1, 0, 0}},
-                        {{left_bottom_p + right - up}, {1, 0, 0}},
-                        {{left_bottom_p - right + up}, {1, 0, 0}},
-                        {{left_bottom_p + right + up},{1, 0, 0}},
-                        {{left_bottom_p + v}, {1, 0, 0}},
+                        {{center - right - up}, {1, 0, 0}},
+                        {{center + right - up}, {1, 0, 0}},
+                        {{center - right + up}, {1, 0, 0}},
+                        {{center + right + up},{1, 0, 0}},
+                        {{center + v}, {1, 0, 0}},
                     };
 
                     u32 arrow_indices[] = 
@@ -511,7 +512,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    if(true)
+    b32 enable_ink_rendering = true;
+    if(enable_ink_rendering)
     {
         for(u32 cell_z = 0;
                 cell_z < fluid_cube->cell_count.z;
@@ -525,7 +527,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         cell_x < fluid_cube->cell_count.x;
                         ++cell_x)
                 {
-                    v3 left_bottom_p = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x, cell_y, cell_z);
+                    v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f);
                     u32 ID = get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z);
 
                     f32 density = fluid_cube->density_dest[ID];
@@ -536,24 +538,24 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     {
                         VertexPN cube_vertices[] = 
                         {
-                            {{left_bottom_p + scale*V3(0, 0, 0)}, {1, 0, 0}},
-                            {{left_bottom_p + scale*V3(1, 0, 0)}, {1, 0, 0}},
-                            {{left_bottom_p + scale*V3(0, 1, 0)}, {1, 0, 0}},
-                            {{left_bottom_p + scale*V3(1, 1, 0)}, {1, 0, 0}},
+                            {{center + 0.5f*scale*V3(-1, -1, -1)}, {1, 0, 0}},
+                            {{center + 0.5f*scale*V3(1, -1, -1)}, {1, 0, 0}},
+                            {{center + 0.5f*scale*V3(-1, 1, -1)}, {1, 0, 0}},
+                            {{center + 0.5f*scale*V3(1, 1, -1)}, {1, 0, 0}},
 
-                            {{left_bottom_p + scale*V3(0, 0, 1)}, {1, 0, 0}},
-                            {{left_bottom_p + scale*V3(1, 0, 1)}, {1, 0, 0}},
-                            {{left_bottom_p + scale*V3(0, 1, 1)}, {1, 0, 0}},
-                            {{left_bottom_p + scale*V3(1, 1, 1)}, {1, 0, 0}},
+                            {{center + 0.5f*scale*V3(-1, -1, 1)}, {1, 0, 0}},
+                            {{center + 0.5f*scale*V3(1, -1, 1)}, {1, 0, 0}},
+                            {{center + 0.5f*scale*V3(-1, 1, 1)}, {1, 0, 0}},
+                            {{center + 0.5f*scale*V3(1, 1, 1)}, {1, 0, 0}},
                         };
 
                         u32 cube_indices[] = 
                         {
                             0, 1, 4, 1, 5, 4,
-                            1, 3, 5, 3, 4, 5,
-                            6, 4, 3, 6, 3, 2,
+                            1, 3, 5, 3, 7, 5,
+                            6, 7, 3, 6, 3, 2,
                             4, 2, 0, 4, 6, 2,
-                            4, 5, 6, 5, 7, 6,
+                            7, 6, 5, 5, 6, 4,
                             2, 1, 0, 2, 3, 1,
                         };
 

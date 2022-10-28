@@ -205,21 +205,16 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                     cell_x < cell_count.x-1;
                     ++cell_x)
             {
-                if(cell_x == cell_count.x/2 && cell_z == cell_count.z/2 &&
-                    cell_y == 1)
-                {
-                    int a =1;
-                }
                 u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
 
                 v3 v = V3(v_x[ID], v_y[ID], v_z[ID]);
 
-                //v3 cell_based_u = hadamard(v, V3(cell_count.x, cell_count.y, cell_count.z));
                 v3 cell_based_u = v/cell_dim;
 
                 v3 p_offset = dt*cell_based_u;
-                // TODO(gh) Original implementation doesn't do this, but shouldn't 
-                // we offset by 0.5f for xyz here, because we need to start at the center of the cell?
+                // TODO(gh) Original implementation doesn't do this,  
+                // but shouldn't we offset by 0.5f for xyz here, 
+                // because we need to start at the center of the cell?
                 v3 p = V3(cell_x, cell_y, cell_z) - p_offset;
 
                 // clip p
@@ -227,27 +222,27 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                 {
                     p.x = 1.5f;
                 }
-                else if(p.x > cell_count.x - 2.5f)
+                else if(p.x > cell_count.x - 1.5f)
                 {
-                    p.x = cell_count.x - 2.5f;
+                    p.x = cell_count.x - 1.5f;
                 }
 
                 if(p.y < 1.5f)
                 {
                     p.y = 1.5f;
                 }
-                else if(p.y > cell_count.y - 2.5f)
+                else if(p.y > cell_count.y - 1.5f)
                 {
-                    p.y = cell_count.y - 2.5f;
+                    p.y = cell_count.y - 1.5f;
                 }
                 
                 if(p.z < 1.5f)
                 {
                     p.z = 1.5f;
                 }
-                else if(p.z > cell_count.z - 2.5f)
+                else if(p.z > cell_count.z - 1.5f)
                 {
-                    p.z = cell_count.z - 2.5f;
+                    p.z = cell_count.z - 1.5f;
                 }
 
                 u32 x0 = (u32)p.x;
@@ -272,7 +267,10 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
 
                 f32 lerp_xyz = lerp(lerp_y0, zf, lerp_y1);
 
+                // TODO(gh) This might be wrong...
                 dest[ID] = lerp_xyz; 
+
+                // dest[ID] = source[ID]; 
             }
         }
     }
