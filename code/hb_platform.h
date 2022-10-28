@@ -241,6 +241,7 @@ u64 rdtsc(void)
 {
 	u64 val;
 #if HB_ARM 
+    // TODO(gh) Counter count seems like it's busted, find another way to do this
 	asm volatile("mrs %0, cntvct_el0" : "=r" (val));
 #elif HB_X64
     val = __rdtsc();
@@ -279,6 +280,9 @@ typedef PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(platform_complete_all_thre
 #define PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(name) void name(ThreadWorkQueue *queue, ThreadWorkCallback *thread_work_callback, void *data)
 typedef PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(platform_add_thread_work_queue_item);
 
+#define PLATFORM_DO_THREAD_WORK_ITEM(name) b32 (name)(ThreadWorkQueue *queue, u32 thread_index)
+typedef PLATFORM_DO_THREAD_WORK_ITEM(platform_do_thread_work_item);
+
 // IMPORTANT(gh): There is no safeguard for the situation where one work takes too long, and meanwhile the work queue was filled so quickly
 // causing writeItem == readItem
 struct ThreadWorkQueue
@@ -301,6 +305,8 @@ struct ThreadWorkQueue
     // now this can be passed onto other codes, such as seperate game code to be used as rendering 
     platform_add_thread_work_queue_item *add_thread_work_queue_item;
     platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
+    // NOTE(gh) Should NOT be used from the game code side!
+    platform_do_thread_work_item *_do_thread_work_item;
 };
 
 // TODO(gh) Request(game code) - Give(platform layer) system?

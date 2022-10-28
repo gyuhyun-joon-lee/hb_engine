@@ -382,8 +382,8 @@ PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(macos_add_thread_work_item)
     dispatch_semaphore_signal((dispatch_semaphore_t)queue->semaphore);
 }
 
-internal b32
-macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
+
+PLATFORM_DO_THREAD_WORK_ITEM(do_main_work_item)
 {
     b32 did_work = false;
     int original_work_index = queue->work_index;
@@ -406,6 +406,37 @@ macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
     return did_work;
 }
 
+PLATFORM_DO_THREAD_WORK_ITEM(do_gpu_work_item)
+{
+    b32 did_work = false;
+    int original_work_index = queue->work_index;
+    int desired_work_index = (original_work_index + 1) % array_count(queue->items);
+
+    // Should check this for later, because some other thread might have figgled with work_index
+    if(original_work_index != queue->add_index)
+    {
+        if(OSAtomicCompareAndSwapIntBarrier(original_work_index, desired_work_index, &queue->work_index)) // old, new, ptr
+        {
+            ThreadWorkItem *item = queue->items + original_work_index;
+
+            switch(item->gpu_work_type)
+            {
+                default:
+                {
+                    invalid_code_path;
+                }
+            }
+
+            OSAtomicIncrement32Barrier(&queue->completion_count);
+
+            //printf("Thread %u: Finished working\n", thread_index);
+            did_work = true;
+        }
+    }
+
+    return did_work;
+}
+
 internal 
 PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_queue_items)
 {
@@ -414,7 +445,7 @@ PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_que
     {
         if(main_thread_should_do_work)
         {
-            macos_do_thread_work_item(queue, 0);
+            queue->_do_thread_work_item(queue, 0);
         }
     }
 
@@ -423,13 +454,13 @@ PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_que
 }
 
 internal void*
-main_thread_proc(void *data)
+thread_proc(void *data)
 {
     MacOSThread *thread = (MacOSThread *)data;
     ThreadWorkQueue *queue = thread->queue;
     while(1)
     {
-        if(macos_do_thread_work_item(queue, thread->ID))
+        if(queue->_do_thread_work_item(queue, thread->ID))
         {
         }
         else
@@ -443,7 +474,7 @@ main_thread_proc(void *data)
 }
 
 internal void
-initialize_thread_work_queue(ThreadWorkQueue *queue, u32 desired_thread_count, void *render_context = 0)
+initialize_thread_work_queue(ThreadWorkQueue *queue, platform_do_thread_work_item *do_thread_work_item, u32 desired_thread_count, void *render_context = 0)
 {
     pthread_attr_t  attr;
     pthread_attr_init(&attr);
@@ -451,6 +482,7 @@ initialize_thread_work_queue(ThreadWorkQueue *queue, u32 desired_thread_count, v
     
     queue->add_thread_work_queue_item = macos_add_thread_work_item;
     queue->complete_all_thread_work_queue_items = macos_complete_all_thread_work_queue_items;
+    queue->_do_thread_work_item = do_thread_work_item;
     queue->semaphore = dispatch_semaphore_create(0);
 
     for(u32 thread_index = 0;
@@ -463,7 +495,7 @@ initialize_thread_work_queue(ThreadWorkQueue *queue, u32 desired_thread_count, v
         thread->ID = thread_index + 1; // 0th thread is the main thread
         thread->queue = queue;
 
-        if(pthread_create(&ID, &attr, &main_thread_proc, (void *)thread) != 0)
+        if(pthread_create(&ID, &attr, &thread_proc, (void *)thread) != 0)
         {
             // TODO(gh) Creating thread failed
             assert(0);
@@ -1221,13 +1253,7 @@ int main(void)
     RandomSeries random_series = start_random_series(rand()); 
 
     ThreadWorkQueue thread_work_queue = {};
-    initialize_thread_work_queue(&thread_work_queue, 8);
-
-#if 0
-    // Testing font in macos...
-    UIFont * arial_font = [fontWithName : [NSString stringWithUTF8String:vertex_shader_name]
-                                    size : 40];
-#endif
+    initialize_thread_work_queue(&thread_work_queue, do_main_work_item, 8);
 
     // TODO(gh) studio display only shows half of the pixels(both width and height)?
     CGDirectDisplayID main_displayID = CGMainDisplayID();
@@ -1764,7 +1790,7 @@ int main(void)
 
     // TODO(gh) To avoid multi threading chaos, we are limiting the thread count to 1
     ThreadWorkQueue gpu_work_queue = {};
-    initialize_thread_work_queue(&gpu_work_queue, 1, (void *)&metal_render_context);
+    initialize_thread_work_queue(&gpu_work_queue, do_gpu_work_item, 1, (void *)&metal_render_context);
 
     PlatformInput platform_input = {};
 
