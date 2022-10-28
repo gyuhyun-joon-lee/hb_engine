@@ -483,6 +483,7 @@ metal_make_render_pipeline(id<MTLDevice> device,
     return result;
 }
 
+#if 0
 internal
 PLATFORM_WRITE_TO_ENTIRE_TEXTURE2D(metal_write_to_entire_texture2D)
 {
@@ -492,6 +493,7 @@ PLATFORM_WRITE_TO_ENTIRE_TEXTURE2D(metal_write_to_entire_texture2D)
             withBytes:src
           bytesPerRow:width*bytes_per_pixel];
 }
+#endif
 
 // TODO(gh) Should we make this more general and merge with the texture3D path, 
 // or should we keep this for clarification?
@@ -519,6 +521,7 @@ metal_make_texture2D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 widt
     return result;
 }
 
+#if 0
 internal
 PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE2D_HANDLE(metal_allocate_and_acquire_texture2D_handle)
 {
@@ -544,6 +547,7 @@ PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE2D_HANDLE(metal_allocate_and_acquire_textur
     assert(result);
     return result;
 }
+#endif
 
 // TODO(gh) We can also make this to share the same memory with a buffer
 internal MetalTexture3D 
@@ -572,6 +576,7 @@ metal_make_texture3D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 widt
     return result;
 }
 
+#if 0
 internal
 PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(metal_allocate_and_acquire_texture3D_handle)
 {
@@ -614,6 +619,7 @@ PLATFORM_WRITE_TO_ENTIRE_TEXTURE3D(metal_write_to_entire_texture3D)
                                       bytesPerRow:bytes_per_row
                                     bytesPerImage:bytes_per_image];
 }
+#endif
 
 inline id<MTLDepthStencilState>
 metal_make_depth_state(id<MTLDevice> device, MTLCompareFunction compare_function, b32 should_enable_write)

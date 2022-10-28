@@ -7,20 +7,22 @@
 #include "stb_truetype.h"
 
 internal TextureAsset2D
-load_texture_asset(PlatformAPI *platform_api, void *device, void *src, i32 width, i32 height, i32 bytes_per_pixel)
+load_texture_asset(ThreadWorkQueue *gpu_work_queue, void *src, i32 width, i32 height, i32 bytes_per_pixel)
 {
     TextureAsset2D result = {};
 
-    assert(device && src);
+    assert(src);
 
     // Allocate the space in GPU and get the handle
-    result.handle = platform_api->allocate_and_acquire_texture2D_handle(device, width, height, bytes_per_pixel);
-    result.width = width;
-    result.height = height;
-    result.bytes_per_pixel = bytes_per_pixel;
+    ThreadAllocateTexture2DData allocate_texture2D_data = {};
+    allocate_texture2D_data.handle_to_populate = &result.handle;
+    allocate_texture2D_data.width = width;
+    allocate_texture2D_data.height = height;
+    allocate_texture2D_data.bytes_per_pixel = bytes_per_pixel;
 
     // Load the file into texture
-    platform_api->write_to_entire_texture2D(result.handle, src, width, height, bytes_per_pixel);
+    gpu_work_queue->add_thread_work_queue_item(gpu_work_queue, 0, GPUWorkType_AllocateTexture2D, &allocate_texture2D_data);
+    gpu_work_queue->complete_all_thread_work_queue_items(gpu_work_queue, false);
 
     return result;
 }
@@ -143,7 +145,7 @@ end_load_font(LoadFontInfo *load_font_info)
 #endif
 
 internal void
-add_glyph_asset(LoadFontInfo *load_font_info, PlatformAPI *platform_api, u32 unicode_codepoint)
+add_glyph_asset(LoadFontInfo *load_font_info, ThreadWorkQueue *gpu_work_queue, u32 unicode_codepoint)
 {
     int glyphID_that_doesnt_exist = stbtt_FindGlyphIndex(&load_font_info->font_info, 11111);     
     assert(stbtt_FindGlyphIndex(&load_font_info->font_info, unicode_codepoint)!=glyphID_that_doesnt_exist);
@@ -177,7 +179,7 @@ add_glyph_asset(LoadFontInfo *load_font_info, PlatformAPI *platform_api, u32 uni
 
     if(bitmap)
     {
-        glyph_asset->texture = load_texture_asset(platform_api, load_font_info->device, bitmap, width, height, 1);
+        glyph_asset->texture = load_texture_asset(gpu_work_queue, bitmap, width, height, 1);
         stbtt_FreeBitmap(bitmap, 0);
     }
 }
@@ -186,7 +188,7 @@ add_glyph_asset(LoadFontInfo *load_font_info, PlatformAPI *platform_api, u32 uni
 // TODO(gh) This is pretty much it when we need the mtldevice for resource allocations,
 // but can we abstract this even further?
 internal void
-load_game_assets(GameAssets *assets, PlatformAPI *platform_api, void *device)
+load_game_assets(GameAssets *assets, PlatformAPI *platform_api, ThreadWorkQueue *gpu_work_queue, void *device)
 {
 #if 0
     load_font("/Users/mekalopo/Library/Fonts/LiberationMono-Regular.ttf",
@@ -198,17 +200,17 @@ load_game_assets(GameAssets *assets, PlatformAPI *platform_api, void *device)
                     "/System/Library/Fonts/Supplemental/applemyungjo.ttf", platform_api, device,
                     max_glyph_count, 128.0f);
     // space works just like other glyphs, but without any texture
-    add_glyph_asset(&load_font_info, platform_api, ' ');
+    add_glyph_asset(&load_font_info, gpu_work_queue, ' ');
     for(u32 codepoint = '!';
             codepoint <= '~';
             ++codepoint)
     {
-        add_glyph_asset(&load_font_info, platform_api, codepoint);
+        add_glyph_asset(&load_font_info, gpu_work_queue, codepoint);
     }
-    add_glyph_asset(&load_font_info, platform_api, 0x8349);
-    add_glyph_asset(&load_font_info, platform_api, 0x30a8);
-    add_glyph_asset(&load_font_info, platform_api, 0x30f3);
-    add_glyph_asset(&load_font_info, platform_api, 0x30b8);
+    add_glyph_asset(&load_font_info, gpu_work_queue, 0x8349);
+    add_glyph_asset(&load_font_info, gpu_work_queue, 0x30a8);
+    add_glyph_asset(&load_font_info, gpu_work_queue, 0x30f3);
+    add_glyph_asset(&load_font_info, gpu_work_queue, 0x30b8);
     end_load_font(&load_font_info);
 }
 

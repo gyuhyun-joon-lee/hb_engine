@@ -32,20 +32,6 @@ typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 #define PLATFORM_FREE_FILE_MEMORY(name) void (name)(void *memory)
 typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
 
-// TODO(gh) Also make one that releases texture handle
-#define PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE2D_HANDLE(name) void *(name)(void *device, i32 width, i32 height, i32 bytes_per_pixel)
-typedef PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE2D_HANDLE(platform_allocate_and_acquire_texture2D_handle);
-
-#define PLATFORM_WRITE_TO_ENTIRE_TEXTURE2D(name) void (name)(void *texture_handle, void *src, i32 width, i32 height, i32 bytes_per_pixel)
-typedef PLATFORM_WRITE_TO_ENTIRE_TEXTURE2D(platform_write_to_entire_texture2D);
-
-// TODO(gh) Also make one that releases texture handle
-#define PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(name) void *(name)(void *device, i32 width, i32 height, i32 depth, i32 bytes_per_pixel)
-typedef PLATFORM_ALLOCATE_AND_ACQUIRE_TEXTURE3D_HANDLE(platform_allocate_and_acquire_texture3D_handle);
-
-#define PLATFORM_WRITE_TO_ENTIRE_TEXTURE3D(name) void (name)(void *texture_handle, void *src, i32 width, i32 height, i32 depth, i32 bytes_per_pixel)
-typedef PLATFORM_WRITE_TO_ENTIRE_TEXTURE3D(platform_write_to_entire_texture3D);
-
 struct PlatformAPI
 {
     platform_read_file *read_file;
@@ -54,15 +40,6 @@ struct PlatformAPI
 
     // platform_atomic_compare_and_exchange32() *atomic_compare_and_exchange32;
     // platform_atomic_compare_and_exchange64() *atomic_compare_and_exchange64;
-
-    platform_allocate_and_acquire_texture2D_handle *allocate_and_acquire_texture2D_handle;
-    platform_write_to_entire_texture2D *write_to_entire_texture2D;
-
-    platform_allocate_and_acquire_texture3D_handle *allocate_and_acquire_texture3D_handle;
-    platform_write_to_entire_texture3D *write_to_entire_texture3D;
-
-    // GPU operations
-    // TODO(gh) Do we wanna put these here, or do we wanna move into seperate place?
 };
 
 struct PlatformInput
@@ -252,6 +229,7 @@ enum GPUWorkType
     GPUWorkType_Null,
     GPUWorkType_AllocateBuffer,
     GPUWorkType_WriteEntireBuffer,
+    GPUWorkType_AllocateTexture2D,
 };
 struct ThreadAllocateBufferData
 {
@@ -264,6 +242,13 @@ struct ThreadWriteEntireBufferData
 
     void *source;
     u64 size_to_write;
+};
+struct ThreadAllocateTexture2DData
+{
+    void **handle_to_populate;
+    i32 width;
+    i32 height;
+    i32 bytes_per_pixel;
 };
 
 // TODO(gh) task_with_memory

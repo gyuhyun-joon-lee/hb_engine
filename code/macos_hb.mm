@@ -439,8 +439,7 @@ PLATFORM_DO_THREAD_WORK_ITEM(macos_do_gpu_work_item)
                     ThreadAllocateBufferData *d = (ThreadAllocateBufferData *)item->data;
                     MetalSharedBuffer buffer = metal_make_shared_buffer(render_context->device, d->size_to_allocate);
                     *(d->handle_to_populate) = (void *)buffer.buffer;
-                    
-                    int a = 1;
+                    assert(*(d->handle_to_populate));
                 }break;
 
                 case GPUWorkType_WriteEntireBuffer:
@@ -449,6 +448,32 @@ PLATFORM_DO_THREAD_WORK_ITEM(macos_do_gpu_work_item)
 
                     void *dest = [(id<MTLBuffer>)d->handle contents];
                     memcpy(dest, d->source, d->size_to_write);
+                }break;
+
+                case GPUWorkType_AllocateTexture2D:
+                {
+                    ThreadAllocateTexture2DData *d = (ThreadAllocateTexture2DData *)item->data;
+
+                    // TODO(gh) This assumes that every asset has pre-known _unnormalized_ pixel format such as RBGA8 or R8... 
+                    // which is super janky XD
+                    MTLPixelFormat pixel_format = MTLPixelFormatInvalid;
+                    switch(d->bytes_per_pixel)
+                    {
+                        case 1:
+                        {
+                            pixel_format = MTLPixelFormatR8Uint;
+                        }break;
+
+                        default:
+                        {
+                            invalid_code_path;
+                        };
+                    }
+
+                    MetalTexture2D texture2D = metal_make_texture2D(render_context->device, pixel_format, d->width, d->height, 
+                            MTLTextureUsageShaderRead, MTLStorageModeShared);
+                    *(d->handle_to_populate) = (void *)texture2D.texture;
+                    assert(*(d->handle_to_populate));
                 }break;
 
                 default:
@@ -1308,10 +1333,6 @@ int main(void)
     platform_api.read_file = debug_macos_read_file;
     platform_api.write_entire_file = debug_macos_write_entire_file;
     platform_api.free_file_memory = debug_macos_free_file_memory;
-    platform_api.allocate_and_acquire_texture2D_handle = metal_allocate_and_acquire_texture2D_handle;
-    platform_api.write_to_entire_texture2D = metal_write_to_entire_texture2D;
-    platform_api.allocate_and_acquire_texture3D_handle = metal_allocate_and_acquire_texture3D_handle;
-    platform_api.write_to_entire_texture3D = metal_write_to_entire_texture3D;
 
     PlatformMemory platform_memory = {};
 

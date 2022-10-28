@@ -108,7 +108,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
                             V3(0, 0, 0), fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 2, 3);
 
-        load_game_assets(&game_state->assets, platform_api, platform_render_push_buffer->device);
+        load_game_assets(&game_state->assets, platform_api, gpu_work_queue, platform_render_push_buffer->device);
         game_state->debug_fluid_force_z = 1;
 
         game_state->is_initialized = true;
@@ -221,6 +221,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     // TODO(gh) Do wee need to add source to the density, too?
     FluidCube *fluid_cube = &game_state->fluid_cube;
     
+#if 0
     zero_memory(fluid_cube->v_x_source, fluid_cube->stride);
     zero_memory(fluid_cube->v_y_source, fluid_cube->stride);
     zero_memory(fluid_cube->v_z_source, fluid_cube->stride);
@@ -321,7 +322,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     
     advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
             fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
-
+#endif
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
@@ -424,7 +425,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
-    b32 enable_fluid_arrow_rendering = true;
+    b32 enable_fluid_arrow_rendering = false;
 
     if(enable_fluid_arrow_rendering)
     {
@@ -506,7 +507,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    b32 enable_ink_rendering = true;
+    b32 enable_ink_rendering = false;
     if(enable_ink_rendering)
     {
         for(u32 cell_z = 0;
