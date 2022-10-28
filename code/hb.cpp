@@ -662,7 +662,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         output_debug_records(debug_platform_render_push_buffer, &game_state->assets, V2(0, 0));
     }
     
-    thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue);
+    thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue, true);
 
     end_temp_memory(&perlin_noise_temp_memory);
 

@@ -37,7 +37,6 @@ global v2 last_mouse_p;
 global v2 mouse_diff;
 
 global b32 is_game_running;
-global dispatch_semaphore_t semaphore;
 
 // TODO(gh) temporary thing to remove render_group.cpp from the platform layer
 internal m4x4 
@@ -380,7 +379,7 @@ PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(macos_add_thread_work_item)
     write_barrier();
 
     // increment the semaphore value by 1
-    dispatch_semaphore_signal(semaphore);
+    dispatch_semaphore_signal((dispatch_semaphore_t)queue->semaphore);
 }
 
 internal b32
@@ -410,9 +409,13 @@ macos_do_thread_work_item(ThreadWorkQueue *queue, u32 thread_index)
 internal 
 PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_queue_items)
 {
+    // NOTE(gh) This does not guarantee that all jobs have been actuall finished
     while(queue->completion_count != queue->completion_goal)
     {
-        macos_do_thread_work_item(queue, 0);
+        if(main_thread_should_do_work)
+        {
+            macos_do_thread_work_item(queue, 0);
+        }
     }
 
     queue->completion_count = 0;
@@ -420,22 +423,53 @@ PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(macos_complete_all_thread_work_que
 }
 
 internal void*
-thread_proc(void *data)
+main_thread_proc(void *data)
 {
     MacOSThread *thread = (MacOSThread *)data;
+    ThreadWorkQueue *queue = thread->queue;
     while(1)
     {
-        if(macos_do_thread_work_item(thread->queue, thread->ID))
+        if(macos_do_thread_work_item(queue, thread->ID))
         {
         }
         else
         {
             // dispatch semaphore puts the thread into sleep until the semaphore is signaled
-            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+            dispatch_semaphore_wait((dispatch_semaphore_t)queue->semaphore, DISPATCH_TIME_FOREVER);
         }
     }
 
     return 0;
+}
+
+internal void
+initialize_thread_work_queue(ThreadWorkQueue *queue, u32 desired_thread_count, void *render_context = 0)
+{
+    pthread_attr_t  attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    
+    queue->add_thread_work_queue_item = macos_add_thread_work_item;
+    queue->complete_all_thread_work_queue_items = macos_complete_all_thread_work_queue_items;
+    queue->semaphore = dispatch_semaphore_create(0);
+
+    for(u32 thread_index = 0;
+            thread_index < desired_thread_count;
+            ++thread_index)
+    {
+        pthread_t ID = 0;
+        MacOSThread *thread = (MacOSThread *)malloc(sizeof(MacOSThread)); 
+
+        thread->ID = thread_index + 1; // 0th thread is the main thread
+        thread->queue = queue;
+
+        if(pthread_create(&ID, &attr, &main_thread_proc, (void *)thread) != 0)
+        {
+            // TODO(gh) Creating thread failed
+            assert(0);
+        }
+    }
+    pthread_attr_destroy(&attr);
 }
 
 internal void
@@ -1180,50 +1214,14 @@ macos_load_game_code(MacOSGameCode *game_code, char *file_name)
     }
 }
 
+
 int main(void)
 { 
     // srand(time(NULL));
     RandomSeries random_series = start_random_series(rand()); 
 
-    u32 thread_to_spawn_count = 8;
-    pthread_attr_t  attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    
     ThreadWorkQueue thread_work_queue = {};
-    thread_work_queue.add_thread_work_queue_item = macos_add_thread_work_item;
-    thread_work_queue.complete_all_thread_work_queue_items = macos_complete_all_thread_work_queue_items;
-
-    semaphore = dispatch_semaphore_create(0);
-
-    for(u32 thread_index = 0;
-            thread_index < thread_to_spawn_count;
-            ++thread_index)
-    {
-        pthread_t ID = 0;
-        MacOSThread *thread = (MacOSThread *)malloc(sizeof(MacOSThread)); 
-
-        thread->ID = thread_index + 1; // 0th thread is the main thread
-        thread->queue = &thread_work_queue;
-
-        if(pthread_create(&ID, &attr, &thread_proc, (void *)thread) != 0)
-        {
-            // TODO(gh) Creating thread failed
-            assert(0);
-        }
-    }
-    pthread_attr_destroy(&attr);
-
-    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 0");
-    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 1");
-    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 2");
-    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 3");
-    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 4");
-    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 5");
-    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 6");
-    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 7");
-    macos_add_thread_work_item(&thread_work_queue, print_string, (void *)"hey! : 8");
-    macos_complete_all_thread_work_queue_items(&thread_work_queue);
+    initialize_thread_work_queue(&thread_work_queue, 8);
 
 #if 0
     // Testing font in macos...
@@ -1764,6 +1762,10 @@ int main(void)
     }
 #endif
 
+    // TODO(gh) To avoid multi threading chaos, we are limiting the thread count to 1
+    ThreadWorkQueue gpu_work_queue = {};
+    initialize_thread_work_queue(&gpu_work_queue, 1, (void *)&metal_render_context);
+
     PlatformInput platform_input = {};
 
     PlatformRenderPushBuffer platform_render_push_buffer = {};
@@ -1821,7 +1823,7 @@ int main(void)
             if(macos_get_last_modified_time(game_code_path) != macos_game_code.last_modified_time)
             {
                 // TODO(gh)Do we need to do this?
-                macos_complete_all_thread_work_queue_items(&thread_work_queue);
+                macos_complete_all_thread_work_queue_items(&thread_work_queue, true);
                 macos_load_game_code(&macos_game_code, game_code_path);
             }
         }

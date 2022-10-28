@@ -58,6 +58,9 @@ struct PlatformAPI
     platform_write_entire_file *write_entire_file;
     platform_free_file_memory *free_file_memory;
 
+    // platform_atomic_compare_and_exchange32() *atomic_compare_and_exchange32;
+    // platform_atomic_compare_and_exchange64() *atomic_compare_and_exchange64;
+
     platform_allocate_and_acquire_texture2D_handle *allocate_and_acquire_texture2D_handle;
     platform_write_to_entire_texture2D *write_to_entire_texture2D;
 
@@ -67,8 +70,8 @@ struct PlatformAPI
     platform_allocate_and_acquire_buffer_handle *allocate_and_acquire_buffer_handle;
     platform_write_to_entire_buffer *write_to_entire_buffer;
 
-    // platform_atomic_compare_and_exchange32() *atomic_compare_and_exchange32;
-    // platform_atomic_compare_and_exchange64() *atomic_compare_and_exchange64;
+    // GPU operations
+    // TODO(gh) Do we wanna put these here, or do we wanna move into seperate place?
 };
 
 struct PlatformInput
@@ -245,24 +248,32 @@ u64 rdtsc(void)
 	return val;
 }
 
-// TODO(gh) multi thread this!
-
 #define PLATFORM_DEBUG_PRINT_CYCLE_COUNTERS(name) void (name)(debug_cycle_counter *debug_cycle_counters)
 
 struct ThreadWorkQueue;
 #define THREAD_WORK_CALLBACK(name) void name(void *data)
 typedef THREAD_WORK_CALLBACK(ThreadWorkCallback);
 
+// TODO(gh) Good idea?
+enum GPUWorkType
+{
+    GPUWorkType_Null,
+};
+
 // TODO(gh) task_with_memory
 struct ThreadWorkItem
 {
-    ThreadWorkCallback *callback; // callback to the function that we wanna execute
+    union
+    {
+        ThreadWorkCallback *callback; // callback to the function that we wanna execute
+        GPUWorkType gpu_work_type;
+    };
     void *data;
 
     b32 written; // indicates whether this item is properly filled or not
 };
 
-#define PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(name) void name(ThreadWorkQueue *queue)
+#define PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(name) void name(ThreadWorkQueue *queue, b32 main_thread_should_do_work)
 typedef PLATFORM_COMPLETE_ALL_THREAD_WORK_QUEUE_ITEMS(platform_complete_all_thread_work_queue_items);
 
 #define PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(name) void name(ThreadWorkQueue *queue, ThreadWorkCallback *thread_work_callback, void *data)
@@ -272,6 +283,8 @@ typedef PLATFORM_ADD_THREAD_WORK_QUEUE_ITEM(platform_add_thread_work_queue_item)
 // causing writeItem == readItem
 struct ThreadWorkQueue
 {
+    void *semaphore;
+
     // NOTE(gh) : volatile forces the compiler not to optimize the value out, and always to the load(as other thread can change it)
     // NOTE(gh) These two just increments, and the function is responsible for doing the modular 
     int volatile work_index; // index to the queue that is currently under work
@@ -282,7 +295,9 @@ struct ThreadWorkQueue
 
     ThreadWorkItem items[1024];
 
-    // TODO(gh) Maybe put this in other place
+    // TODO(gh) Not every queue has this!
+    void *render_context;
+
     // now this can be passed onto other codes, such as seperate game code to be used as rendering 
     platform_add_thread_work_queue_item *add_thread_work_queue_item;
     platform_complete_all_thread_work_queue_items * complete_all_thread_work_queue_items;
