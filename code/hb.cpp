@@ -220,44 +220,33 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     // NOTE(gh) Fluid simulation
     // TODO(gh) Do wee need to add source to the density, too?
     FluidCube *fluid_cube = &game_state->fluid_cube;
-    local_persist b32 added_density = false;
     
     zero_memory(fluid_cube->v_x_source, fluid_cube->stride);
     zero_memory(fluid_cube->v_y_source, fluid_cube->stride);
     zero_memory(fluid_cube->v_z_source, fluid_cube->stride);
-    zero_memory(fluid_cube->density_source, fluid_cube->stride);
     //if(((u32)platform_input->time_elasped_from_start) % 4 == 0)
+    u32 center_x = fluid_cube->cell_count.x/2;
+    u32 center_y = fluid_cube->cell_count.y/2;
+
+    for(i32 z = 1;
+            z < fluid_cube->cell_count.z - 1;
+            ++z)
     {
-        u32 center_x = fluid_cube->cell_count.x/2;
-        u32 center_y = fluid_cube->cell_count.y/2;
+        for(i32 y = 1;
+                y < 3;
+                ++y)
+       {
+            for(i32 x = 1;
+                    x < fluid_cube->cell_count.x - 1;
+                    ++x)
+            {
+                u32 ID = get_index(fluid_cube->cell_count, x, y, z);
 
-        for(i32 z = 1;
-                z < fluid_cube->cell_count.z - 1;
-                ++z)
-        {
-            for(i32 y = 1;
-                    y < 2;
-                    ++y)
-           {
-                for(i32 x = 1;
-                        x < fluid_cube->cell_count.x - 1;
-                        ++x)
-                {
-                    u32 ID = get_index(fluid_cube->cell_count, x, y, z);
-
-                    fluid_cube->v_x_source[ID] = 0;
-                    fluid_cube->v_y_source[ID] = 30;
-                    fluid_cube->v_z_source[ID] = 30;
-
-                    if(!added_density && (x == fluid_cube->cell_count.x/2) && 
-                        (z == fluid_cube->cell_count.z/2))
-                    {
-                        fluid_cube->density_source[ID] = 3;
-                    }
-                }
+                fluid_cube->v_x_source[ID] = 0;
+                fluid_cube->v_y_source[ID] = 10;
+                fluid_cube->v_z_source[ID] = 10;
             }
         }
-        
     }
 
     // NOTE(gh) At first, source holds the source force, and dest holds the previous value
@@ -272,17 +261,17 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
     swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
 
-    u32 diffuse_iter_count = 3;
+    u32 diffuse_iter_count = 1;
     for(u32 diffuse_iter = 0;
             diffuse_iter < diffuse_iter_count;
             ++diffuse_iter)
     {
         diffuse(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_yz);
+                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_NegateX);
         diffuse(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_zx);
+                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_NegateY);
         diffuse(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
+                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_NegateZ);
 
         swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
         swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
@@ -290,15 +279,25 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     advect(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_yz);
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateX);
     advect(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_zx);
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateY);
     advect(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_xy);
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateZ);
 
-    project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame);
-    validate_divergence(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->cell_count, fluid_cube->cell_dim);
+    // using density source as a temporary divergence buffer, which means modifying divergence source buffer
+    // should come after this!
+    project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame);
+    // validate_divergence(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->cell_count, fluid_cube->cell_dim);
 
+    zero_memory(fluid_cube->density_source, fluid_cube->stride);
+    local_persist b32 added_density = false;
+    if(!added_density && platform_input->time_elasped_from_start > 3)
+    {
+        fluid_cube->density_source[get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, fluid_cube->cell_count.y/2, fluid_cube->cell_count.z-2)] = 100;
+        added_density = true;
+    }
+    
 #if 0
     printf("%.6f, %.6f, %.6f\n", fluid_cube->v_x_dest[get_index(fluid_cube->cell_count, 1, 2, 1)],
                                  fluid_cube->v_y_dest[get_index(fluid_cube->cell_count, 1, 2, 1)],
@@ -311,7 +310,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     swap(fluid_cube->density_dest, fluid_cube->density_source);
 
     for(u32 diffuse_iter = 0;
-            diffuse_iter < 1;
+            diffuse_iter < diffuse_iter_count;
             ++diffuse_iter)
     {
         diffuse(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, 

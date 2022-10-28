@@ -103,53 +103,55 @@ add_source(f32 *dest, f32 *source, f32 *force, v3u cell_count, f32 dt)
 void set_boundary_values(f32 *dest, v3u cell_count, ElementTypeForBoundary element_type)
 {
     TIMED_BLOCK();
-    for(u32 cell_z = 1;
-            cell_z < cell_count.z-1;
+    
+    // NOTE(gh) We should flip X in two YZ planes where x == 0 || x == cell_count.x-1,
+    // but keep the other values same
+    for(u32 cell_z = 0;
+            cell_z < cell_count.z;
             ++cell_z)
     {
-        for(u32 cell_y = 1;
-                cell_y < cell_count.y-1;
+        for(u32 cell_y = 0;
+                cell_y < cell_count.y;
                 ++cell_y)
         {
-            for(u32 cell_x = 1;
-                    cell_x < cell_count.x-1;
-                    ++cell_x)
-            {
-                u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
-                switch(element_type)
-                {
-                    case ElementTypeForBoundary_xy:
-                    {
-                        dest[get_index(cell_count, cell_x, cell_y, 0)] = -dest[get_index(cell_count, cell_x, cell_y, 1)];
-                        dest[get_index(cell_count, cell_x, cell_y, cell_count.z-1)] = -dest[get_index(cell_count, cell_x, cell_y, cell_count.z-2)];
-                    }break;
+            dest[get_index(cell_count, 0, cell_y, cell_z)] = (element_type == ElementTypeForBoundary_NegateX) ?
+                -dest[get_index(cell_count, 1, cell_y, cell_z)] : dest[get_index(cell_count, 1, cell_y, cell_z)];
+            dest[get_index(cell_count, cell_count.x-1, cell_y, cell_z)] = (element_type == ElementTypeForBoundary_NegateX) ?
+                -dest[get_index(cell_count, cell_count.x-2, cell_y, cell_z)] : dest[get_index(cell_count, cell_count.x-2, cell_y, cell_z)];
+        }
+    }
 
-                    case ElementTypeForBoundary_yz:
-                    {
-                        dest[get_index(cell_count, 0, cell_y, cell_z)] = -dest[get_index(cell_count, 1, cell_y, cell_z)];
-                        dest[get_index(cell_count, cell_count.x-1, cell_y, cell_z)] = -dest[get_index(cell_count, cell_count.x-2, cell_y, cell_z)];
+    // NOTE(gh) We should flip Y in two XZ planes where y == 0 || y == cell_count.y-1
+    // but keep the other values same
+    for(u32 cell_z = 0;
+            cell_z < cell_count.z;
+            ++cell_z)
+    {
+        for(u32 cell_x = 0;
+                cell_x < cell_count.x;
+                ++cell_x)
+        {
+            dest[get_index(cell_count, cell_x, 0, cell_z)] = (element_type == ElementTypeForBoundary_NegateY) ?
+                -dest[get_index(cell_count, cell_x, 1, cell_z)] : dest[get_index(cell_count, cell_x, 1, cell_z)];
+            dest[get_index(cell_count, cell_x, cell_count.y-1, cell_z)] = (element_type == ElementTypeForBoundary_NegateY) ?
+                -dest[get_index(cell_count, cell_x, cell_count.y-2, cell_z)] : dest[get_index(cell_count, cell_x, cell_count.y-2, cell_z)];
+        }
+    }
 
-                    }break;
-
-                    case ElementTypeForBoundary_zx:
-                    {
-                        dest[get_index(cell_count, cell_x, 0, cell_z)] = -dest[get_index(cell_count, cell_x, 1, cell_z)];
-                        dest[get_index(cell_count, cell_x, cell_count.y-1, cell_z)] = -dest[get_index(cell_count, cell_x, cell_count.y-2, cell_z)];
-                    }break;
-
-                    case ElementTypeForBoundary_Continuous:
-                    {
-                        // TODO(gh) Original implementation doesn't seem to be doing this,
-                        // do we really need to do this?
-                        dest[get_index(cell_count, 0, cell_y, cell_z)] = dest[get_index(cell_count, 1, cell_y, cell_z)];
-                        dest[get_index(cell_count, cell_count.x-1, cell_y, cell_z)] = dest[get_index(cell_count, cell_count.x-2, cell_y, cell_z)];
-                        dest[get_index(cell_count, cell_x, 0, cell_z)] = dest[get_index(cell_count, cell_x, 1, cell_z)];
-                        dest[get_index(cell_count, cell_x, cell_count.y-1, cell_z)] = dest[get_index(cell_count, cell_x, cell_count.y-2, cell_z)];
-                        dest[get_index(cell_count, cell_x, cell_y, 0)] = dest[get_index(cell_count, cell_x, cell_y, 1)];
-                        dest[get_index(cell_count, cell_x, cell_y, cell_count.z-1)] = dest[get_index(cell_count, cell_x, cell_y, cell_count.z-2)];
-                    }break;
-                }
-            }
+    // NOTE(gh) We should flip Z in two XY planes where z == 0 || z == cell_count.z-1
+    // but keep the other values same
+    for(u32 cell_y = 0;
+            cell_y < cell_count.y;
+            ++cell_y)
+    {
+        for(u32 cell_x = 0;
+                cell_x < cell_count.x;
+                ++cell_x)
+        {
+            dest[get_index(cell_count, cell_x, cell_y, 0)] = (element_type == ElementTypeForBoundary_NegateZ) ?
+                -dest[get_index(cell_count, cell_x, cell_y, 1)] : dest[get_index(cell_count, cell_x, cell_y, 1)];
+            dest[get_index(cell_count, cell_x, cell_y, cell_count.z-1)] = (element_type == ElementTypeForBoundary_NegateZ) ?
+                -dest[get_index(cell_count, cell_x, cell_y, cell_count.z-2)] : dest[get_index(cell_count, cell_x, cell_y, cell_count.z-2)];
         }
     }
 
@@ -203,11 +205,17 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                     cell_x < cell_count.x-1;
                     ++cell_x)
             {
+                if(cell_x == cell_count.x/2 && cell_z == cell_count.z/2 &&
+                    cell_y == 1)
+                {
+                    int a =1;
+                }
                 u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
 
                 v3 v = V3(v_x[ID], v_y[ID], v_z[ID]);
 
-                v3 cell_based_u = v / cell_dim;
+                //v3 cell_based_u = hadamard(v, V3(cell_count.x, cell_count.y, cell_count.z));
+                v3 cell_based_u = v/cell_dim;
 
                 v3 p_offset = dt*cell_based_u;
                 // TODO(gh) Original implementation doesn't do this, but shouldn't 
@@ -215,31 +223,31 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                 v3 p = V3(cell_x, cell_y, cell_z) - p_offset;
 
                 // clip p
-                if(p.x < 0.5f)
+                if(p.x < 1.5f)
                 {
-                    p.x = 0.5f;
+                    p.x = 1.5f;
                 }
-                else if(p.x > cell_count.x - 1.5f)
+                else if(p.x > cell_count.x - 2.5f)
                 {
-                    p.x = cell_count.x - 1.5f;
+                    p.x = cell_count.x - 2.5f;
                 }
 
-                if(p.y < 0.5f)
+                if(p.y < 1.5f)
                 {
-                    p.y = 0.5f;
+                    p.y = 1.5f;
                 }
-                else if(p.y > cell_count.y - 1.5f)
+                else if(p.y > cell_count.y - 2.5f)
                 {
-                    p.y = cell_count.y - 1.5f;
+                    p.y = cell_count.y - 2.5f;
                 }
                 
-                if(p.z < 0.5f)
+                if(p.z < 1.5f)
                 {
-                    p.z = 0.5f;
+                    p.z = 1.5f;
                 }
-                else if(p.z > cell_count.z - 1.5f)
+                else if(p.z > cell_count.z - 2.5f)
                 {
-                    p.z = cell_count.z - 1.5f;
+                    p.z = cell_count.z - 2.5f;
                 }
 
                 u32 x0 = (u32)p.x;
@@ -351,13 +359,33 @@ get_divergence(f32 *x, f32 *y, f32 *z, v3u cell_count, f32 cell_dim, u32 cell_x,
 // NOTE(gh) Project only works for vector components such as velocity,
 // and components like density should not use this routine.
 internal void
-project(f32 *x, f32 *y, f32 *z, f32 *pressures, v3u cell_count, f32 cell_dim, f32 dt)
+project(f32 *x, f32 *y, f32 *z, f32 *pressures, f32 *divergences, v3u cell_count, f32 cell_dim, f32 dt)
 {
     TIMED_BLOCK();
     zero_memory(pressures, sizeof(f32)*cell_count.x*cell_count.y*cell_count.z);
-    set_boundary_values(pressures, cell_count, ElementTypeForBoundary_Continuous);
 
     // First, get the divergence
+    for(u32 cell_z = 1;
+            cell_z < cell_count.z-1;
+            ++cell_z)
+    {
+        for(u32 cell_y = 1;
+                cell_y < cell_count.y-1;
+                ++cell_y)
+        {
+            for(u32 cell_x = 1;
+                    cell_x < cell_count.x-1;
+                    ++cell_x)
+            {
+                u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
+                
+                f32 divergence = get_divergence(x, y, z, cell_count, cell_dim, cell_x, cell_y, cell_z);
+                divergences[ID] = divergence;
+            }
+        }
+    }
+    set_boundary_values(divergences, cell_count, ElementTypeForBoundary_Continuous);
+
     for(u32 iter = 0;
             iter < 128; // requires 40 to 80 iteration to make the error unnoticable
             ++iter)
@@ -376,8 +404,6 @@ project(f32 *x, f32 *y, f32 *z, f32 *pressures, v3u cell_count, f32 cell_dim, f3
                 {
                     u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
                     
-                    f32 divergence = get_divergence(x, y, z, cell_count, cell_dim, cell_x, cell_y, cell_z);
-
                     f32 p_pos_x = pressures[get_index(cell_count, cell_x+1, cell_y, cell_z)];
                     f32 p_neg_x = pressures[get_index(cell_count, cell_x-1, cell_y, cell_z)];
 
@@ -387,6 +413,7 @@ project(f32 *x, f32 *y, f32 *z, f32 *pressures, v3u cell_count, f32 cell_dim, f3
                     f32 p_pos_z = pressures[get_index(cell_count, cell_x, cell_y, cell_z+1)];
                     f32 p_neg_z = pressures[get_index(cell_count, cell_x, cell_y, cell_z-1)];
 
+                    f32 divergence = divergences[ID];
                     // TODO(gh) Once this works, we can simplify this more
                     pressures[ID] = (p_pos_x+p_neg_x+p_pos_y+p_neg_y+p_pos_z+p_neg_z - divergence*cell_dim*cell_dim)/6;
                 }
@@ -428,9 +455,9 @@ project(f32 *x, f32 *y, f32 *z, f32 *pressures, v3u cell_count, f32 cell_dim, f3
             }
         }
     }
-    set_boundary_values(x, cell_count, ElementTypeForBoundary_yz);
-    set_boundary_values(y, cell_count, ElementTypeForBoundary_zx);
-    set_boundary_values(z, cell_count, ElementTypeForBoundary_xy);
+    set_boundary_values(x, cell_count, ElementTypeForBoundary_NegateX);
+    set_boundary_values(y, cell_count, ElementTypeForBoundary_NegateY);
+    set_boundary_values(z, cell_count, ElementTypeForBoundary_NegateZ);
 }
 
 internal void

@@ -37,9 +37,9 @@ enum ElementTypeForBoundary
     // These values require the boundary to be an exact negative value of the neighbor.
     // For example, v0jk.x = -v1jk.x, vi0k.y = -vi1k.y, and so one.
     // This counteracts the fluid from going outside the boundary.
-    ElementTypeForBoundary_xy, // should negate in xy plane(i.e z value)
-    ElementTypeForBoundary_yz,
-    ElementTypeForBoundary_zx,
+    ElementTypeForBoundary_NegateX, // should negate in xy plane(i.e z value)
+    ElementTypeForBoundary_NegateY,
+    ElementTypeForBoundary_NegateZ,
 
     // For these values, we are setting the same value as the neighbor.
     // For example, d0jk = d1jk
