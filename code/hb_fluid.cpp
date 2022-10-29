@@ -206,44 +206,30 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                     ++cell_x)
             {
                 u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
+                if(ID == get_index(cell_count, cell_count.x/2, 1, cell_count.z/2) &&
+                        element_type == ElementTypeForBoundary_Continuous)
+                {
+                    if(source[ID] != 0)
+                    {
+                        int a =1;
+                    }
+                }
 
                 v3 v = V3(v_x[ID], v_y[ID], v_z[ID]);
 
                 v3 cell_based_u = v/cell_dim;
 
                 v3 p_offset = dt*cell_based_u;
-                // TODO(gh) Original implementation doesn't do this,  
-                // but shouldn't we offset by 0.5f for xyz here, 
-                // because we need to start at the center of the cell?
+
+                // NOTE(gh) No need to add 0.5f here, we will gonna starting lerp from the bottom left corner anyway
+                // by casting (u32) to the position.
                 v3 p = V3(cell_x, cell_y, cell_z) - p_offset;
 
+                // TODO(gh) The range of clamping is different with the original implementation
                 // clip p
-                if(p.x < 0.5f)
-                {
-                    p.x = 0.5f;
-                }
-                else if(p.x > cell_count.x - 1.5f) // we need one cell worth of padding for indexing
-                {
-                    p.x = cell_count.x - 1.5f;
-                }
-
-                if(p.y < 0.5f)
-                {
-                    p.y = 0.5f;
-                }
-                else if(p.y > cell_count.y - 1.5f)
-                {
-                    p.y = cell_count.y - 1.5f;
-                }
-                
-                if(p.z < 0.5f)
-                {
-                    p.z = 0.5f;
-                }
-                else if(p.z > cell_count.z - 1.5f)
-                {
-                    p.z = cell_count.z - 1.5f;
-                }
+                p.x = clamp(0.0f, p.x, cell_count.x-2.f);
+                p.y = clamp(0.0f, p.y, cell_count.y-2.f);
+                p.z = clamp(0.0f, p.z, cell_count.z-2.f);
 
                 u32 x0 = (u32)p.x;
                 u32 x1 = x0+1;

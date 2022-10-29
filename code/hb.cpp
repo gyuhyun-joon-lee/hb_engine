@@ -102,9 +102,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
-        u32 fluid_cell_count_x = 32;
-        u32 fluid_cell_count_y = 32;
-        u32 fluid_cell_count_z = 16;
+        u32 fluid_cell_count_x = 12;
+        u32 fluid_cell_count_y = 12;
+        u32 fluid_cell_count_z = 12;
         initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
                             V3(0, 0, 0), fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 2, 3);
 
@@ -221,7 +221,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     // TODO(gh) Do wee need to add source to the density, too?
     FluidCube *fluid_cube = &game_state->fluid_cube;
     
-#if 0
+#if 1
     zero_memory(fluid_cube->v_x_source, fluid_cube->stride);
     zero_memory(fluid_cube->v_y_source, fluid_cube->stride);
     zero_memory(fluid_cube->v_z_source, fluid_cube->stride);
@@ -293,7 +293,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     zero_memory(fluid_cube->density_source, fluid_cube->stride);
     local_persist b32 added_density = false;
-    if(!added_density && platform_input->time_elasped_from_start > 8)
+    if(!added_density && platform_input->time_elasped_from_start > 1)
     {
         fluid_cube->density_source[get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, 1, fluid_cube->cell_count.z/2)] = 
             10000;
@@ -507,7 +507,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    b32 enable_ink_rendering = false;
+    b32 enable_ink_rendering = true;
     if(enable_ink_rendering)
     {
         for(u32 cell_z = 0;
