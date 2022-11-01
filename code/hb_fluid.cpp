@@ -23,9 +23,20 @@
    We try to find the diffusion value that when went back in time, becomes the diffusion value that we are holding.
 
    W3 -> W4 : Projection
+   Because we are advancing not entirely smoothly like in nature but in a fixed time stamp(dt), the result at this point
+   has divergence in it, which eventually makes the simulation unstable.
    From the Hodge decomposition, we know that w = u + gradient, which means we can get u when we know w and gradient.
    If we take the divergence on both sides, we get div(w) = div(u) + laplacian(pressure)
    By definition, divergence of zero-divergence vector field is 0, so div(w) = laplacian(pressure), which is also a poisson equation.
+*/
+
+/*
+   NOTE(gh)Terms used in fluid simulation
+   Gradient - vector that points at the higher value in scalar field.
+   For example, if point A has higer pressure than point B, the gradient vector will point from B to A(vector BA)
+   This is why the advection step in navier-stokes equation looks like : -(u*del)u, which means if the gradient vector is
+   in opposite direction, the point that we are calculating this equation will end up getting higher value(velocity, density..)
+   because the point with higer value will end replacing the current point in micro scale.
 */
 
 #define swap(ptr0, ptr1) {void *temp = (void*)(ptr0); ptr0 = ptr1; *(void **)(&ptr1) = temp;}
@@ -46,6 +57,7 @@ initialize_fluid_cube(FluidCube *fluid_cube, MemoryArena *arena, v3 left_bottom_
     fluid_cube->v_z = push_array(arena, f32, 2*fluid_cube->total_cell_count); 
     fluid_cube->densities = push_array(arena, f32, 2*fluid_cube->total_cell_count); 
     fluid_cube->pressures = push_array(arena, f32, fluid_cube->total_cell_count); 
+    fluid_cube->temp_buffer = push_array(arena, f32, fluid_cube->total_cell_count); 
 
     zero_memory(fluid_cube->v_x, 2*fluid_cube->stride);
     zero_memory(fluid_cube->v_y, 2*fluid_cube->stride);
@@ -189,7 +201,7 @@ void set_boundary_values(f32 *dest, v3u cell_count, ElementTypeForBoundary eleme
 }
 
 internal void
-advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32 cell_dim, f32 dt, ElementTypeForBoundary element_type)
+reverse_advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32 cell_dim, f32 dt, ElementTypeForBoundary element_type)
 {
     TIMED_BLOCK();
 
@@ -254,6 +266,100 @@ advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32
                 f32 lerp_xyz = lerp(lerp_y0, zf, lerp_y1);
 
                 dest[ID] = lerp_xyz; 
+            }
+        }
+    }
+
+    set_boundary_values(dest, cell_count, element_type);
+}
+
+internal void
+forward_advect(f32 *dest, f32 *source, f32 *temp, f32 *v_x, f32 *v_y, f32 *v_z, v3u cell_count, f32 cell_dim, f32 dt, ElementTypeForBoundary element_type)
+{
+    TIMED_BLOCK();
+    u32 stride =  sizeof(f32)*cell_count.x*cell_count.y*cell_count.z;
+    zero_memory(dest, stride);
+    zero_memory(temp, stride);
+    memcpy(temp, source, stride);
+
+    for(u32 cell_z = 1;
+            cell_z < cell_count.z-1;
+            ++cell_z)
+    {
+        for(u32 cell_y = 1;
+                cell_y < cell_count.y-1;
+                ++cell_y)
+        {
+            for(u32 cell_x = 1;
+                    cell_x < cell_count.x-1;
+                    ++cell_x)
+            {
+                u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
+                if(source[ID] != 0)
+                {
+                    int a= 1;
+                }
+                if(ID == get_index(cell_count, cell_count.x/2, 1, cell_count.z/2) &&
+                        element_type == ElementTypeForBoundary_Continuous)
+                {
+                    if(temp[ID] != 0)
+                    {
+                        int a =1;
+                    }
+                }
+
+                v3 v = V3(v_x[ID], v_y[ID], v_z[ID]);
+
+                v3 cell_based_u = v/cell_dim;
+
+                v3 p_offset = dt*cell_based_u;
+
+                // NOTE(gh) No need to add 0.5f here, we will gonna starting lerp from the bottom left corner anyway
+                // by casting (u32) to the position.
+                v3 p = V3(cell_x, cell_y, cell_z) + p_offset;
+
+                // TODO(gh) The range of clamping is different with the original implementation
+                // TODO(gh) Is the range still valid in forward advection?
+                p.x = clamp(0.0f, p.x, cell_count.x-2.f);
+                p.y = clamp(0.0f, p.y, cell_count.y-2.f);
+                p.z = clamp(0.0f, p.z, cell_count.z-2.f);
+
+                u32 x0 = (u32)p.x;
+                u32 x1 = x0+1;
+                f32 xf = p.x - x0;
+                f32 one_minus_xf = 1-xf;
+
+                u32 y0 = (u32)p.y;
+                u32 y1 = y0+1;
+                f32 yf = p.y - y0;
+                f32 one_minus_yf = 1-yf;
+
+                u32 z0 = (u32)p.z;
+                u32 z1 = z0+1;
+                f32 zf = p.z - z0;
+                f32 one_minus_zf = 1-zf;
+
+                // TODO(gh) once this works, we can simplify the math here
+                f32 value000 = xf*yf*zf*temp[ID];
+                f32 value100 = one_minus_xf*yf*zf*temp[ID];
+                f32 value010 = xf*one_minus_yf*zf*temp[ID];
+                f32 value110 = one_minus_xf*one_minus_yf*zf*temp[ID];
+                f32 value001 = xf*yf*one_minus_zf*temp[ID];
+                f32 value101 = one_minus_xf*yf*one_minus_zf*temp[ID];
+                f32 value011 = xf*one_minus_yf*one_minus_zf*temp[ID];
+                f32 value111 = one_minus_xf*one_minus_yf*one_minus_zf*temp[ID];
+#if 1
+                dest[get_index(cell_count, x0, y0, z0)] += value000;
+                dest[get_index(cell_count, x1, y0, z0)] += value100;
+                dest[get_index(cell_count, x0, y1, z0)] += value010;
+                dest[get_index(cell_count, x1, y1, z0)] += value110;
+                dest[get_index(cell_count, x0, y0, z1)] += value001;
+                dest[get_index(cell_count, x1, y0, z1)] += value101;
+                dest[get_index(cell_count, x0, y1, z1)] += value011;
+                dest[get_index(cell_count, x1, y1, z1)] += value111;
+#endif
+
+                temp[ID] = 0;
             }
         }
     }

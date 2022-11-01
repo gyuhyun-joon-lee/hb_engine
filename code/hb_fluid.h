@@ -21,6 +21,7 @@ struct FluidCube
     f32 *v_z;
     f32 *densities;
     f32 *pressures; // Used implicitly by the projection
+    f32 *temp_buffer; // Used for forward advection
      
     f32 *v_x_dest;
     f32 *v_x_source;

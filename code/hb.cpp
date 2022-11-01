@@ -221,7 +221,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     // TODO(gh) Do wee need to add source to the density, too?
     FluidCube *fluid_cube = &game_state->fluid_cube;
     
-#if 1
     zero_memory(fluid_cube->v_x_source, fluid_cube->stride);
     zero_memory(fluid_cube->v_y_source, fluid_cube->stride);
     zero_memory(fluid_cube->v_z_source, fluid_cube->stride);
@@ -257,7 +256,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     add_source(fluid_cube->v_x_dest, fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, platform_input->dt_per_frame);
     add_source(fluid_cube->v_y_dest, fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, platform_input->dt_per_frame);
     add_source(fluid_cube->v_z_dest, fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, platform_input->dt_per_frame);
-
     swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
     swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
     swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
@@ -273,20 +271,24 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_NegateY);
         diffuse(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
                 fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_NegateZ);
-
         swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
         swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
         swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
     }
 
-    advect(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateX);
-    advect(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateY);
-    advect(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateZ);
+    // advect only works in zero-divergence field
+    project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame);
 
-    // using density source as a temporary divergence buffer, which means modifying divergence source buffer
+#if 1
+    reverse_advect(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateX);
+    reverse_advect(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateY);
+    reverse_advect(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
+            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateZ);
+#endif
+
+    // using density source as a temporary divergence buffer, which means modifying density source 
     // should come after this!
     project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame);
     // validate_divergence(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->cell_count, fluid_cube->cell_dim);
@@ -295,8 +297,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     local_persist b32 added_density = false;
     if(!added_density && platform_input->time_elasped_from_start > 1)
     {
-        fluid_cube->density_source[get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, 1, fluid_cube->cell_count.z/2)] = 
-            10000;
+        u32 ID = get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, 1, fluid_cube->cell_count.z/2);
+        fluid_cube->density_source[ID] = 10000;
         added_density = true;
     }
     
@@ -319,9 +321,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
         swap(fluid_cube->density_dest, fluid_cube->density_source);
     }
-    
-    advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
+
+    reverse_advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
+                    fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
+#if 0
+    forward_advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->temp_buffer, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
+                    fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
 #endif
 
     // NOTE(gh) Frustum cull the grids
@@ -425,7 +430,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
-    b32 enable_fluid_arrow_rendering = false;
+    b32 enable_fluid_arrow_rendering = true;
 
     if(enable_fluid_arrow_rendering)
     {
@@ -526,7 +531,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     u32 ID = get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z);
 
                     f32 density = fluid_cube->density_dest[ID];
-                    assert(density >= 0);
+                    // assert(density >= 0);
 
                     f32 scale = clamp(0.0f, fluid_cube->cell_dim*density, 2.0f);
                     {
