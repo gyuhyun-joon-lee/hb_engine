@@ -130,6 +130,13 @@ struct v3u
     u32 z;
 };
 
+struct v3i
+{
+    i32 x;
+    i32 y;
+    i32 z;
+};
+
 struct v4
 {
     union

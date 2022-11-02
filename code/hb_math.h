@@ -492,6 +492,18 @@ V3u(u32 x, u32 y, u32 z)
     return result;
 }
 
+inline v3i
+V3i(i32 x, i32 y, i32 z)
+{
+    v3i result = {};
+
+    result.x = x;
+    result.y = y;
+    result.z = z;
+
+    return result;
+}
+
 inline v4
 V4(void)
 {

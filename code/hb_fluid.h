@@ -33,6 +33,7 @@ struct FluidCube
     f32 *density_source;
 };
 
+
 enum ElementTypeForBoundary
 {
     // These values require the boundary to be an exact negative value of the neighbor.
@@ -45,6 +46,26 @@ enum ElementTypeForBoundary
     // For these values, we are setting the same value as the neighbor.
     // For example, d0jk = d1jk
     ElementTypeForBoundary_Continuous,
+};
+
+// NOTE(gh) This is fluid cube using MAC grid, which is a grid that stores different quantities
+// in different locations. For example, we store pressure in the center of the grid, 
+// while storing velocities on the edge(or center of the face in 3D) of the grid.
+// (i.e store u on vertical edges, and v on horizontal edges in 2D)
+struct FluidCubeMAC
+{
+    v3 left_bottom_p;
+    v3i cell_count; // MAC does not store boundaries, we will explicitly handle the boundaries.
+    f32 cell_dim; // each cell is a uniform cube
+
+    f32 *v_x; // count : 2*z*y*(x+1)
+    f32 *v_y; // count : 2*z*(y+1)*x
+    f32 *v_z; // count : 2*(z+1)*y*x
+
+    f32 *pressures; // count : x*y*z, used implicitly by the projection
+    f32 *densities; // count : x*y*z
+
+    // We will also not store the viscosity, and depend on numerical diffusion due to forward euler
 };
 
 #endif

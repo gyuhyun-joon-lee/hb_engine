@@ -86,8 +86,10 @@ get_index(v3u cell_count, u32 cell_x, u32 cell_y, u32 cell_z)
 }
 
 // NOTE(gh) The source can be force, density, temperature... whatever you want the fluid to carry.
+// NOTE(gh) For velocity, remember that du/dt = ddp, because the change of velocity is acceleration.
+// This is why we need to multiply the ddp by dt and then add it to the resulting velocity.
 internal void
-add_source(f32 *dest, f32 *source, f32 *force, v3u cell_count, f32 dt)
+add_source(f32 *dest, f32 *source, f32 *ddp, v3u cell_count, f32 dt)
 {
     // NOTE(gh) Original implementation allows force to be applied to the boundary?
     for(u32 cell_z = 0;
@@ -104,7 +106,7 @@ add_source(f32 *dest, f32 *source, f32 *force, v3u cell_count, f32 dt)
             {
                 u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
 
-                dest[ID] = source[ID] + dt*force[ID];  
+                dest[ID] = source[ID] + dt*ddp[ID];  
             }
         }
     }
@@ -568,4 +570,448 @@ validate_divergence(f32 *x, f32 *y, f32 *z, v3u cell_count, f32 cell_dim)
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+internal void
+initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom_p, v3i cell_count, f32 cell_dim)
+{
+    cube->left_bottom_p = left_bottom_p;
+    cube->cell_count = cell_count;
+    cube->cell_dim = cell_dim;
+
+    cube->v_x = push_array(arena, f32, 2*(cell_count.x+1)*cell_count.y*cell_count.z);
+    cube->v_y = push_array(arena, f32, 2*cell_count.x*(cell_count.y+1)*cell_count.z);
+    cube->v_z = push_array(arena, f32, 2*cell_count.x*cell_count.y*(cell_count.z+1));
+    
+    cube->pressures = push_array(arena, f32, cell_count.x*cell_count.y*cell_count.z);
+    cube->densities = push_array(arena, f32, cell_count.x*cell_count.y*cell_count.z);
+}
+
+struct MACID
+{
+    // ID0 is smaller than ID1, no matter what axis that it's opertating on
+    i32 ID0;
+    i32 ID1;
+};
+
+// TODO(gh) Should double-check these functions
+internal MACID
+get_index_mac_x(i32 x, i32 y, i32 z, v3i cell_count)
+{
+    MACID result = {};
+    result.ID0 = cell_count.y*(cell_count.x+1)*z + (cell_count.x+1)*y + x;
+    result.ID1 = result.ID0+1;
+    return result;
+}
+
+internal MACID
+get_index_mac_y(i32 x, i32 y, i32 z, v3i cell_count)
+{
+    MACID result = {};
+    result.ID0 = cell_count.x*(cell_count.y+1)*z + (cell_count.y+1)*x + y;
+    result.ID1 = result.ID0+1;
+    return result;
+}
+
+internal MACID
+get_index_mac_z(i32 x, i32 y, i32 z, v3i cell_count)
+{
+    MACID result = {};
+    result.ID0 = cell_count.x*(cell_count.z+1)*y + (cell_count.z+1)*x + z;
+    result.ID1 = result.ID0+1;
+    return result;
+}
+
+internal i32
+get_index_mac_center(i32 x, i32 y, i32 z, v3i cell_count)
+{
+    i32 result = cell_count.x*cell_count.y*z + cell_count.x*y + x;
+    return result;
+}
+
+// NOTE(gh) 'input' depends on what quantity we are dealing with at the momemnt.
+// For velocity, it should be the acceleration(ddp), which will be multiplied by dt and added to the destination.
+// Recalling the momentum equation, the 'mass' of the fluid doesn't matter, because it gets cancelled out 
+// during getting du/dt
+internal void
+add_ddp(f32 *dest, f32 *source, f32 *input, v3i cell_count, v3i mac_offset, v3 cell_dim, u32 indicator)
+{
+    // Depending on x, y, and z, mac_offset should be (1,0,0),(0,1,0),(0,0,1) respectively
+    for(u32 z = 0;
+            z < cell_count.z;
+            ++z)
+    {
+        for(u32 y = 0;
+                y < cell_count.y;
+                ++y)
+        {
+            for(u32 x = 0;
+                    x < cell_count.x;
+                    ++x)
+            {
+                MACID macID = {};
+                switch(indicator)
+                {
+                    case 0:
+                    {
+                        macID = get_index_mac_x(x, y, z, cell_count);
+                    }break;
+
+                    case 1:
+                    {
+                        macID = get_index_mac_y(x, y, z, cell_count);
+                    }break;
+
+                    case 2:
+                    {
+                        macID = get_index_mac_z(x, y, z, cell_count);
+                    }break;
+
+                    default:
+                    {
+                        invalid_code_path;
+                    };
+                }
+
+                dest[macID.ID0] += 0.5f*input[macID.ID0];
+                dest[macID.ID1] += 0.5f*input[macID.ID1];
+            }
+        }
+    }
+}
+
+internal f32
+get_neighboring_pressure_with_boundary_condition(f32 *pressures, i32 center_x, i32 center_y, i32 center_z, v3i offset, v3i cell_count)
+{
+    f32 result = 0;
+
+    i32 x = center_x+offset.x;
+    i32 y = center_y+offset.y;
+    i32 z = center_z+offset.z;
+
+    b32 is_solid_wall = false;
+    if(x < 0 || x >= cell_count.x ||
+        y < 0 || y >= cell_count.y ||
+        z < 0 || z >= cell_count.z)
+    {
+        // TODO(gh) For now, we will assume that the fluid cube is 
+        // covered with solid walls for now(which sets the pressure to the center cell)
+        // but we should also handle free-space case, which will just set the pressure to 0.
+        is_solid_wall = true;
+    }
+
+    if(is_solid_wall)
+    {
+        // Set the pressure to the center P, which effectively negates 1 from the coefficient of center P in the equation
+        // (4 in 2D, 6 in 3D)
+        result = pressures[get_index_mac_center(x, y, z, cell_count)];
+    }
+    else
+    {
+        result = pressures[get_index_mac_center(x+offset.x, y+offset.y, z+offset.z, cell_count)];
+    }
+
+    return result;
+}
+
+enum BoundaryDirection
+{
+    BoundaryDirection_x, // u
+    BoundaryDirection_y, // v
+    BoundaryDirection_z, // w
+};
+
+// NOTE(gh) N-S mementum equation does have a pressure term (-delP/density),
+// but we don't know the pressure that will satisfy the continuity equation (divergence(u) = 0)
+// So we need to get the pressure, and subtract it from the result of the N-S equation
+internal void
+project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, 
+                                        f32 *pressures, f32 *temp_buffer,
+                                        v3i cell_count, f32 cell_dim, f32 dt, BoundaryDirection boundary_direction)
+{
+    // TODO(gh) For now, we will assume that the density is uniform across the board.
+    // Later, we would want to do something else(AKA smoke)
+    f32 density = 1;
+    zero_memory(pressures, sizeof(f32)*cell_count.x*cell_count.y*cell_count.z);
+    zero_memory(temp_buffer, sizeof(f32)*cell_count.x*cell_count.y*cell_count.z);
+
+    // As we know that divergence should be 0, we can express it in mac grid.
+    // Then, we can express each u or v with u(zero-div)= u(yes-div) - (density/dt)*gradient(P)
+    // This works even if the cell was occupied by a solid wall, because we can think
+    // of a solid wall having a 'ghost' pressure.
+    // The result looks like : P = ((-cell_dim*density/dt)*Divergence(u(yes-div)) + all of neighboring P)/6
+    for(i32 z = 0;
+            z < cell_count.z;
+            ++z)
+    {
+        for(i32 y = 0;
+                y < cell_count.y;
+                ++y)
+        {
+            for(i32 x = 0;
+                    x < cell_count.x;
+                    ++x)
+            {
+                MACID macID_x = get_index_mac_x(x, y, z, cell_count);
+                MACID macID_y = get_index_mac_y(x, y, z, cell_count);
+                MACID macID_z = get_index_mac_z(x, y, z, cell_count);
+
+                // TODO(gh) Replace all 0 with the solid wall velocity
+                // NOTE(gh) This is (-cell_dim*cell_dim*density/dt)*Divergence(u(yes-div)) - (cell_dim*density/dt)*(u - u)(soild-fluid or fluid-solid, depending on where the solid wall was located) 
+                // for each solid wall boundary)
+                f32 a = -(cell_dim*density/dt);
+                f32 rhs = a*(v_x[macID_x.ID1]-v_x[macID_x.ID0]+v_y[macID_y.ID1]-v_y[macID_y.ID0]+v_z[macID_z.ID1]-v_z[macID_z.ID0]); 
+                 
+                if(x == 0)
+                {
+                    rhs -= a*(v_x[macID_x.ID0] - 0);
+                }
+                else if(x == cell_count.x-1)
+                {
+                    rhs -= a*(0 - v_x[macID_y.ID1]);
+                }
+
+                if(y == 0)
+                {
+                    rhs -= a*(v_y[macID_y.ID0] - 0);
+                }
+                else if(y == cell_count.y-1)
+                {
+                    rhs -= a*(0 - v_y[macID_y.ID1]);
+                }
+
+                if(z == 0)
+                {
+                    rhs -= a * (v_z[macID_z.ID0] - 0);
+                }
+                else if(z == cell_count.z-1)
+                {
+                    rhs -= a*(0 - v_z[macID_z.ID1]);
+                }
+
+                temp_buffer[get_index_mac_center(x, y, z, cell_count)] = rhs;
+            }
+        }
+    }
+
+    // TODO(gh) We will stick with the basic Jacobi iteration for now, but we might wanna
+    // switch to a better and faster converging algorithm.
+    for(u32 iter = 0;
+            iter < 40;
+            ++iter)
+    {
+        for(i32 z = 0;
+                z < cell_count.z;
+                ++z)
+        {
+            for(i32 y = 0;
+                    y < cell_count.y;
+                    ++y)
+            {
+                for(i32 x = 0;
+                        x < cell_count.x;
+                        ++x)
+                {
+                    u32 centerID = get_index_mac_center(x, y, z, cell_count);
+                    pressures[centerID] = 
+                        (1.0f/6.0f)*(temp_buffer[centerID]+
+                                    get_neighboring_pressure_with_boundary_condition(pressures, x, y, z, V3i(1, 0, 0), cell_count) +
+                                    get_neighboring_pressure_with_boundary_condition(pressures, x, y, z, V3i(-1, 0, 0), cell_count) +
+                                    get_neighboring_pressure_with_boundary_condition(pressures, x, y, z, V3i(0, 1, 0), cell_count) +
+                                    get_neighboring_pressure_with_boundary_condition(pressures, x, y, z, V3i(0, -1, 0), cell_count) +
+                                    get_neighboring_pressure_with_boundary_condition(pressures, x, y, z, V3i(0, 0, 1), cell_count) +
+                                    get_neighboring_pressure_with_boundary_condition(pressures, x, y, z, V3i(0, 0, -1), cell_count));
+                }
+            }
+        }
+    }
+
+    // NOTE(gh) Do u(n+1) = u(n) - (density/dt)*divergence(P)
+    f32 c = (density/(dt*cell_dim));
+    for(i32 z = 0;
+            z < cell_count.z;
+            ++z)
+    {
+        for(i32 y = 0;
+                y < cell_count.y;
+                ++y)
+        {
+            for(i32 x = 0;
+                    x < cell_count.x;
+                    ++x)
+            {
+                // TODO(gh) For now, we assume the solid wall is not moving 
+                // later, we need to change this with the velocity of solid wall based on x, y, z direction
+                switch(boundary_direction)
+                {
+                    case BoundaryDirection_x:
+                    {
+                        MACID macID = get_index_mac_x(x, y, z, cell_count);
+                        if(x == 0)
+                        {
+                            // solid - fluid
+                            dest[macID.ID0] = 0;
+                        }
+                        else if(x == cell_count.x-1)
+                        {
+                            // fluid - solid
+                            dest[macID.ID1] = 0;
+                        }
+                        else
+                        {
+                            // We always(and only) set the dest with higher ID
+                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_index_mac_center(x+1,y,z,cell_count)]-pressures[get_index_mac_center(x,y,z,cell_count)]);
+                        }
+                    }break;
+
+                    case BoundaryDirection_y:
+                    {
+                        MACID macID = get_index_mac_y(x, y, z, cell_count);
+                        if(y == 0)
+                        {
+                            /*
+                               fluid
+                                 |
+                               solid
+                            */
+                            dest[macID.ID0] = 0;
+                        }
+                        else if(y == cell_count.y-1)
+                        {
+                            /*
+                               solid
+                                 |
+                               fluid
+                            */
+                            dest[macID.ID1] = 0;
+                        }
+                        else
+                        {
+                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_index_mac_center(x,y+1,z,cell_count)]-pressures[get_index_mac_center(x,y,z,cell_count)]);
+                        }
+                    }break;
+
+                    case BoundaryDirection_z:
+                    {
+                        MACID macID = get_index_mac_y(x, y, z, cell_count);
+                        if(z == 0)
+                        {
+                            dest[macID.ID0] = 0;
+                        }
+                        else if(z == cell_count.z-1)
+                        {
+                            dest[macID.ID1] = 0;
+                        }
+                        else
+                        {
+                            // NOTE(gh) u(n+1) = u(n) - (density/dt)*divergence(P)
+                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_index_mac_center(x,y,z+1,cell_count)]-pressures[get_index_mac_center(x,y,z,cell_count)]);
+                        }
+                    }break;
+                }
+            }
+        }
+    }
+}
+
+internal void
+advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3i cell_count, f32 cell_dim)
+{}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
