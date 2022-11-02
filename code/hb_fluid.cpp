@@ -956,15 +956,24 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                         MACID macID = get_index_mac_y(x, y, z, cell_count);
                         if(z == 0)
                         {
+                            /*
+                               fluid
+                                 |
+                               solid
+                            */
                             dest[macID.ID0] = 0;
                         }
                         else if(z == cell_count.z-1)
                         {
+                            /*
+                               solid
+                                 |
+                               fluid
+                            */
                             dest[macID.ID1] = 0;
                         }
                         else
                         {
-                            // NOTE(gh) u(n+1) = u(n) - (density/dt)*divergence(P)
                             dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_index_mac_center(x,y,z+1,cell_count)]-pressures[get_index_mac_center(x,y,z,cell_count)]);
                         }
                     }break;
@@ -976,7 +985,9 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
 
 internal void
 advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3i cell_count, f32 cell_dim)
-{}
+{
+    // TODO(gh) implement this!
+}
 
 
 
