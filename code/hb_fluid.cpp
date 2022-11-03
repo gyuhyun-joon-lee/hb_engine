@@ -842,7 +842,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
 {
     // TODO(gh) For now, we will assume that the density is uniform across the board.
     // Later, we would want to do something else(AKA smoke)
-    f32 density = 1;
+    f32 density = 997; // density of water
     zero_memory(pressures, sizeof(f32)*cell_count.x*cell_count.y*cell_count.z);
     zero_memory(temp_buffer, sizeof(f32)*cell_count.x*cell_count.y*cell_count.z);
 
@@ -1080,7 +1080,7 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
             {
                 v3 cell_rel_p = V3(x, y, z);
                 
-                // Adjust p inside the MAC grid
+                // Adjust p inside the cell depending on the type
                 switch(quantity_type)
                 {
                     case FluidQuantityType_x:
@@ -1140,7 +1140,7 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
 
                 // NOTE(gh) Because forward euler method is unstable, we use backtracking which guarantees 
                 // the stable result(but might not be accute)
-                // TODO(gh) Use RK3 instead of linear interpolation
+                // TODO(gh) Use RK3 instead of linear interpolation, but the performance might not be great.
                 v3 previous_p = cell_rel_p - dt*cell_rel_v; 
 
                 // TODO(gh) We are always clamping considering that we will be using cell centers for lerp,
@@ -1312,6 +1312,8 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
 internal void
 update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
 {
+    TIMED_BLOCK();
+
     TempMemory temp_memory = 
         start_temp_memory(arena, sizeof(f32)*cube->total_center_count);
     f32 *temp_buffer = push_array(&temp_memory, f32, cube->total_center_count);
@@ -1323,7 +1325,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
     
     local_persist f32 t = 0;
     local_persist b32 added_velocity = false;
-    if(t < 1000)
+    if(true)
     {
         for(i32 z = 0;
                 z < cube->cell_count.z;
@@ -1337,8 +1339,8 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
                         x < cube->cell_count.x;
                         ++x)
                 {
-#if 1
-                    add_input_to_center(cube->v_x_source, 30*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_x);
+#if 0
+                    add_input_to_center(cube->v_x_source, 5*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_x);
                     add_input_to_center(cube->v_y_source, 30*cosf(t), x, y, z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 30*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_z);
 #else
@@ -1409,6 +1411,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
     local_persist b32 added_density = false;
     if(!added_density)
     {
+        add_input_to_center(cube->density_source, 10000, cube->cell_count.x/2, 0, cube->cell_count.z/2, cube->cell_count, FluidQuantityType_Center);
         for(i32 z = 0;
                 z < cube->cell_count.z;
                 ++z)
@@ -1421,7 +1424,6 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
                         x < cube->cell_count.x;
                         ++x)
                 {
-                    add_input_to_center(cube->density_source, 100, x, y, z, cube->cell_count, FluidQuantityType_Center);
                 }
             }
         }
