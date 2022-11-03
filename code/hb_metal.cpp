@@ -483,17 +483,15 @@ metal_make_render_pipeline(id<MTLDevice> device,
     return result;
 }
 
-#if 0
-internal
-PLATFORM_WRITE_TO_ENTIRE_TEXTURE2D(metal_write_to_entire_texture2D)
+internal void
+metal_write_entire_texture2D(id<MTLTexture> texture_handle, void *source, i32 width, i32 height, i32 bytes_per_pixel)
 {
     MTLRegion region = MTLRegionMake2D(0, 0, width, height);
     [(id<MTLTexture>)texture_handle replaceRegion:region
           mipmapLevel:0
-            withBytes:src
+          withBytes:source
           bytesPerRow:width*bytes_per_pixel];
 }
-#endif
 
 // TODO(gh) Should we make this more general and merge with the texture3D path, 
 // or should we keep this for clarification?

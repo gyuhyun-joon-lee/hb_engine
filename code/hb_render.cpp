@@ -393,6 +393,7 @@ push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 colo
     entry->color = color;
 }
 
+
 // TODO(gh) Change this with textured quad? Because we have to have some kind of texture system
 // that is visible from the game code someday!
 internal void
@@ -446,6 +447,50 @@ push_arbitrary_mesh(PlatformRenderPushBuffer *render_push_buffer, v3 color, Vert
                                             render_push_buffer->combined_index_buffer_size,
                                             indices, sizeof(indices[0]) * index_count);
     entry->index_count = index_count; 
+}
+
+// TODO(gh) This is not an actual instanced rendering... XD
+internal RenderEntryArbitraryMesh *
+start_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer, v3 color)
+{
+    assert(render_push_buffer->recording_instanced_rendering == false);
+    render_push_buffer->recording_instanced_rendering = true;
+
+    RenderEntryArbitraryMesh *entry = push_render_element(render_push_buffer, RenderEntryArbitraryMesh);
+    entry->header.type = RenderEntryType_ArbitraryMesh;
+    entry->header.size = sizeof(*entry);
+    entry->color = color;
+
+    entry->vertex_buffer_offset = render_push_buffer->combined_vertex_buffer_used;
+    entry->index_buffer_offset = render_push_buffer->combined_index_buffer_used;
+
+    return entry;
+}
+
+internal void
+push_arbitrary_mesh_instance(PlatformRenderPushBuffer *render_push_buffer, RenderEntryArbitraryMesh *entry,
+                            VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+{
+    assert(render_push_buffer->recording_instanced_rendering == true);
+    push_data(render_push_buffer->combined_vertex_buffer, 
+              &render_push_buffer->combined_vertex_buffer_used, 
+              render_push_buffer->combined_vertex_buffer_size,
+              vertices, sizeof(vertices[0]) * vertex_count);
+
+    push_data(render_push_buffer->combined_index_buffer, 
+              &render_push_buffer->combined_index_buffer_used, 
+              render_push_buffer->combined_index_buffer_size,
+              indices, sizeof(indices[0]) * index_count);
+
+    entry->index_count += index_count; 
+    entry->instance_count++;
+}
+
+internal void
+end_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer)
+{
+    assert(render_push_buffer->recording_instanced_rendering == true);
+    render_push_buffer->recording_instanced_rendering = false;
 }
 
 

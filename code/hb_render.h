@@ -234,6 +234,10 @@ struct RenderEntryArbitraryMesh
     u32 vertex_buffer_offset;
     u32 index_buffer_offset;
     u32 index_count;
+
+    // NOTE(gh) Not actually used because we are not doing proper instanced rendering,
+    // but we will increment it for the record
+    u32 instance_count;
 }; 
 
 #endif

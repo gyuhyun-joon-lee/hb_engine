@@ -111,7 +111,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, 
                                     V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 2);
 
-        load_game_assets(&game_state->assets, platform_api, gpu_work_queue, platform_render_push_buffer->device);
+        load_game_assets(&game_state->assets, platform_api, gpu_work_queue);
         game_state->debug_fluid_force_z = 1;
 
         game_state->is_initialized = true;
@@ -438,10 +438,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
-    b32 enable_fluid_arrow_rendering = true;
+    b32 enable_fluid_arrow_rendering = false;
 
     if(enable_fluid_arrow_rendering)
     {
+        // start_instanced_rendering =;
         for(u32 cell_z = 0;
                 cell_z < fluid_cube->cell_count.z;
                 ++cell_z)
@@ -792,7 +793,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 
             // TODO(gh) Do we wanna keep this scale value?
             f32 scale = 0.5f;
-            // debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
+            debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
             //debug_text_line(platform_render_push_buffer, assets, "Togplil", top_left_rel_p_px, scale);
 
             debug_newline(&top_left_rel_p_px, scale, &assets->debug_font_asset);
@@ -801,7 +802,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
         }
     }
 
-#if 0 
+#if 1 
     {
         char buffer[512] = {};
         snprintf(buffer, array_count(buffer),

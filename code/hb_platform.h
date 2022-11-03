@@ -235,6 +235,7 @@ enum GPUWorkType
     GPUWorkType_AllocateBuffer,
     GPUWorkType_WriteEntireBuffer,
     GPUWorkType_AllocateTexture2D,
+    GPUWorkType_WriteEntireTexture2D,
 };
 struct ThreadAllocateBufferData
 {
@@ -251,6 +252,16 @@ struct ThreadWriteEntireBufferData
 struct ThreadAllocateTexture2DData
 {
     void **handle_to_populate;
+    i32 width;
+    i32 height;
+    i32 bytes_per_pixel;
+};
+struct ThreadWriteEntireTexture2D
+{
+    void *handle;
+
+    void *source;
+    
     i32 width;
     i32 height;
     i32 bytes_per_pixel;
@@ -307,8 +318,10 @@ struct ThreadWorkQueue
 // TODO(gh) Request(game code) - Give(platform layer) system?
 struct PlatformRenderPushBuffer
 {
+    // TODO(gh)
+    b32 recording_instanced_rendering;
+
     // NOTE(gh) provided by the platform layer
-    void *device; // TODO(gh) Not well thought-out concept
     i32 window_width;
     i32 window_height;
     f32 width_over_height; 

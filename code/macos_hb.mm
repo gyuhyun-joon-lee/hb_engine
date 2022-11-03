@@ -476,6 +476,13 @@ PLATFORM_DO_THREAD_WORK_ITEM(macos_do_gpu_work_item)
                     assert(*(d->handle_to_populate));
                 }break;
 
+                case GPUWorkType_WriteEntireTexture2D:
+                {
+                    ThreadWriteEntireTexture2D *d = (ThreadWriteEntireTexture2D *)item->data;
+                    assert(d->handle && d->source);
+                    metal_write_entire_texture2D((id<MTLTexture>)d->handle, d->source, d->width, d->height, d->bytes_per_pixel);
+                }break;
+
                 default:
                 {
                     invalid_code_path;
@@ -1856,8 +1863,6 @@ int main(void)
     platform_render_push_buffer.window_height = window_height;
     platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
 
-    platform_render_push_buffer.device = (void *)device;
-
     platform_render_push_buffer.combined_vertex_buffer = metal_render_context.combined_vertex_buffer.memory;
     platform_render_push_buffer.combined_vertex_buffer_size = metal_render_context.combined_vertex_buffer.size;
     platform_render_push_buffer.combined_index_buffer = metal_render_context.combined_index_buffer.memory;
@@ -1874,8 +1879,6 @@ int main(void)
     _debug_platform_render_push_buffer.window_width = window_width;
     _debug_platform_render_push_buffer.window_height = window_height;
     _debug_platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
-
-    _debug_platform_render_push_buffer.device = (void *)device;
 
     debug_platform_render_push_buffer = &_debug_platform_render_push_buffer;
 #endif 

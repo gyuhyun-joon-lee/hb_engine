@@ -7,11 +7,11 @@
 #include "stb_truetype.h"
 
 internal TextureAsset2D
-load_texture_asset(ThreadWorkQueue *gpu_work_queue, void *src, i32 width, i32 height, i32 bytes_per_pixel)
+load_texture_asset(ThreadWorkQueue *gpu_work_queue, void *source, i32 width, i32 height, i32 bytes_per_pixel)
 {
     TextureAsset2D result = {};
 
-    assert(src);
+    assert(source);
 
     // Allocate the space in GPU and get the handle
     ThreadAllocateTexture2DData allocate_texture2D_data = {};
@@ -23,6 +23,18 @@ load_texture_asset(ThreadWorkQueue *gpu_work_queue, void *src, i32 width, i32 he
     // Load the file into texture
     gpu_work_queue->add_thread_work_queue_item(gpu_work_queue, 0, GPUWorkType_AllocateTexture2D, &allocate_texture2D_data);
     gpu_work_queue->complete_all_thread_work_queue_items(gpu_work_queue, false);
+
+    ThreadWriteEntireTexture2D write_entire_texture2D_data = {};
+    write_entire_texture2D_data.handle = result.handle;
+    write_entire_texture2D_data.source = source;
+    write_entire_texture2D_data.width = width;
+    write_entire_texture2D_data.height = height;
+    write_entire_texture2D_data.bytes_per_pixel = bytes_per_pixel;
+
+    gpu_work_queue->add_thread_work_queue_item(gpu_work_queue, 0, GPUWorkType_WriteEntireTexture2D, &write_entire_texture2D_data);
+    gpu_work_queue->complete_all_thread_work_queue_items(gpu_work_queue, false);
+
+    assert(result.handle);
 
     return result;
 }
@@ -89,11 +101,10 @@ get_mesh_asset(GameAssets *asset, ThreadWorkQueue *gpu_work_queue, u32 *assetID,
 }
 
 internal void
-begin_load_font(LoadFontInfo *load_font_info, FontAsset *font_asset, const char *file_path, PlatformAPI *platform_api, void *device, u32 max_glyph_count, f32 desired_font_height_px)
+begin_load_font(LoadFontInfo *load_font_info, FontAsset *font_asset, const char *file_path, PlatformAPI *platform_api, u32 max_glyph_count, f32 desired_font_height_px)
 {
     load_font_info->font_asset = font_asset;
     load_font_info->font_asset->max_glyph_count = max_glyph_count;
-    load_font_info->device = device;
 
     PlatformReadFileResult font_data = platform_api->read_file(file_path);
     load_font_info->desired_font_height_px = desired_font_height_px;
@@ -188,7 +199,7 @@ add_glyph_asset(LoadFontInfo *load_font_info, ThreadWorkQueue *gpu_work_queue, u
 // TODO(gh) This is pretty much it when we need the mtldevice for resource allocations,
 // but can we abstract this even further?
 internal void
-load_game_assets(GameAssets *assets, PlatformAPI *platform_api, ThreadWorkQueue *gpu_work_queue, void *device)
+load_game_assets(GameAssets *assets, PlatformAPI *platform_api, ThreadWorkQueue *gpu_work_queue)
 {
 #if 0
     load_font("/Users/mekalopo/Library/Fonts/LiberationMono-Regular.ttf",
@@ -197,7 +208,7 @@ load_game_assets(GameAssets *assets, PlatformAPI *platform_api, ThreadWorkQueue 
     u32 max_glyph_count = 2048;
     LoadFontInfo load_font_info = {};
     begin_load_font(&load_font_info, &assets->debug_font_asset, 
-                    "/System/Library/Fonts/Supplemental/applemyungjo.ttf", platform_api, device,
+                    "/System/Library/Fonts/Supplemental/applemyungjo.ttf", platform_api, 
                     max_glyph_count, 128.0f);
     // space works just like other glyphs, but without any texture
     add_glyph_asset(&load_font_info, gpu_work_queue, ' ');
