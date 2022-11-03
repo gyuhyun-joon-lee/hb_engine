@@ -515,7 +515,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
 #if 1
-    b32 enable_ink_rendering = true;
+    b32 enable_ink_rendering = false;
     if(enable_ink_rendering)
     {
         for(u32 cell_z = 0;

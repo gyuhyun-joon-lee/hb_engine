@@ -1063,7 +1063,8 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
 {
     v3i cell_count = cube->cell_count; 
     f32 cell_dim = cube->cell_dim; 
-    // NOTE(gh) We are not gonna process the right(or top) most boundary to keep the same loop condition and
+
+    // NOTE(gh) right(or top) most boundary to keep the same loop condition is not getting processed
     // because it will be set by the boundary condition anyway.
     for(i32 z = 0;
             z < cell_count.z;
@@ -1180,7 +1181,7 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
                     x0--;
                     x1--;
                 }
-                f32 xf = lerp_p.x - x0;
+                f32 xf = clamp(0.0f, lerp_p.x - x0, 1.0f);
 
                 i32 y0 = (i32)lerp_p.y;
                 i32 y1 = y0 + 1;
@@ -1189,7 +1190,7 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
                     y0--;
                     y1--;
                 }
-                f32 yf = lerp_p.y - y0;
+                f32 yf = clamp(0.0f, lerp_p.y - y0, 1.0f);
 
                 i32 z0 = (i32)lerp_p.z;
                 i32 z1 = z0 + 1;
@@ -1198,15 +1199,10 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
                     z0--;
                     z1--;
                 }
-                f32 zf = lerp_p.z - z0;
+                f32 zf = clamp(0.0f, lerp_p.z - z0, 1.0f);
 
                 assert(x0 >= 0 && y0 >= 0 && z0 >= 0 &&
                         x1 < cell_count.x && y1 < cell_count.y && z1 < cell_count.z);
-
-                if(x == 0 && y == 0 && z == 0)
-                {
-                    int a = 1;
-                }
 
                 f32 center000 = flt_max; 
                 f32 center100 = flt_max; 
@@ -1276,7 +1272,9 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
                                   lerp(lerp(center000, xf, center100), 
                                   yf, 
                                   lerp(center010, xf, center110)),
-                             zf,
+
+                                  zf,
+
                                   lerp(lerp(center001, xf, center101), 
                                   yf, 
                                   lerp(center011, xf, center111)));
@@ -1339,7 +1337,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
                         x < cube->cell_count.x;
                         ++x)
                 {
-#if 0
+#if 1
                     add_input_to_center(cube->v_x_source, 30*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_x);
                     add_input_to_center(cube->v_y_source, 30*cosf(t), x, y, z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 30*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_z);
@@ -1454,7 +1452,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
                     ++x)
             {
                 f32 density = cube->densities[get_mac_index_center(x, y, z, cube->cell_count)];
-                assert(density >= 0 && density < 2000);
+                assert(density >= 0 && density < flt_max);
                 total_density += density;
             }
         }
