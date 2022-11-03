@@ -259,7 +259,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             ++z)
     {
         for(i32 y = 1;
-                y < 3;
+                y < 2;
                 ++y)
        {
             for(i32 x = 1;
