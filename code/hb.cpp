@@ -102,11 +102,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
-        u32 fluid_cell_count_x = 12;
-        u32 fluid_cell_count_y = 12;
-        u32 fluid_cell_count_z = 12;
+        i32 fluid_cell_count_x = 12;
+        i32 fluid_cell_count_y = 12;
+        i32 fluid_cell_count_z = 12;
         initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
                             V3(0, 0, 0), fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 2, 3);
+
+        initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, 
+                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 2);
 
         load_game_assets(&game_state->assets, platform_api, gpu_work_queue, platform_render_push_buffer->device);
         game_state->debug_fluid_force_z = 1;
@@ -217,6 +220,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
+#if 0
     // NOTE(gh) Fluid simulation
     // TODO(gh) Do wee need to add source to the density, too?
     FluidCube *fluid_cube = &game_state->fluid_cube;
@@ -328,6 +332,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     forward_advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->temp_buffer, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
                     fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
 #endif
+#endif
+
+    FluidCubeMAC *fluid_cube = &game_state->fluid_cube_mac;
+    update_fluid_cube(fluid_cube, &game_state->transient_arena, platform_input->dt_per_frame);
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
@@ -448,15 +456,15 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 {
                     v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f);
 
-                    f32 v_x = fluid_cube->v_x_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
-                    f32 v_y = fluid_cube->v_y_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
-                    f32 v_z = fluid_cube->v_z_dest[get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z)];
+                    f32 v_x = get_mac_center_value_x(fluid_cube->v_x_dest, cell_x, cell_y, cell_z, fluid_cube->cell_count);
+                    f32 v_y = get_mac_center_value_y(fluid_cube->v_y_dest, cell_x, cell_y, cell_z, fluid_cube->cell_count);
+                    f32 v_z = get_mac_center_value_z(fluid_cube->v_z_dest, cell_x, cell_y, cell_z, fluid_cube->cell_count);
 
                     v3 color = V3(0.5f, 0.5f, 0.5f);
 
                     f32 scale = 0.15f;
                     v3 v = V3(v_x, v_y, v_z);
-                    f32 v_scale = clamp(0.0f, length(v), 0.5f*fluid_cube->cell_dim);
+                    f32 v_scale = clamp(0.0f, length(v), 2.0f*fluid_cube->cell_dim);
                     v = normalize(v);
 
                     if(compare_with_epsilon(length_square(v), 0))
@@ -466,13 +474,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     else
                     {
                         color = abs(v);
-                    }
-
-                    if(cell_x == 0 || (cell_x == fluid_cube->cell_count.x-1) || 
-                            cell_y == 0 || (cell_y == fluid_cube->cell_count.y-1) ||
-                            cell_z == 0 || (cell_z == fluid_cube->cell_count.z-1))
-                    {
-                        color = V3(1, 0, 0);
                     }
 
                     // TODO(gh) Doesn't work when v == up vector, and what if the length of v is too small?
@@ -512,6 +513,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
+#if 0
     b32 enable_ink_rendering = true;
     if(enable_ink_rendering)
     {
@@ -572,6 +574,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
         }
     }
+#endif
 
 
     if(debug_platform_render_push_buffer)

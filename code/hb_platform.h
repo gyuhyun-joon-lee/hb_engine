@@ -134,10 +134,15 @@ start_memory_arena(void *base, size_t size, b32 should_be_zero = true)
 
 // TODO(gh) : Alignment might be an issue, always take account of that
 internal void *
-push_size(MemoryArena *memory_arena, size_t size, size_t alignment = 0)
+push_size(MemoryArena *memory_arena, size_t size, b32 should_be_no_temp_memory = true, size_t alignment = 0)
 {
     assert(size != 0);
-    assert(memory_arena->temp_memory_count == 0);
+
+    if(should_be_no_temp_memory)
+    {
+        assert(memory_arena->temp_memory_count == 0);
+    }
+
     assert(memory_arena->used <= memory_arena->total_size);
 
     void *result = (u8 *)memory_arena->base + memory_arena->used;
@@ -180,7 +185,7 @@ start_temp_memory(MemoryArena *memory_arena, size_t size, b32 should_be_zero = t
     result.total_size = size;
     result.memory_arena = memory_arena;
 
-    push_size(memory_arena, size);
+    push_size(memory_arena, size, false);
 
     memory_arena->temp_memory_count++;
     if(should_be_zero)

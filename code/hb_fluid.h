@@ -33,7 +33,6 @@ struct FluidCube
     f32 *density_source;
 };
 
-
 enum ElementTypeForBoundary
 {
     // These values require the boundary to be an exact negative value of the neighbor.
@@ -58,6 +57,10 @@ struct FluidCubeMAC
     v3i cell_count; // MAC does not store boundaries, we will explicitly handle the boundaries.
     f32 cell_dim; // each cell is a uniform cube
 
+    i32 total_x_count;
+    i32 total_y_count;
+    i32 total_z_count;
+
     f32 *v_x; // count : 2*z*y*(x+1)
     f32 *v_y; // count : 2*z*(y+1)*x
     f32 *v_z; // count : 2*(z+1)*y*x
@@ -65,7 +68,26 @@ struct FluidCubeMAC
     f32 *pressures; // count : x*y*z, used implicitly by the projection
     f32 *densities; // count : x*y*z
 
+    f32 *v_x_dest;
+    f32 *v_x_source;
+    f32 *v_y_dest;
+    f32 *v_y_source;
+    f32 *v_z_dest;
+    f32 *v_z_source;
+    f32 *density_dest;
+    f32 *density_source;
+
     // We will also not store the viscosity, and depend on numerical diffusion due to forward euler
+};
+
+// NOTE(gh) Also used for enforcing boundary
+// i.e if FluidQuantityType_x, pressure will be adjusted with a 'ghost' pressure for the left and right walls
+enum FluidQuantityType
+{
+    FluidQuantityType_Center, // density, temperature... 
+    FluidQuantityType_x, 
+    FluidQuantityType_y, 
+    FluidQuantityType_z,
 };
 
 #endif

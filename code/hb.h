@@ -30,6 +30,7 @@ struct GameState
     u32 grass_grid_count_y;
 
     FluidCube fluid_cube;
+    FluidCubeMAC fluid_cube_mac;
 
     u32 offset_x;
     f32 time_until_offset_x_inc;

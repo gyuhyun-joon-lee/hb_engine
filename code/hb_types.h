@@ -28,6 +28,9 @@ typedef double r64;
 #define Flt_Min FLT_MIN
 #define Flt_Max FLT_MAX
 
+#define flt_min FLT_MIN
+#define flt_max FLT_MAX
+
 #define U8_Max UINT8_MAX
 #define U16_Max UINT16_MAX
 #define U32_Max UINT32_MAX

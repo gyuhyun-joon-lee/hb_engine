@@ -639,12 +639,26 @@ initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom
     cube->cell_count = cell_count;
     cube->cell_dim = cell_dim;
 
-    cube->v_x = push_array(arena, f32, 2*(cell_count.x+1)*cell_count.y*cell_count.z);
-    cube->v_y = push_array(arena, f32, 2*cell_count.x*(cell_count.y+1)*cell_count.z);
-    cube->v_z = push_array(arena, f32, 2*cell_count.x*cell_count.y*(cell_count.z+1));
-    
+    cube->total_x_count = (cell_count.x+1)*cell_count.y*cell_count.z;
+    cube->total_y_count = cell_count.x*(cell_count.y+1)*cell_count.z;
+    cube->total_z_count = cell_count.x*cell_count.y*(cell_count.z+1);
+
+    cube->v_x = push_array(arena, f32, 2*cube->total_x_count);
+    cube->v_y = push_array(arena, f32, 2*cube->total_y_count);
+    cube->v_z = push_array(arena, f32, 2*cube->total_z_count);
     cube->pressures = push_array(arena, f32, cell_count.x*cell_count.y*cell_count.z);
     cube->densities = push_array(arena, f32, cell_count.x*cell_count.y*cell_count.z);
+    zero_memory(cube->v_x, sizeof(f32)*2*cube->total_x_count);
+    zero_memory(cube->v_y, sizeof(f32)*2*cube->total_y_count);
+    zero_memory(cube->v_z, sizeof(f32)*2*cube->total_z_count);
+
+    cube->v_x_dest = cube->v_x;
+    cube->v_x_source = cube->v_x_dest + cube->total_x_count;
+    cube->v_y_dest = cube->v_y;
+    cube->v_y_source = cube->v_y_dest + cube->total_y_count;
+    cube->v_z_dest = cube->v_z;
+    cube->v_z_source = cube->v_z_dest + cube->total_z_count;
+
 }
 
 struct MACID
@@ -656,7 +670,7 @@ struct MACID
 
 // TODO(gh) Should double-check these functions
 internal MACID
-get_index_mac_x(i32 x, i32 y, i32 z, v3i cell_count)
+get_mac_index_x(i32 x, i32 y, i32 z, v3i cell_count)
 {
     MACID result = {};
     result.ID0 = cell_count.y*(cell_count.x+1)*z + (cell_count.x+1)*y + x;
@@ -664,8 +678,18 @@ get_index_mac_x(i32 x, i32 y, i32 z, v3i cell_count)
     return result;
 }
 
+internal f32
+get_mac_center_value_x(f32 *x, i32 cell_x, i32 cell_y, i32 cell_z, v3i cell_count)
+{
+    MACID macID = get_mac_index_x(cell_x, cell_y, cell_z, cell_count);
+
+    f32 result = 0.5f*(x[macID.ID0] + x[macID.ID1]);
+
+    return result;
+}
+
 internal MACID
-get_index_mac_y(i32 x, i32 y, i32 z, v3i cell_count)
+get_mac_index_y(i32 x, i32 y, i32 z, v3i cell_count)
 {
     MACID result = {};
     result.ID0 = cell_count.x*(cell_count.y+1)*z + (cell_count.y+1)*x + y;
@@ -673,8 +697,18 @@ get_index_mac_y(i32 x, i32 y, i32 z, v3i cell_count)
     return result;
 }
 
+internal f32
+get_mac_center_value_y(f32 *y, i32 cell_x, i32 cell_y, i32 cell_z, v3i cell_count)
+{
+    MACID macID = get_mac_index_y(cell_x, cell_y, cell_z, cell_count);
+
+    f32 result = 0.5f*(y[macID.ID0] + y[macID.ID1]);
+
+    return result;
+}
+
 internal MACID
-get_index_mac_z(i32 x, i32 y, i32 z, v3i cell_count)
+get_mac_index_z(i32 x, i32 y, i32 z, v3i cell_count)
 {
     MACID result = {};
     result.ID0 = cell_count.x*(cell_count.z+1)*y + (cell_count.z+1)*x + z;
@@ -682,8 +716,18 @@ get_index_mac_z(i32 x, i32 y, i32 z, v3i cell_count)
     return result;
 }
 
+internal f32
+get_mac_center_value_z(f32 *z, i32 cell_x, i32 cell_y, i32 cell_z, v3i cell_count)
+{
+    MACID macID = get_mac_index_z(cell_x, cell_y, cell_z, cell_count);
+
+    f32 result = 0.5f*(z[macID.ID0] + z[macID.ID1]);
+
+    return result;
+}
+
 internal i32
-get_index_mac_center(i32 x, i32 y, i32 z, v3i cell_count)
+get_mac_index_center(i32 x, i32 y, i32 z, v3i cell_count)
 {
     i32 result = cell_count.x*cell_count.y*z + cell_count.x*y + x;
     return result;
@@ -694,49 +738,52 @@ get_index_mac_center(i32 x, i32 y, i32 z, v3i cell_count)
 // Recalling the momentum equation, the 'mass' of the fluid doesn't matter, because it gets cancelled out 
 // during getting du/dt
 internal void
-add_ddp(f32 *dest, f32 *source, f32 *input, v3i cell_count, v3i mac_offset, v3 cell_dim, u32 indicator)
+add_input_to_center(f32 *input, f32 value, i32 x, i32 y, i32 z, v3i cell_count, FluidQuantityType quantity_type)
 {
-    // Depending on x, y, and z, mac_offset should be (1,0,0),(0,1,0),(0,0,1) respectively
-    for(u32 z = 0;
-            z < cell_count.z;
-            ++z)
+    assert(x >= 0 && x < cell_count.x);
+    assert(y >= 0 && y < cell_count.y);
+    assert(z >= 0 && z < cell_count.z);
+
+    MACID macID = {};
+    switch(quantity_type)
     {
-        for(u32 y = 0;
-                y < cell_count.y;
-                ++y)
+        case FluidQuantityType_x:
         {
-            for(u32 x = 0;
-                    x < cell_count.x;
-                    ++x)
-            {
-                MACID macID = {};
-                switch(indicator)
-                {
-                    case 0:
-                    {
-                        macID = get_index_mac_x(x, y, z, cell_count);
-                    }break;
+            macID = get_mac_index_x(x, y, z, cell_count);
+            input[macID.ID0] += 0.5f*value;
+            input[macID.ID1] += 0.5f*value;
+        }break;
 
-                    case 1:
-                    {
-                        macID = get_index_mac_y(x, y, z, cell_count);
-                    }break;
+        case FluidQuantityType_y:
+        {
+            macID = get_mac_index_y(x, y, z, cell_count);
+            input[macID.ID0] += 0.5f*value;
+            input[macID.ID1] += 0.5f*value;
+        }break;
 
-                    case 2:
-                    {
-                        macID = get_index_mac_z(x, y, z, cell_count);
-                    }break;
+        case FluidQuantityType_z:
+        {
+            macID = get_mac_index_z(x, y, z, cell_count);
+            input[macID.ID0] += 0.5f*value;
+            input[macID.ID1] += 0.5f*value;
+        }break;
 
-                    default:
-                    {
-                        invalid_code_path;
-                    };
-                }
+        case FluidQuantityType_Center:
+        {
+            input[get_mac_index_center(x, y, z, cell_count)] += value;
+        };
+    }
+}
 
-                dest[macID.ID0] += 0.5f*input[macID.ID0];
-                dest[macID.ID1] += 0.5f*input[macID.ID1];
-            }
-        }
+internal void
+update_with_input(f32 *dest, f32 *source, f32 *input, u32 total_count, f32 dt)
+{
+    // NOTE(gh) input is guaranteed to be as large as source and dest
+    for(u32 i = 0;
+            i < total_count;
+            ++i)
+    {
+        dest[i] = source[i] + dt*input[i];
     }
 }
 
@@ -764,22 +811,16 @@ get_neighboring_pressure_with_boundary_condition(f32 *pressures, i32 center_x, i
     {
         // Set the pressure to the center P, which effectively negates 1 from the coefficient of center P in the equation
         // (4 in 2D, 6 in 3D)
-        result = pressures[get_index_mac_center(x, y, z, cell_count)];
+        result = pressures[get_mac_index_center(center_x, center_y, center_z, cell_count)];
     }
     else
     {
-        result = pressures[get_index_mac_center(x+offset.x, y+offset.y, z+offset.z, cell_count)];
+        result = pressures[get_mac_index_center(x, y, z, cell_count)];
     }
 
     return result;
 }
 
-enum BoundaryDirection
-{
-    BoundaryDirection_x, // u
-    BoundaryDirection_y, // v
-    BoundaryDirection_z, // w
-};
 
 // NOTE(gh) N-S mementum equation does have a pressure term (-delP/density),
 // but we don't know the pressure that will satisfy the continuity equation (divergence(u) = 0)
@@ -787,7 +828,7 @@ enum BoundaryDirection
 internal void
 project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, 
                                         f32 *pressures, f32 *temp_buffer,
-                                        v3i cell_count, f32 cell_dim, f32 dt, BoundaryDirection boundary_direction)
+                                        v3i cell_count, f32 cell_dim, f32 dt, FluidQuantityType quantity_type)
 {
     // TODO(gh) For now, we will assume that the density is uniform across the board.
     // Later, we would want to do something else(AKA smoke)
@@ -812,44 +853,53 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                     x < cell_count.x;
                     ++x)
             {
-                MACID macID_x = get_index_mac_x(x, y, z, cell_count);
-                MACID macID_y = get_index_mac_y(x, y, z, cell_count);
-                MACID macID_z = get_index_mac_z(x, y, z, cell_count);
+                MACID macID_x = get_mac_index_x(x, y, z, cell_count);
+                MACID macID_y = get_mac_index_y(x, y, z, cell_count);
+                MACID macID_z = get_mac_index_z(x, y, z, cell_count);
 
-                // TODO(gh) Replace all 0 with the solid wall velocity
                 // NOTE(gh) This is (-cell_dim*cell_dim*density/dt)*Divergence(u(yes-div)) - (cell_dim*density/dt)*(u - u)(soild-fluid or fluid-solid, depending on where the solid wall was located) 
                 // for each solid wall boundary)
                 f32 a = -(cell_dim*density/dt);
+                // simplified version of -(cell_dim*cell_dim*density/dt) * divergence;
                 f32 rhs = a*(v_x[macID_x.ID1]-v_x[macID_x.ID0]+v_y[macID_y.ID1]-v_y[macID_y.ID0]+v_z[macID_z.ID1]-v_z[macID_z.ID0]); 
                  
+                // TODO(gh) Set these properly when we have moving object
+                f32 solid_wall_x0 = 0;
+                f32 solid_wall_x1 = 0;
+                f32 solid_wall_y0 = 0;
+                f32 solid_wall_y1 = 0;
+                f32 solid_wall_z0 = 0;
+                f32 solid_wall_z1 = 0;
+                // If the neighboring cell was located at the boundary,
+                // we should set the 'ghost' pressure with the solid wall velocity
                 if(x == 0)
                 {
-                    rhs -= a*(v_x[macID_x.ID0] - 0);
+                    rhs -= a*(v_x[macID_x.ID0] - solid_wall_x0);
                 }
                 else if(x == cell_count.x-1)
                 {
-                    rhs -= a*(0 - v_x[macID_y.ID1]);
+                    rhs += a*(v_x[macID_y.ID1] - solid_wall_x1);
                 }
 
                 if(y == 0)
                 {
-                    rhs -= a*(v_y[macID_y.ID0] - 0);
+                    rhs -= a*(v_y[macID_y.ID0] - solid_wall_y0);
                 }
                 else if(y == cell_count.y-1)
                 {
-                    rhs -= a*(0 - v_y[macID_y.ID1]);
+                    rhs += a*(v_y[macID_y.ID1] - solid_wall_y1);
                 }
 
                 if(z == 0)
                 {
-                    rhs -= a * (v_z[macID_z.ID0] - 0);
+                    rhs -= a * (v_z[macID_z.ID0] - solid_wall_z0);
                 }
                 else if(z == cell_count.z-1)
                 {
-                    rhs -= a*(0 - v_z[macID_z.ID1]);
+                    rhs += a*(v_z[macID_z.ID1] - solid_wall_z1);
                 }
 
-                temp_buffer[get_index_mac_center(x, y, z, cell_count)] = rhs;
+                temp_buffer[get_mac_index_center(x, y, z, cell_count)] = rhs;
             }
         }
     }
@@ -872,7 +922,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                         x < cell_count.x;
                         ++x)
                 {
-                    u32 centerID = get_index_mac_center(x, y, z, cell_count);
+                    u32 centerID = get_mac_index_center(x, y, z, cell_count);
                     pressures[centerID] = 
                         (1.0f/6.0f)*(temp_buffer[centerID]+
                                     get_neighboring_pressure_with_boundary_condition(pressures, x, y, z, V3i(1, 0, 0), cell_count) +
@@ -886,8 +936,8 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
         }
     }
 
-    // NOTE(gh) Do u(n+1) = u(n) - (density/dt)*divergence(P)
-    f32 c = (density/(dt*cell_dim));
+    // NOTE(gh) Do u(n+1) = u(n) - (dt/density)*divergence(P)
+    f32 c = (dt/(density*cell_dim));
     for(i32 z = 0;
             z < cell_count.z;
             ++z)
@@ -900,43 +950,38 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                     x < cell_count.x;
                     ++x)
             {
+                f32 center_pressure = pressures[get_mac_index_center(x,y,z,cell_count)];
                 // TODO(gh) For now, we assume the solid wall is not moving 
                 // later, we need to change this with the velocity of solid wall based on x, y, z direction
-                switch(boundary_direction)
+                switch(quantity_type)
                 {
-                    case BoundaryDirection_x:
+                    case FluidQuantityType_x:
                     {
-                        MACID macID = get_index_mac_x(x, y, z, cell_count);
-                        if(x == 0)
-                        {
-                            // solid - fluid
-                            dest[macID.ID0] = 0;
-                        }
-                        else if(x == cell_count.x-1)
+                        MACID macID = get_mac_index_x(x, y, z, cell_count);
+
+                        if(x == cell_count.x-1)
                         {
                             // fluid - solid
                             dest[macID.ID1] = 0;
                         }
                         else
                         {
-                            // We always(and only) set the dest with higher ID
-                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_index_mac_center(x+1,y,z,cell_count)]-pressures[get_index_mac_center(x,y,z,cell_count)]);
+                            // We always(and only) set the dest with higher ID, so we need to explicitly set the left boundary
+                            if(x == 0)
+                            {
+                                // solid - fluid
+                                dest[macID.ID0] = 0;
+                            }
+
+                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x+1,y,z,cell_count)] - center_pressure);
                         }
                     }break;
 
-                    case BoundaryDirection_y:
+                    case FluidQuantityType_y:
                     {
-                        MACID macID = get_index_mac_y(x, y, z, cell_count);
-                        if(y == 0)
-                        {
-                            /*
-                               fluid
-                                 |
-                               solid
-                            */
-                            dest[macID.ID0] = 0;
-                        }
-                        else if(y == cell_count.y-1)
+                        MACID macID = get_mac_index_y(x, y, z, cell_count);
+
+                        if(y == cell_count.y-1)
                         {
                             /*
                                solid
@@ -947,23 +992,24 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                         }
                         else
                         {
-                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_index_mac_center(x,y+1,z,cell_count)]-pressures[get_index_mac_center(x,y,z,cell_count)]);
+                            if(y == 0)
+                            {
+                                /*
+                                   fluid
+                                   |
+                                   solid
+                                   */
+                                dest[macID.ID0] = 0;
+                            }
+                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x,y+1,z,cell_count)] - center_pressure);
                         }
                     }break;
 
-                    case BoundaryDirection_z:
+                    case FluidQuantityType_z:
                     {
-                        MACID macID = get_index_mac_y(x, y, z, cell_count);
-                        if(z == 0)
-                        {
-                            /*
-                               fluid
-                                 |
-                               solid
-                            */
-                            dest[macID.ID0] = 0;
-                        }
-                        else if(z == cell_count.z-1)
+                        MACID macID = get_mac_index_z(x, y, z, cell_count);
+
+                        if(z == cell_count.z-1)
                         {
                             /*
                                solid
@@ -974,7 +1020,16 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                         }
                         else
                         {
-                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_index_mac_center(x,y,z+1,cell_count)]-pressures[get_index_mac_center(x,y,z,cell_count)]);
+                            if(z == 0)
+                            {
+                                /*
+                                   fluid
+                                   |
+                                   solid
+                                   */
+                                dest[macID.ID0] = 0;
+                            }
+                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x,y,z+1,cell_count)] - center_pressure);
                         }
                     }break;
                 }
@@ -984,9 +1039,338 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
 }
 
 internal void
-advect(f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, v3i cell_count, f32 cell_dim)
+advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, f32 dt, FluidQuantityType quantity_type)
 {
-    // TODO(gh) implement this!
+    v3i cell_count = cube->cell_count; 
+    f32 cell_dim = cube->cell_dim; 
+    // NOTE(gh) We are not gonna process the right(or top) most boundary to keep the same loop condition and
+    // because it will be set by the boundary condition anyway.
+    for(i32 z = 0;
+            z < cell_count.z;
+            ++z)
+    {
+        for(i32 y = 0;
+                y < cell_count.y;
+                ++y)
+        {
+            for(i32 x = 0;
+                    x < cell_count.x;
+                    ++x)
+            {
+                v3 cell_rel_p = V3(x, y, z);
+                
+                // Adjust p inside the MAC grid
+                switch(quantity_type)
+                {
+                    case FluidQuantityType_x:
+                    {
+                        cell_rel_p += V3(0, 0.5f, 0.5f);
+                    }break;
+                    
+                    case FluidQuantityType_y:
+                    {
+                        cell_rel_p += V3(0.5f, 0, 0.5f);
+                    }break;
+
+                    case FluidQuantityType_z:
+                    {
+                        cell_rel_p += V3(0.5f, 0.5f, 0);
+                    }break;
+
+                    case FluidQuantityType_Center:
+                    {
+                        cell_rel_p += V3(0.5f, 0.5f, 0.5f);
+                    }break;
+                }
+
+                MACID macID_x = get_mac_index_x(x, y, z, cell_count);
+                f32 v_x0 = v_x[macID_x.ID0];
+                f32 v_x1 = v_x[macID_x.ID1];
+                MACID macID_y = get_mac_index_y(x, y, z, cell_count);
+                f32 v_y0 = v_y[macID_y.ID0];
+                f32 v_y1 = v_y[macID_y.ID1];
+                MACID macID_z = get_mac_index_z(x, y, z, cell_count);
+                f32 v_z0 = v_z[macID_z.ID0];
+                f32 v_z1 = v_z[macID_z.ID1];
+                    
+                v3 cell_rel_v = {};
+                switch(quantity_type)
+                {
+                    case FluidQuantityType_x:
+                    {
+                        cell_rel_v = V3(v_x0, 0.5f*(v_y0+v_y1), 0.5f*(v_z0+v_z1)) / cell_dim;
+                    }break;
+                    
+                    case FluidQuantityType_y:
+                    {
+                        cell_rel_v = V3(0.5f*(v_x0+v_x1), v_y0, 0.5f*(v_z0+v_z1)) / cell_dim;
+                    }break;
+
+                    case FluidQuantityType_z:
+                    {
+                        cell_rel_v = V3(0.5f*(v_x0+v_x1), 0.5f*(v_y0+v_y1), v_z0) / cell_dim;
+                    }break;
+
+                    case FluidQuantityType_Center:
+                    {
+                        cell_rel_v = V3(0.5f*(v_x0+v_x1), 0.5f*(v_y0+v_y1), 0.5f*(v_z0+v_z1)) / cell_dim;
+                    }break;
+                }
+
+                // NOTE(gh) Because forward euler method is unstable, we use backtracking which guarantees 
+                // the stable result(but might not be accute)
+                // TODO(gh) Use RK3 instead of linear interpolation
+                v3 previous_p = cell_rel_p - dt*cell_rel_v; 
+
+                // TODO(gh) We are always clamping considering that we will be using cell centers for lerp,
+                // but do we wanna clamp it differently based on x, y, z, and scalar?
+                if(previous_p.x < 0.5f)
+                {
+                    previous_p.x = 0.5f;
+                }
+                else if(previous_p.x > cell_count.x - 0.5f)
+                {
+                    previous_p.x = cell_count.x - 0.5f;
+                }
+
+                if(previous_p.y < 0.5f)
+                {
+                    previous_p.y = 0.5f;
+                }
+                else if(previous_p.y > cell_count.y - 0.5f)
+                {
+                    previous_p.y = cell_count.y - 0.5f;
+                }
+
+                if(previous_p.z < 0.5f)
+                {
+                    previous_p.z = 0.5f;
+                }
+                else if(previous_p.z > cell_count.z - 0.5f)
+                {
+                    previous_p.z = cell_count.z - 0.5f;
+                }
+
+                // TODO(gh) This might produce slightly wrong value?
+                v3 lerp_p = previous_p - V3(0.5f, 0.5f, 0.5f);
+                i32 x0 = (i32)lerp_p.x;
+                i32 x1 = x0 + 1;
+                if(x1 == cell_count.x)
+                {
+                    x0--;
+                    x1--;
+                }
+                i32 xf = lerp_p.x - x0;
+
+                i32 y0 = (i32)lerp_p.y;
+                i32 y1 = y0 + 1;
+                i32 yf = lerp_p.y - y0;
+                if(y1 == cell_count.y)
+                {
+                    y0--;
+                    y1--;
+                }
+
+                i32 z0 = (i32)lerp_p.z;
+                i32 z1 = z0 + 1;
+                i32 zf = lerp_p.z - z0;
+                if(z1 == cell_count.z)
+                {
+                    z0--;
+                    z1--;
+                }
+
+                assert(x0 >= 0 && y0 >= 0 && z0 >= 0 &&
+                        x1 < cell_count.x && y1 < cell_count.y && z1 < cell_count.z);
+
+                f32 center000 = flt_max; 
+                f32 center100 = flt_max; 
+                f32 center010 = flt_max; 
+                f32 center110 = flt_max; 
+                f32 center001 = flt_max; 
+                f32 center101 = flt_max; 
+                f32 center011 = flt_max; 
+                f32 center111 = flt_max; 
+
+                switch(quantity_type)
+                {
+                    case FluidQuantityType_x:
+                    {
+                        center000 = get_mac_center_value_x(source, x0, y0, z0, cell_count); 
+                        center100 = get_mac_center_value_x(source, x1, y0, z0, cell_count); 
+                        center010 = get_mac_center_value_x(source, x0, y1, z0, cell_count); 
+                        center110 = get_mac_center_value_x(source, x1, y1, z0, cell_count); 
+
+                        center001 = get_mac_center_value_x(source, x0, y0, z1, cell_count); 
+                        center101 = get_mac_center_value_x(source, x1, y0, z1, cell_count); 
+                        center011 = get_mac_center_value_x(source, x0, y1, z1, cell_count); 
+                        center111 = get_mac_center_value_x(source, x1, y1, z1, cell_count); 
+                    }break;
+                    
+                    case FluidQuantityType_y:
+                    {
+                        center000 = get_mac_center_value_y(source, x0, y0, z0, cell_count); 
+                        center100 = get_mac_center_value_y(source, x1, y0, z0, cell_count); 
+                        center010 = get_mac_center_value_y(source, x0, y1, z0, cell_count); 
+                        center110 = get_mac_center_value_y(source, x1, y1, z0, cell_count); 
+
+                        center001 = get_mac_center_value_y(source, x0, y0, z1, cell_count); 
+                        center101 = get_mac_center_value_y(source, x1, y0, z1, cell_count); 
+                        center011 = get_mac_center_value_y(source, x0, y1, z1, cell_count); 
+                        center111 = get_mac_center_value_y(source, x1, y1, z1, cell_count); 
+                    }break;
+
+                    case FluidQuantityType_z:
+                    {
+                        center000 = get_mac_center_value_z(source, x0, y0, z0, cell_count); 
+                        center100 = get_mac_center_value_z(source, x1, y0, z0, cell_count); 
+                        center010 = get_mac_center_value_z(source, x0, y1, z0, cell_count); 
+                        center110 = get_mac_center_value_z(source, x1, y1, z0, cell_count); 
+
+                        center001 = get_mac_center_value_z(source, x0, y0, z1, cell_count); 
+                        center101 = get_mac_center_value_z(source, x1, y0, z1, cell_count); 
+                        center011 = get_mac_center_value_z(source, x0, y1, z1, cell_count); 
+                        center111 = get_mac_center_value_z(source, x1, y1, z1, cell_count); 
+                    }break;
+
+                    case FluidQuantityType_Center:
+                    {
+                        f32 q000 = source[get_mac_index_center(x0, y0, z0, cell_count)];
+                        f32 q100 = source[get_mac_index_center(x1, y0, z0, cell_count)];
+                        f32 q010 = source[get_mac_index_center(x0, y1, z0, cell_count)];
+                        f32 q110 = source[get_mac_index_center(x1, y1, z0, cell_count)];
+
+                        f32 q001 = source[get_mac_index_center(x0, y0, z1, cell_count)];
+                        f32 q101 = source[get_mac_index_center(x1, y0, z1, cell_count)];
+                        f32 q011 = source[get_mac_index_center(x0, y1, z1, cell_count)];
+                        f32 q111 = source[get_mac_index_center(x1, y1, z1, cell_count)];
+                    }break;
+                }
+
+                f32 lerp_value = lerp(
+                                  lerp(lerp(center000, xf, center100), 
+                                  yf, 
+                                  lerp(center010, xf, center110)),
+                             zf,
+                                  lerp(lerp(center001, xf, center101), 
+                                  yf, 
+                                  lerp(center011, xf, center111)));
+
+
+                // NOTE(gh) We will always fill ID0 for x, y, z quantity types. The last ID1 is at the boundary, 
+                // and will be overwrited by the boundary condition anyway.
+                switch(quantity_type)
+                {
+                    case FluidQuantityType_x:
+                    {
+                        dest[get_mac_index_x(x, y, z, cell_count).ID0] = lerp_value;
+                    }break;
+                    
+                    case FluidQuantityType_y:
+                    {
+                        dest[get_mac_index_y(x, y, z, cell_count).ID0] = lerp_value;
+                    }break;
+
+                    case FluidQuantityType_z:
+                    {
+                        dest[get_mac_index_z(x, y, z, cell_count).ID0] = lerp_value;
+                    }break;
+
+                    case FluidQuantityType_Center:
+                    {
+                        dest[get_mac_index_center(x, y, z, cell_count)] = lerp_value;
+                    }break;
+                }
+            }
+        }
+    }
+}
+
+internal void
+update_fluid_cube(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
+{
+    TempMemory temp_memory = 
+        start_temp_memory(arena, sizeof(f32)*cube->cell_count.x*cube->cell_count.y*cube->cell_count.z);
+    f32 *temp_buffer = push_array(&temp_memory, f32, cube->cell_count.x*cube->cell_count.y*cube->cell_count.z);
+
+    zero_memory(cube->v_x_source, sizeof(f32)*cube->total_x_count);
+    zero_memory(cube->v_y_source, sizeof(f32)*cube->total_y_count);
+    zero_memory(cube->v_z_source, sizeof(f32)*cube->total_z_count);
+    
+    local_persist f32 t = 0;
+
+    if(t < 1)
+    {
+        for(i32 z = 0;
+                z < cube->cell_count.z;
+                ++z)
+        {
+            for(i32 y = 2;
+                    y < 3;
+                    ++y)
+           {
+                for(i32 x = 0;
+                        x < cube->cell_count.x;
+                        ++x)
+                {
+#if 0
+                    add_input_to_center(cube->v_x_source, 0, x, y, z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_y_source, 30, x, y, z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_z_source, 30, x, y, z, cube->cell_count, FluidQuantityType_z);
+#endif
+                }
+            }
+        }
+
+        t += dt;
+    }
+
+    update_with_input(cube->v_x_dest, cube->v_x_dest, cube->v_x_source, cube->total_x_count, dt);
+    update_with_input(cube->v_y_dest, cube->v_y_dest, cube->v_y_source, cube->total_y_count, dt);
+    update_with_input(cube->v_z_dest, cube->v_z_dest, cube->v_z_source, cube->total_z_count, dt);
+
+    swap(cube->v_x_dest, cube->v_x_source);
+    swap(cube->v_y_dest, cube->v_y_source);
+    swap(cube->v_z_dest, cube->v_z_source);
+
+    project_and_enforce_boundary_condition(cube->v_x_dest, cube->v_x_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+                                            cube->pressures, temp_buffer,
+                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_x);
+
+    project_and_enforce_boundary_condition(cube->v_y_dest, cube->v_y_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+                                            cube->pressures, temp_buffer,
+                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_y);
+
+    project_and_enforce_boundary_condition(cube->v_z_dest, cube->v_z_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+                                            cube->pressures, temp_buffer,
+                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_z);
+    swap(cube->v_x_dest, cube->v_x_source);
+    swap(cube->v_y_dest, cube->v_y_source);
+    swap(cube->v_z_dest, cube->v_z_source);
+
+    advect(cube, cube->v_x_dest, cube->v_x_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+           dt, FluidQuantityType_x);
+    advect(cube, cube->v_y_dest, cube->v_y_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+           dt, FluidQuantityType_y);
+    advect(cube, cube->v_z_dest, cube->v_z_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+           dt, FluidQuantityType_z);
+    swap(cube->v_x_dest, cube->v_x_source);
+    swap(cube->v_y_dest, cube->v_y_source);
+    swap(cube->v_z_dest, cube->v_z_source);
+
+    project_and_enforce_boundary_condition(cube->v_x_dest, cube->v_x_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+                                            cube->pressures, temp_buffer,
+                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_x);
+
+    project_and_enforce_boundary_condition(cube->v_y_dest, cube->v_y_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+                                            cube->pressures, temp_buffer,
+                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_y);
+
+    project_and_enforce_boundary_condition(cube->v_z_dest, cube->v_z_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+                                            cube->pressures, temp_buffer,
+                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_z);
+
+    end_temp_memory(&temp_memory);
 }
 
 

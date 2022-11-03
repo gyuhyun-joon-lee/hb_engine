@@ -109,17 +109,23 @@ atan2_(r32 y, r32 x)
 }
 
 inline i32
-round_r32_to_i32(r32 value)
+round_f32_to_i32(f32 value)
 {
     // TODO(gh) : intrinsic?
     return (i32)roundf(value);
 }
 
 inline u32
-round_r32_to_u32(r32 value)
+round_f32_to_u32(f32 value)
 {
     // TODO(gh) : intrinsic?
     return (u32)roundf(value);
+}
+
+inline f32
+floor_f32(f32 value)
+{
+    return floorf(value);
 }
 
 inline r32
