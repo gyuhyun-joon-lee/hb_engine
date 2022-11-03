@@ -1963,7 +1963,7 @@ int main(void)
                 }
 
                 time_elasped_from_start += target_seconds_per_frame;
-                printf("%dms elasped, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
+                // printf("%dms elasped, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
                 // printf("CPU:%llu, GPU:%llu\n", metal_render_context.grass_rendering_end_timestamp.cpu - metal_render_context.grass_rendering_start_timestamp.cpu,
                                              // metal_render_context.grass_rendering_end_timestamp.gpu - metal_render_context.grass_rendering_start_timestamp.gpu);
             }

@@ -38,6 +38,32 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
    - If we are going to use the packed texture, how should we correctly sample from it in the shader?
    */
 
+internal void
+debug_print_total_density(FluidCube *fluid_cube)
+{
+    f32 total_density = 0;
+    for(u32 cell_z = 0;
+            cell_z < fluid_cube->cell_count.z;
+            ++cell_z)
+    {
+        for(u32 cell_y = 0;
+                cell_y < fluid_cube->cell_count.y;
+                ++cell_y)
+        {
+            for(u32 cell_x = 0;
+                    cell_x < fluid_cube->cell_count.x;
+                    ++cell_x)
+            {
+                u32 ID = get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z);
+                f32 density = fluid_cube->density_dest[ID];
+                total_density += density;
+            }
+        }
+    }
+
+    printf("%.5f\n", total_density);
+}
+
 extern "C" 
 GAME_UPDATE_AND_RENDER(update_and_render)
 {
@@ -310,6 +336,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     // density
     add_source(fluid_cube->density_dest, fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, platform_input->dt_per_frame);
+    printf("after adding source : ");
+    debug_print_total_density(fluid_cube);
 
     swap(fluid_cube->density_dest, fluid_cube->density_source);
 
@@ -319,11 +347,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         diffuse(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
                 fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
+        printf("after diffusion : ");
+        debug_print_total_density(fluid_cube);
         swap(fluid_cube->density_dest, fluid_cube->density_source);
     }
 
     reverse_advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
                     fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
+
+    printf("after advection : ");
+    debug_print_total_density(fluid_cube);
 #if 0
     forward_advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->temp_buffer, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
                     fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
@@ -512,6 +545,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
+    f32 total_density = 0;
     b32 enable_ink_rendering = true;
     if(enable_ink_rendering)
     {
@@ -529,8 +563,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 {
                     v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f);
                     u32 ID = get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z);
-
                     f32 density = fluid_cube->density_dest[ID];
+                    total_density += density;
                     // assert(density >= 0);
 
                     f32 scale = clamp(0.0f, fluid_cube->cell_dim*density, 2.0f);
