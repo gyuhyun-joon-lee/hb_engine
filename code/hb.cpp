@@ -463,20 +463,20 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
-    b32 enable_fluid_arrow_rendering = true;
 
+    b32 enable_fluid_arrow_rendering = true;
     if(enable_fluid_arrow_rendering)
     {
-        for(u32 cell_z = 0;
-                cell_z < fluid_cube->cell_count.z;
+        for(u32 cell_z = 1;
+                cell_z < fluid_cube->cell_count.z-1;
                 ++cell_z)
         {
-            for(u32 cell_y = 0;
-                    cell_y < fluid_cube->cell_count.y;
+            for(u32 cell_y = 1;
+                    cell_y < fluid_cube->cell_count.y-1;
                     ++cell_y)
             {
-                for(u32 cell_x = 0;
-                        cell_x < fluid_cube->cell_count.x;
+                for(u32 cell_x = 1;
+                        cell_x < fluid_cube->cell_count.x-1;
                         ++cell_x)
                 {
                     v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f);
@@ -489,7 +489,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                     f32 scale = 0.15f;
                     v3 v = V3(v_x, v_y, v_z);
-                    f32 v_scale = clamp(0.0f, length(v), 0.5f*fluid_cube->cell_dim);
+                    f32 v_scale = clamp(0.0f, length(v), 2.0f*fluid_cube->cell_dim);
                     v = normalize(v);
 
                     if(compare_with_epsilon(length_square(v), 0))
@@ -546,7 +546,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     f32 total_density = 0;
-    b32 enable_ink_rendering = true;
+    b32 enable_ink_rendering = false;
     if(enable_ink_rendering)
     {
         for(u32 cell_z = 0;
