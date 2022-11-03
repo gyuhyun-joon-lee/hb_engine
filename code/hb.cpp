@@ -335,7 +335,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #endif
 
     FluidCubeMAC *fluid_cube = &game_state->fluid_cube_mac;
-    update_fluid_cube(fluid_cube, &game_state->transient_arena, platform_input->dt_per_frame);
+    update_fluid_cube_mac(fluid_cube, &game_state->transient_arena, platform_input->dt_per_frame);
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
@@ -460,7 +460,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     f32 v_y = get_mac_center_value_y(fluid_cube->v_y_dest, cell_x, cell_y, cell_z, fluid_cube->cell_count);
                     f32 v_z = get_mac_center_value_z(fluid_cube->v_z_dest, cell_x, cell_y, cell_z, fluid_cube->cell_count);
 
-                    v3 color = V3(0.5f, 0.5f, 0.5f);
+                    v3 color = {};
 
                     f32 scale = 0.15f;
                     v3 v = V3(v_x, v_y, v_z);

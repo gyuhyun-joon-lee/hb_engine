@@ -646,8 +646,10 @@ initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom
     cube->v_x = push_array(arena, f32, 2*cube->total_x_count);
     cube->v_y = push_array(arena, f32, 2*cube->total_y_count);
     cube->v_z = push_array(arena, f32, 2*cube->total_z_count);
+
     cube->pressures = push_array(arena, f32, cell_count.x*cell_count.y*cell_count.z);
     cube->densities = push_array(arena, f32, cell_count.x*cell_count.y*cell_count.z);
+
     zero_memory(cube->v_x, sizeof(f32)*2*cube->total_x_count);
     zero_memory(cube->v_y, sizeof(f32)*2*cube->total_y_count);
     zero_memory(cube->v_z, sizeof(f32)*2*cube->total_z_count);
@@ -744,26 +746,25 @@ add_input_to_center(f32 *input, f32 value, i32 x, i32 y, i32 z, v3i cell_count, 
     assert(y >= 0 && y < cell_count.y);
     assert(z >= 0 && z < cell_count.z);
 
-    MACID macID = {};
     switch(quantity_type)
     {
         case FluidQuantityType_x:
         {
-            macID = get_mac_index_x(x, y, z, cell_count);
+            MACID macID = get_mac_index_x(x, y, z, cell_count);
             input[macID.ID0] += 0.5f*value;
             input[macID.ID1] += 0.5f*value;
         }break;
 
         case FluidQuantityType_y:
         {
-            macID = get_mac_index_y(x, y, z, cell_count);
+            MACID macID = get_mac_index_y(x, y, z, cell_count);
             input[macID.ID0] += 0.5f*value;
             input[macID.ID1] += 0.5f*value;
         }break;
 
         case FluidQuantityType_z:
         {
-            macID = get_mac_index_z(x, y, z, cell_count);
+            MACID macID = get_mac_index_z(x, y, z, cell_count);
             input[macID.ID0] += 0.5f*value;
             input[macID.ID1] += 0.5f*value;
         }break;
@@ -771,7 +772,7 @@ add_input_to_center(f32 *input, f32 value, i32 x, i32 y, i32 z, v3i cell_count, 
         case FluidQuantityType_Center:
         {
             input[get_mac_index_center(x, y, z, cell_count)] += value;
-        };
+        }break;
     }
 }
 
@@ -783,6 +784,10 @@ update_with_input(f32 *dest, f32 *source, f32 *input, u32 total_count, f32 dt)
             i < total_count;
             ++i)
     {
+        if(input[i] > 0.0f)
+        {
+            int a = 1;
+        }
         dest[i] = source[i] + dt*input[i];
     }
 }
@@ -973,6 +978,11 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                                 dest[macID.ID0] = 0;
                             }
 
+                            if(source[macID.ID1] > 0.0f)
+                            {
+                                int a = 1;
+                            }
+
                             dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x+1,y,z,cell_count)] - center_pressure);
                         }
                     }break;
@@ -1000,6 +1010,11 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                                    solid
                                    */
                                 dest[macID.ID0] = 0;
+                            }
+
+                            if(source[macID.ID1] > 0.0f)
+                            {
+                                int a = 1;
                             }
                             dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x,y+1,z,cell_count)] - center_pressure);
                         }
@@ -1287,36 +1302,36 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
 }
 
 internal void
-update_fluid_cube(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
+update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
 {
     TempMemory temp_memory = 
         start_temp_memory(arena, sizeof(f32)*cube->cell_count.x*cube->cell_count.y*cube->cell_count.z);
     f32 *temp_buffer = push_array(&temp_memory, f32, cube->cell_count.x*cube->cell_count.y*cube->cell_count.z);
 
+    // NOTE(gh) Dest holds the previous frame's data, so we will be using source as input buffer
     zero_memory(cube->v_x_source, sizeof(f32)*cube->total_x_count);
     zero_memory(cube->v_y_source, sizeof(f32)*cube->total_y_count);
     zero_memory(cube->v_z_source, sizeof(f32)*cube->total_z_count);
     
     local_persist f32 t = 0;
-
-    if(t < 1)
+    if(t < 100)
     {
         for(i32 z = 0;
                 z < cube->cell_count.z;
                 ++z)
         {
-            for(i32 y = 2;
-                    y < 3;
+            for(i32 y = 0;
+                    y < 1;
                     ++y)
            {
                 for(i32 x = 0;
                         x < cube->cell_count.x;
                         ++x)
                 {
-#if 0
-                    add_input_to_center(cube->v_x_source, 0, x, y, z, cube->cell_count, FluidQuantityType_x);
-                    add_input_to_center(cube->v_y_source, 30, x, y, z, cube->cell_count, FluidQuantityType_y);
-                    add_input_to_center(cube->v_z_source, 30, x, y, z, cube->cell_count, FluidQuantityType_z);
+#if 1
+                    add_input_to_center(cube->v_x_source, 30*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_y_source, 30*cosf(t), x, y, z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_z_source, 30*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_z);
 #endif
                 }
             }
@@ -1348,6 +1363,7 @@ update_fluid_cube(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
     swap(cube->v_y_dest, cube->v_y_source);
     swap(cube->v_z_dest, cube->v_z_source);
 
+#if 1
     advect(cube, cube->v_x_dest, cube->v_x_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
            dt, FluidQuantityType_x);
     advect(cube, cube->v_y_dest, cube->v_y_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
@@ -1370,6 +1386,7 @@ update_fluid_cube(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
                                             cube->pressures, temp_buffer,
                                             cube->cell_count, cube->cell_dim, dt, FluidQuantityType_z);
 
+#endif
     end_temp_memory(&temp_memory);
 }
 
