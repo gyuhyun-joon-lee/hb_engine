@@ -438,8 +438,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }break;
         }
     }
-    b32 enable_fluid_arrow_rendering = true;
 
+    b32 enable_fluid_arrow_rendering = true;
     if(enable_fluid_arrow_rendering)
     {
         // start_instanced_rendering =;
@@ -514,7 +514,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-#if 0
+#if 1
     b32 enable_ink_rendering = true;
     if(enable_ink_rendering)
     {
@@ -531,7 +531,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         ++cell_x)
                 {
                     v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f);
-                    u32 ID = get_index(fluid_cube->cell_count, cell_x, cell_y, cell_z);
+                    u32 ID = get_mac_index_center(cell_x, cell_y, cell_z, fluid_cube->cell_count);
 
                     f32 density = fluid_cube->density_dest[ID];
                     // assert(density >= 0);

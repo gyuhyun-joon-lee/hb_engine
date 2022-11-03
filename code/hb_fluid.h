@@ -57,9 +57,10 @@ struct FluidCubeMAC
     v3i cell_count; // MAC does not store boundaries, we will explicitly handle the boundaries.
     f32 cell_dim; // each cell is a uniform cube
 
-    i32 total_x_count;
-    i32 total_y_count;
-    i32 total_z_count;
+    i32 total_x_count; // z*y*(x+1)
+    i32 total_y_count; // z*(y+1)*x
+    i32 total_z_count; // (z+1)*y*x
+    i32 total_center_count; // x*y*z
 
     f32 *v_x; // count : 2*z*y*(x+1)
     f32 *v_y; // count : 2*z*(y+1)*x

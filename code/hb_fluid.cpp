@@ -642,17 +642,20 @@ initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom
     cube->total_x_count = (cell_count.x+1)*cell_count.y*cell_count.z;
     cube->total_y_count = cell_count.x*(cell_count.y+1)*cell_count.z;
     cube->total_z_count = cell_count.x*cell_count.y*(cell_count.z+1);
+    cube->total_center_count = cell_count.x*cell_count.y*cell_count.z;
 
     cube->v_x = push_array(arena, f32, 2*cube->total_x_count);
     cube->v_y = push_array(arena, f32, 2*cube->total_y_count);
     cube->v_z = push_array(arena, f32, 2*cube->total_z_count);
 
-    cube->pressures = push_array(arena, f32, cell_count.x*cell_count.y*cell_count.z);
-    cube->densities = push_array(arena, f32, cell_count.x*cell_count.y*cell_count.z);
+    cube->pressures = push_array(arena, f32, cube->total_center_count);
+    cube->densities = push_array(arena, f32, 2*cube->total_center_count);
 
     zero_memory(cube->v_x, sizeof(f32)*2*cube->total_x_count);
     zero_memory(cube->v_y, sizeof(f32)*2*cube->total_y_count);
     zero_memory(cube->v_z, sizeof(f32)*2*cube->total_z_count);
+    zero_memory(cube->densities, sizeof(f32)*2*cube->total_center_count);
+    zero_memory(cube->pressures, sizeof(f32)*cube->total_center_count);
 
     cube->v_x_dest = cube->v_x;
     cube->v_x_source = cube->v_x_dest + cube->total_x_count;
@@ -661,6 +664,8 @@ initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom
     cube->v_z_dest = cube->v_z;
     cube->v_z_source = cube->v_z_dest + cube->total_z_count;
 
+    cube->density_dest = cube->densities;
+    cube->density_source = cube->densities + cube->total_center_count;
 }
 
 struct MACID
@@ -1175,28 +1180,33 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
                     x0--;
                     x1--;
                 }
-                i32 xf = lerp_p.x - x0;
+                f32 xf = lerp_p.x - x0;
 
                 i32 y0 = (i32)lerp_p.y;
                 i32 y1 = y0 + 1;
-                i32 yf = lerp_p.y - y0;
                 if(y1 == cell_count.y)
                 {
                     y0--;
                     y1--;
                 }
+                f32 yf = lerp_p.y - y0;
 
                 i32 z0 = (i32)lerp_p.z;
                 i32 z1 = z0 + 1;
-                i32 zf = lerp_p.z - z0;
                 if(z1 == cell_count.z)
                 {
                     z0--;
                     z1--;
                 }
+                f32 zf = lerp_p.z - z0;
 
                 assert(x0 >= 0 && y0 >= 0 && z0 >= 0 &&
                         x1 < cell_count.x && y1 < cell_count.y && z1 < cell_count.z);
+
+                if(x == 0 && y == 0 && z == 0)
+                {
+                    int a = 1;
+                }
 
                 f32 center000 = flt_max; 
                 f32 center100 = flt_max; 
@@ -1250,15 +1260,15 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
 
                     case FluidQuantityType_Center:
                     {
-                        f32 q000 = source[get_mac_index_center(x0, y0, z0, cell_count)];
-                        f32 q100 = source[get_mac_index_center(x1, y0, z0, cell_count)];
-                        f32 q010 = source[get_mac_index_center(x0, y1, z0, cell_count)];
-                        f32 q110 = source[get_mac_index_center(x1, y1, z0, cell_count)];
+                        center000 = source[get_mac_index_center(x0, y0, z0, cell_count)];
+                        center100 = source[get_mac_index_center(x1, y0, z0, cell_count)];
+                        center010 = source[get_mac_index_center(x0, y1, z0, cell_count)];
+                        center110 = source[get_mac_index_center(x1, y1, z0, cell_count)];
 
-                        f32 q001 = source[get_mac_index_center(x0, y0, z1, cell_count)];
-                        f32 q101 = source[get_mac_index_center(x1, y0, z1, cell_count)];
-                        f32 q011 = source[get_mac_index_center(x0, y1, z1, cell_count)];
-                        f32 q111 = source[get_mac_index_center(x1, y1, z1, cell_count)];
+                        center001 = source[get_mac_index_center(x0, y0, z1, cell_count)];
+                        center101 = source[get_mac_index_center(x1, y0, z1, cell_count)];
+                        center011 = source[get_mac_index_center(x0, y1, z1, cell_count)];
+                        center111 = source[get_mac_index_center(x1, y1, z1, cell_count)];
                     }break;
                 }
 
@@ -1305,8 +1315,8 @@ internal void
 update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
 {
     TempMemory temp_memory = 
-        start_temp_memory(arena, sizeof(f32)*cube->cell_count.x*cube->cell_count.y*cube->cell_count.z);
-    f32 *temp_buffer = push_array(&temp_memory, f32, cube->cell_count.x*cube->cell_count.y*cube->cell_count.z);
+        start_temp_memory(arena, sizeof(f32)*cube->total_center_count);
+    f32 *temp_buffer = push_array(&temp_memory, f32, cube->total_center_count);
 
     // NOTE(gh) Dest holds the previous frame's data, so we will be using source as input buffer
     zero_memory(cube->v_x_source, sizeof(f32)*cube->total_x_count);
@@ -1314,7 +1324,8 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
     zero_memory(cube->v_z_source, sizeof(f32)*cube->total_z_count);
     
     local_persist f32 t = 0;
-    if(t < 100)
+    local_persist b32 added_velocity = false;
+    if(t < 1000)
     {
         for(i32 z = 0;
                 z < cube->cell_count.z;
@@ -1328,16 +1339,20 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
                         x < cube->cell_count.x;
                         ++x)
                 {
-#if 1
+#if 0
                     add_input_to_center(cube->v_x_source, 30*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_x);
                     add_input_to_center(cube->v_y_source, 30*cosf(t), x, y, z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 30*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_z);
+#else
+                    add_input_to_center(cube->v_x_source, 0, x, y, z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_y_source, 30, x, y, z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_z_source, 30, x, y, z, cube->cell_count, FluidQuantityType_z);
 #endif
                 }
             }
         }
 
-        t += dt;
+        added_velocity = true;
     }
 
     update_with_input(cube->v_x_dest, cube->v_x_dest, cube->v_x_source, cube->total_x_count, dt);
@@ -1359,11 +1374,11 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
     project_and_enforce_boundary_condition(cube->v_z_dest, cube->v_z_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
                                             cube->pressures, temp_buffer,
                                             cube->cell_count, cube->cell_dim, dt, FluidQuantityType_z);
+#if 1
     swap(cube->v_x_dest, cube->v_x_source);
     swap(cube->v_y_dest, cube->v_y_source);
     swap(cube->v_z_dest, cube->v_z_source);
 
-#if 1
     advect(cube, cube->v_x_dest, cube->v_x_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
            dt, FluidQuantityType_x);
     advect(cube, cube->v_y_dest, cube->v_y_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
@@ -1387,7 +1402,68 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
                                             cube->cell_count, cube->cell_dim, dt, FluidQuantityType_z);
 
 #endif
+
+    // NOTE(gh) The order of processing quantities is from the paper Real-Time Fluid Dynamics for Games from Jos Stam,
+    // which is velocity first and scalar quantities later.
+
+    zero_memory(cube->density_source, sizeof(f32)*cube->total_center_count);
+
+    local_persist b32 added_density = false;
+    if(!added_density)
+    {
+        for(i32 z = 0;
+                z < cube->cell_count.z;
+                ++z)
+        {
+            for(i32 y = 0;
+                    y < 1;
+                    ++y)
+           {
+                for(i32 x = 0;
+                        x < cube->cell_count.x;
+                        ++x)
+                {
+                    add_input_to_center(cube->density_source, 100, x, y, z, cube->cell_count, FluidQuantityType_Center);
+                }
+            }
+        }
+
+        added_density = true; 
+    }
+
+    // TODO(gh) How can the density be divergence-free, if we are not doing any projection?
+    update_with_input(cube->density_dest, cube->density_dest, cube->density_source, cube->total_center_count, dt);
+    // TODO(gh) Also, I don't think the total density gets preserved by this advection
+#if 1
+    swap(cube->density_dest, cube->density_source);
+    advect(cube, cube->density_dest, cube->density_source, cube->v_x_dest, cube->v_y_dest, cube->v_z_dest, 
+           dt, FluidQuantityType_Center);
+#endif
+
+    f32 total_density = 0;
+    for(i32 z = 0;
+            z < cube->cell_count.z;
+            ++z)
+    {
+        for(i32 y = 0;
+                y < cube->cell_count.y;
+                ++y)
+        {
+            for(i32 x = 0;
+                    x < cube->cell_count.x;
+                    ++x)
+            {
+                f32 density = cube->densities[get_mac_index_center(x, y, z, cube->cell_count)];
+                assert(density >= 0 && density < 2000);
+                total_density += density;
+            }
+        }
+    }
+
+    printf("Total Density : %.6f\n", total_density);
+
     end_temp_memory(&temp_memory);
+    t += dt;
 }
 
 
