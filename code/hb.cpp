@@ -104,7 +104,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 12;
         i32 fluid_cell_count_y = 12;
-        i32 fluid_cell_count_z = 12;
+        i32 fluid_cell_count_z = 8;
         initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
                             V3(0, 0, 0), fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 2, 3);
 
@@ -335,7 +335,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #endif
 
     FluidCubeMAC *fluid_cube = &game_state->fluid_cube_mac;
-    update_fluid_cube_mac(fluid_cube, &game_state->transient_arena, platform_input->dt_per_frame);
+    update_fluid_cube_mac(fluid_cube, &game_state->transient_arena, thread_work_queue, platform_input->dt_per_frame);
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1

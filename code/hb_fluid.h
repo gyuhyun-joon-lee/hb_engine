@@ -20,6 +20,7 @@ struct FluidCube
     f32 *v_y;
     f32 *v_z;
     f32 *densities;
+
     f32 *pressures; // Used implicitly by the projection
     f32 *temp_buffer; // Used for forward advection
      
@@ -66,8 +67,14 @@ struct FluidCubeMAC
     f32 *v_y; // count : 2*z*(y+1)*x
     f32 *v_z; // count : 2*(z+1)*y*x
 
-    f32 *pressures; // count : x*y*z, used implicitly by the projection
     f32 *densities; // count : x*y*z
+
+    f32 *pressure_x; // Used implicitly by the projection
+    f32 *temp_buffer_x; // Used for forward advection
+    f32 *pressure_y; // Used implicitly by the projection
+    f32 *temp_buffer_y; // Used for forward advection
+    f32 *pressure_z; // Used implicitly by the projection
+    f32 *temp_buffer_z; // Used for forward advection
 
     f32 *v_x_dest;
     f32 *v_x_source;

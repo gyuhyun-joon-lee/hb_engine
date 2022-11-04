@@ -648,14 +648,20 @@ initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom
     cube->v_y = push_array(arena, f32, 2*cube->total_y_count);
     cube->v_z = push_array(arena, f32, 2*cube->total_z_count);
 
-    cube->pressures = push_array(arena, f32, cube->total_center_count);
+    cube->pressure_x = push_array(arena, f32, cube->total_center_count);
+    cube->pressure_y = push_array(arena, f32, cube->total_center_count);
+    cube->pressure_z = push_array(arena, f32, cube->total_center_count);
+
+    cube->temp_buffer_x = push_array(arena, f32, cube->total_center_count);
+    cube->temp_buffer_y = push_array(arena, f32, cube->total_center_count);
+    cube->temp_buffer_z = push_array(arena, f32, cube->total_center_count);
+
     cube->densities = push_array(arena, f32, 2*cube->total_center_count);
 
     zero_memory(cube->v_x, sizeof(f32)*2*cube->total_x_count);
     zero_memory(cube->v_y, sizeof(f32)*2*cube->total_y_count);
     zero_memory(cube->v_z, sizeof(f32)*2*cube->total_z_count);
     zero_memory(cube->densities, sizeof(f32)*2*cube->total_center_count);
-    zero_memory(cube->pressures, sizeof(f32)*cube->total_center_count);
 
     cube->v_x_dest = cube->v_x;
     cube->v_x_source = cube->v_x_dest + cube->total_x_count;
@@ -840,11 +846,12 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                                         f32 *pressures, f32 *temp_buffer,
                                         v3i cell_count, f32 cell_dim, f32 dt, FluidQuantityType quantity_type)
 {
+    TIMED_BLOCK();
+    // IMPORTANT(gh) : pressures and temp buffer SHOULD be initialized to 0!!! 
+    
     // TODO(gh) For now, we will assume that the density is uniform across the board.
     // Later, we would want to do something else(AKA smoke)
     f32 density = 997; // density of water
-    zero_memory(pressures, sizeof(f32)*cell_count.x*cell_count.y*cell_count.z);
-    zero_memory(temp_buffer, sizeof(f32)*cell_count.x*cell_count.y*cell_count.z);
 
     // As we know that divergence should be 0, we can express it in mac grid.
     // Then, we can express each u or v with u(zero-div)= u(yes-div) - (density/dt)*gradient(P)
@@ -909,10 +916,16 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                     rhs += a*(v_z[macID_z.ID1] - solid_wall_z1);
                 }
 
+                if(x == cell_count.x/2 && y == cell_count.y/2 && z == cell_count.z/2)
+                {
+                    int a = 1;
+                }
+
                 temp_buffer[get_mac_index_center(x, y, z, cell_count)] = rhs;
             }
         }
     }
+
 
     // TODO(gh) We will stick with the basic Jacobi iteration for now, but we might wanna
     // switch to a better and faster converging algorithm.
@@ -945,7 +958,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
             }
         }
     }
-
+    
     // NOTE(gh) Do u(n+1) = u(n) - (dt/density)*divergence(P)
     f32 c = (dt/(density*cell_dim));
     for(i32 z = 0;
@@ -983,11 +996,6 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                                 dest[macID.ID0] = 0;
                             }
 
-                            if(source[macID.ID1] > 0.0f)
-                            {
-                                int a = 1;
-                            }
-
                             dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x+1,y,z,cell_count)] - center_pressure);
                         }
                     }break;
@@ -1017,10 +1025,6 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                                 dest[macID.ID0] = 0;
                             }
 
-                            if(source[macID.ID1] > 0.0f)
-                            {
-                                int a = 1;
-                            }
                             dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x,y+1,z,cell_count)] - center_pressure);
                         }
                     }break;
@@ -1061,6 +1065,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
 internal void
 advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z, f32 dt, FluidQuantityType quantity_type)
 {
+    TIMED_BLOCK();
     v3i cell_count = cube->cell_count; 
     f32 cell_dim = cube->cell_dim; 
 
@@ -1309,14 +1314,78 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
     }
 }
 
+struct ThreadFluidCubeWorkData
+{
+    FluidCubeMAC *fluid_cube;
+
+    i32 start_x;
+    i32 one_past_end_x;
+
+    i32 start_y;
+    i32 one_past_end_y;
+
+    i32 start_z;
+    i32 one_past_end_z;
+
+    f32 *source;
+    f32 *dest;
+
+    // Only holds how much item is gonna process,
+    // both need to be cleared to 0
+    f32 *pressure;
+    f32 *temp_buffer;
+
+    FluidQuantityType quantity_type;
+
+    f32 dt;
+};
+
+internal
+THREAD_WORK_CALLBACK(thread_project_and_enforce_boundary_condition_calllback)
+{
+    ThreadFluidCubeWorkData *d = (ThreadFluidCubeWorkData *)data;
+    FluidCubeMAC *cube = d->fluid_cube;
+
+    project_and_enforce_boundary_condition(d->dest, d->source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+            d->pressure, d->temp_buffer,
+            cube->cell_count, cube->cell_dim, d->dt, d->quantity_type);
+}
+
 internal void
-update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
+add_project_and_enforce_boundary_condition_work(ThreadWorkQueue *thread_work_queue, ThreadFluidCubeWorkData *data, 
+                                                FluidCubeMAC *cube, f32 *dest, f32 *source, 
+                                                f32 *pressure, f32 *temp_buffer, FluidQuantityType quantity_type, f32 dt)
+{
+
+    zero_memory(pressure, sizeof(f32)*cube->total_center_count);
+    zero_memory(temp_buffer, sizeof(f32)*cube->total_center_count);
+
+    // NOTE(gh) We can't divide this job any more, because the pressure buffer needs neighboring values to be coherent(jacobi iteration)
+    data->fluid_cube = cube;
+
+    data->dest = dest;
+    data->source = source;
+
+    data->pressure = pressure;
+    data->temp_buffer = temp_buffer; 
+
+    data->dt = dt;
+    data->quantity_type = quantity_type;
+
+#if 0
+    ThreadFluidCubeWorkData *d = data;
+    project_and_enforce_boundary_condition(d->dest, d->source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+            d->pressure, d->temp_buffer,
+            cube->cell_count, cube->cell_dim, d->dt, d->quantity_type);
+#endif
+
+    thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_project_and_enforce_boundary_condition_calllback, 0, (void *)data);
+}
+
+internal void
+update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *thread_work_queue, f32 dt)
 {
     TIMED_BLOCK();
-
-    TempMemory temp_memory = 
-        start_temp_memory(arena, sizeof(f32)*cube->total_center_count);
-    f32 *temp_buffer = push_array(&temp_memory, f32, cube->total_center_count);
 
     // NOTE(gh) Dest holds the previous frame's data, so we will be using source as input buffer
     zero_memory(cube->v_x_source, sizeof(f32)*cube->total_x_count);
@@ -1363,17 +1432,28 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
     swap(cube->v_y_dest, cube->v_y_source);
     swap(cube->v_z_dest, cube->v_z_source);
 
-    project_and_enforce_boundary_condition(cube->v_x_dest, cube->v_x_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
-                                            cube->pressures, temp_buffer,
-                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_x);
+    u32 work_count_x = 4;
+    u32 work_count_y = 4;
+    u32 work_count_z = 4;
+    u32 total_work_count = work_count_x*work_count_y*work_count_z;
 
-    project_and_enforce_boundary_condition(cube->v_y_dest, cube->v_y_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
-                                            cube->pressures, temp_buffer,
-                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_y);
+    TempMemory thread_work_data_temp_memory = 
+        start_temp_memory(arena, 3*sizeof(ThreadFluidCubeWorkData));
 
-    project_and_enforce_boundary_condition(cube->v_z_dest, cube->v_z_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
-                                            cube->pressures, temp_buffer,
-                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_z);
+    ThreadFluidCubeWorkData *fluid_work_data = 
+        push_array(&thread_work_data_temp_memory, ThreadFluidCubeWorkData, 3);
+
+    add_project_and_enforce_boundary_condition_work(thread_work_queue, fluid_work_data + 0, 
+                                                cube, cube->v_x_dest, cube->v_x_source, cube->pressure_x, cube->temp_buffer_x, 
+                                                FluidQuantityType_x, dt);
+    add_project_and_enforce_boundary_condition_work(thread_work_queue, fluid_work_data + 1, 
+                                                cube, cube->v_y_dest, cube->v_y_source, cube->pressure_y, cube->temp_buffer_y, 
+                                                FluidQuantityType_y, dt);
+    add_project_and_enforce_boundary_condition_work(thread_work_queue, fluid_work_data + 2, 
+                                                cube, cube->v_z_dest, cube->v_z_source, cube->pressure_z, cube->temp_buffer_z, 
+                                                FluidQuantityType_z, dt);
+    thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue, true);
+
 #if 1
     swap(cube->v_x_dest, cube->v_x_source);
     swap(cube->v_y_dest, cube->v_y_source);
@@ -1389,17 +1469,31 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
     swap(cube->v_y_dest, cube->v_y_source);
     swap(cube->v_z_dest, cube->v_z_source);
 
+#if 0
     project_and_enforce_boundary_condition(cube->v_x_dest, cube->v_x_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
-                                            cube->pressures, temp_buffer,
+                                            cube->pressure_x, cube->temp_buffer_x,
                                             cube->cell_count, cube->cell_dim, dt, FluidQuantityType_x);
 
     project_and_enforce_boundary_condition(cube->v_y_dest, cube->v_y_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
-                                            cube->pressures, temp_buffer,
+                                            cube->pressure_y, cube->temp_buffer_y,
                                             cube->cell_count, cube->cell_dim, dt, FluidQuantityType_y);
 
     project_and_enforce_boundary_condition(cube->v_z_dest, cube->v_z_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
-                                            cube->pressures, temp_buffer,
+                                            cube->pressure_z, cube->temp_buffer_z,
                                             cube->cell_count, cube->cell_dim, dt, FluidQuantityType_z);
+
+#else
+    add_project_and_enforce_boundary_condition_work(thread_work_queue, fluid_work_data + 0, 
+                                                cube, cube->v_x_dest, cube->v_x_source, cube->pressure_x, cube->temp_buffer_x, 
+                                                FluidQuantityType_x, dt);
+    add_project_and_enforce_boundary_condition_work(thread_work_queue, fluid_work_data + 1, 
+                                                cube, cube->v_y_dest, cube->v_y_source, cube->pressure_y, cube->temp_buffer_y, 
+                                                FluidQuantityType_y, dt);
+    add_project_and_enforce_boundary_condition_work(thread_work_queue, fluid_work_data + 2, 
+                                                cube, cube->v_z_dest, cube->v_z_source, cube->pressure_z, cube->temp_buffer_z, 
+                                                FluidQuantityType_z, dt);
+    thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue, true);
+#endif
 
 #endif
 
@@ -1460,9 +1554,9 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, f32 dt)
         }
     }
 
-    printf("Total Density : %.6f\n", total_density);
+    // printf("Total Density : %.6f\n", total_density);
 
-    end_temp_memory(&temp_memory);
+    end_temp_memory(&thread_work_data_temp_memory);
     t += dt;
 }
 
