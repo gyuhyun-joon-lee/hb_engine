@@ -1462,6 +1462,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                                                 FluidQuantityType_z, dt);
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue, true);
 #endif
+    //
 
 #if 1
     swap(cube->v_x_dest, cube->v_x_source);
