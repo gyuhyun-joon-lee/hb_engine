@@ -1432,17 +1432,25 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
     swap(cube->v_y_dest, cube->v_y_source);
     swap(cube->v_z_dest, cube->v_z_source);
 
-    u32 work_count_x = 4;
-    u32 work_count_y = 4;
-    u32 work_count_z = 4;
-    u32 total_work_count = work_count_x*work_count_y*work_count_z;
-
     TempMemory thread_work_data_temp_memory = 
         start_temp_memory(arena, 3*sizeof(ThreadFluidCubeWorkData));
 
     ThreadFluidCubeWorkData *fluid_work_data = 
         push_array(&thread_work_data_temp_memory, ThreadFluidCubeWorkData, 3);
 
+#if 0
+    project_and_enforce_boundary_condition(cube->v_x_dest, cube->v_x_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+                                            cube->pressure_x, cube->temp_buffer_x,
+                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_x);
+
+    project_and_enforce_boundary_condition(cube->v_y_dest, cube->v_y_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+                                            cube->pressure_y, cube->temp_buffer_y,
+                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_y);
+
+    project_and_enforce_boundary_condition(cube->v_z_dest, cube->v_z_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
+                                            cube->pressure_z, cube->temp_buffer_z,
+                                            cube->cell_count, cube->cell_dim, dt, FluidQuantityType_z);
+#else
     add_project_and_enforce_boundary_condition_work(thread_work_queue, fluid_work_data + 0, 
                                                 cube, cube->v_x_dest, cube->v_x_source, cube->pressure_x, cube->temp_buffer_x, 
                                                 FluidQuantityType_x, dt);
@@ -1453,6 +1461,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                                                 cube, cube->v_z_dest, cube->v_z_source, cube->pressure_z, cube->temp_buffer_z, 
                                                 FluidQuantityType_z, dt);
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue, true);
+#endif
 
 #if 1
     swap(cube->v_x_dest, cube->v_x_source);
@@ -1468,6 +1477,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
     swap(cube->v_x_dest, cube->v_x_source);
     swap(cube->v_y_dest, cube->v_y_source);
     swap(cube->v_z_dest, cube->v_z_source);
+#endif
 
 #if 0
     project_and_enforce_boundary_condition(cube->v_x_dest, cube->v_x_source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
@@ -1493,8 +1503,6 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                                                 cube, cube->v_z_dest, cube->v_z_source, cube->pressure_z, cube->temp_buffer_z, 
                                                 FluidQuantityType_z, dt);
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue, true);
-#endif
-
 #endif
 
     // NOTE(gh) The order of processing quantities is from the paper Real-Time Fluid Dynamics for Games from Jos Stam,

@@ -409,7 +409,7 @@ PLATFORM_DO_THREAD_WORK_ITEM(macos_do_main_work_item)
             item->callback(item->data);
             OSAtomicIncrement32Barrier(&queue->completion_count);
 
-            //printf("Thread %u: Finished working\n", thread_index);
+            // printf("Thread %u: Finished working\n", thread_index);
             did_work = true;
         }
     }
@@ -491,7 +491,6 @@ PLATFORM_DO_THREAD_WORK_ITEM(macos_do_gpu_work_item)
 
             OSAtomicIncrement32Barrier(&queue->completion_count);
 
-            //printf("Thread %u: Finished working\n", thread_index);
             did_work = true;
         }
     }
