@@ -104,7 +104,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 12;
         i32 fluid_cell_count_y = 12;
-        i32 fluid_cell_count_z = 8;
+        i32 fluid_cell_count_z = 12;
         initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
                             V3(0, 0, 0), fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 2, 3);
 
