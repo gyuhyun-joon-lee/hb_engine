@@ -1048,28 +1048,20 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
             {
                 RenderEntryArbitraryMesh *entry = (RenderEntryArbitraryMesh *)((u8 *)render_push_buffer->base + consumed);
                 consumed += sizeof(*entry);
-#if 1
-                m4x4 model = M4x4();
-
-                PerObjectData per_object_data = {};
-                per_object_data.model = model;
-                per_object_data.color = entry->color;
 
                 metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
 
-                metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
+                metal_set_vertex_buffer(g_buffer_render_encoder, render_context->transient_buffer.buffer, entry->instance_buffer_offset, 1);
                 metal_set_vertex_buffer(g_buffer_render_encoder, 
-                                        render_context->combined_vertex_buffer.buffer, 
+                                        render_context->transient_buffer.buffer, 
                                         entry->vertex_buffer_offset, 2);
                 metal_set_vertex_bytes(g_buffer_render_encoder, &light_proj_view, sizeof(light_proj_view), 3);
 
                 metal_set_fragment_sampler(g_buffer_render_encoder, render_context->shadowmap_sampler, 0);
-
                 metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
 
-                metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
-                        render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
-#endif
+                metal_draw_indexed_instances(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
+                                            render_context->transient_buffer.buffer, entry->index_buffer_offset, entry->index_count, entry->instance_count);
             }break;
 
             default:
@@ -1205,11 +1197,11 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                     consumed += header->size;
 
                     metal_set_render_pipeline(forward_render_encoder, render_context->forward_render_game_camera_frustum_pipeline);
-                    metal_set_vertex_buffer(forward_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
+                    metal_set_vertex_buffer(forward_render_encoder, render_context->transient_buffer.buffer, entry->vertex_buffer_offset, 0);
                     metal_set_vertex_bytes(forward_render_encoder, &render_proj_view, sizeof(render_proj_view), 1);
 
                     metal_draw_indexed(forward_render_encoder, MTLPrimitiveTypeTriangle, 
-                                    render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+                                    render_context->transient_buffer.buffer, entry->index_buffer_offset, entry->index_count);
 
                 }break;
 
@@ -1809,9 +1801,7 @@ int main(void)
         metal_render_context.grass_double_buffer_fence[i] = metal_make_fence(device);
     }
     
-    metal_render_context.combined_vertex_buffer = metal_make_shared_buffer(device, megabytes(8));
-    metal_render_context.combined_index_buffer = metal_make_shared_buffer(device, megabytes(4));
-
+    metal_render_context.transient_buffer = metal_make_shared_buffer(device, megabytes(64));
     metal_render_context.giant_buffer = metal_make_shared_buffer(device, gigabytes(1));
 
     metal_render_context.device = device;
@@ -1862,10 +1852,10 @@ int main(void)
     platform_render_push_buffer.window_height = window_height;
     platform_render_push_buffer.width_over_height = (f32)window_width / (f32)window_height;
 
-    platform_render_push_buffer.combined_vertex_buffer = metal_render_context.combined_vertex_buffer.memory;
-    platform_render_push_buffer.combined_vertex_buffer_size = metal_render_context.combined_vertex_buffer.size;
-    platform_render_push_buffer.combined_index_buffer = metal_render_context.combined_index_buffer.memory;
-    platform_render_push_buffer.combined_index_buffer_size = metal_render_context.combined_index_buffer.size;
+    platform_render_push_buffer.transient_buffer = metal_render_context.transient_buffer.memory;
+    platform_render_push_buffer.transient_buffer_used = 0;
+    platform_render_push_buffer.transient_buffer_size = metal_render_context.transient_buffer.size;
+
     platform_render_push_buffer.giant_buffer = metal_render_context.giant_buffer.memory;
     platform_render_push_buffer.giant_buffer_size = metal_render_context.giant_buffer.size;
 

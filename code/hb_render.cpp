@@ -292,8 +292,7 @@ init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *re
 
     render_push_buffer->enable_shadow = enable_shadow;
     
-    render_push_buffer->combined_vertex_buffer_used = 0;
-    render_push_buffer->combined_index_buffer_used = 0;
+    render_push_buffer->transient_buffer_used = 0;
 
     render_push_buffer->used = 0;
 }
@@ -326,6 +325,7 @@ push_line(PlatformRenderPushBuffer *render_push_buffer, v3 start, v3 end, v3 col
     entry->color = color;
 }
 
+// TODO(gh) This can be confusing, do we want to have just one buffer that holds everything(vertex, index, instance data..?)
 internal u32
 push_data(void *dst_buffer, u64 *dst_used, u64 dst_size, void *src, u32 src_size)
 {
@@ -352,14 +352,14 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
 
     entry->color = color;
 
-    entry->vertex_buffer_offset = push_data(render_push_buffer->combined_vertex_buffer, 
-                                            &render_push_buffer->combined_vertex_buffer_used, 
-                                            render_push_buffer->combined_vertex_buffer_size,
+    entry->vertex_buffer_offset = push_data(render_push_buffer->transient_buffer, 
+                                            &render_push_buffer->transient_buffer_used, 
+                                            render_push_buffer->transient_buffer_size,
                                             vertices, sizeof(vertices[0]) * vertex_count);
 
-    entry->index_buffer_offset = push_data(render_push_buffer->combined_index_buffer, 
-                                            &render_push_buffer->combined_index_buffer_used, 
-                                            render_push_buffer->combined_index_buffer_size,
+    entry->index_buffer_offset = push_data(render_push_buffer->transient_buffer, 
+                                            &render_push_buffer->transient_buffer_used, 
+                                            render_push_buffer->transient_buffer_size,
                                             indices, sizeof(indices[0]) * index_count);
     entry->index_count = index_count;
 }
@@ -435,23 +435,22 @@ push_arbitrary_mesh(PlatformRenderPushBuffer *render_push_buffer, v3 color, Vert
     entry->header.type = RenderEntryType_ArbitraryMesh;
     entry->header.size = sizeof(*entry);
 
-    entry->color = color;
-
-    entry->vertex_buffer_offset = push_data(render_push_buffer->combined_vertex_buffer, 
-                                            &render_push_buffer->combined_vertex_buffer_used, 
-                                            render_push_buffer->combined_vertex_buffer_size,
+    entry->vertex_buffer_offset = push_data(render_push_buffer->transient_buffer, 
+                                            &render_push_buffer->transient_buffer_used, 
+                                            render_push_buffer->transient_buffer_size,
                                             vertices, sizeof(vertices[0]) * vertex_count);
 
-    entry->index_buffer_offset = push_data(render_push_buffer->combined_index_buffer, 
-                                            &render_push_buffer->combined_index_buffer_used, 
-                                            render_push_buffer->combined_index_buffer_size,
+    entry->index_buffer_offset = push_data(render_push_buffer->transient_buffer, 
+                                            &render_push_buffer->transient_buffer_used, 
+                                            render_push_buffer->transient_buffer_size,
                                             indices, sizeof(indices[0]) * index_count);
     entry->index_count = index_count; 
 }
 
 // TODO(gh) This is not an actual instanced rendering... XD
 internal RenderEntryArbitraryMesh *
-start_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer, v3 color)
+start_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer, 
+                        VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
 {
     assert(render_push_buffer->recording_instanced_rendering == false);
     render_push_buffer->recording_instanced_rendering = true;
@@ -459,30 +458,43 @@ start_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer, v3 color
     RenderEntryArbitraryMesh *entry = push_render_element(render_push_buffer, RenderEntryArbitraryMesh);
     entry->header.type = RenderEntryType_ArbitraryMesh;
     entry->header.size = sizeof(*entry);
-    entry->color = color;
 
-    entry->vertex_buffer_offset = render_push_buffer->combined_vertex_buffer_used;
-    entry->index_buffer_offset = render_push_buffer->combined_index_buffer_used;
+    entry->vertex_buffer_offset = push_data(render_push_buffer->transient_buffer, 
+                                            &render_push_buffer->transient_buffer_used, 
+                                            render_push_buffer->transient_buffer_size,
+                                            vertices, sizeof(vertices[0]) * vertex_count);
+
+    entry->index_buffer_offset = push_data(render_push_buffer->transient_buffer, 
+                                            &render_push_buffer->transient_buffer_used, 
+                                            render_push_buffer->transient_buffer_size,
+                                            indices, sizeof(indices[0]) * index_count);
+    entry->index_count = index_count;
+
+    entry->instance_buffer_offset = render_push_buffer->transient_buffer_used;
+    entry->instance_count = 0;
 
     return entry;
 }
 
 internal void
 push_arbitrary_mesh_instance(PlatformRenderPushBuffer *render_push_buffer, RenderEntryArbitraryMesh *entry,
-                            VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+                            v3 p, v3 scale, v3 rotation_axis, f32 rotation_angle, v3 color)
 {
     assert(render_push_buffer->recording_instanced_rendering == true);
-    push_data(render_push_buffer->combined_vertex_buffer, 
-              &render_push_buffer->combined_vertex_buffer_used, 
-              render_push_buffer->combined_vertex_buffer_size,
-              vertices, sizeof(vertices[0]) * vertex_count);
 
-    push_data(render_push_buffer->combined_index_buffer, 
-              &render_push_buffer->combined_index_buffer_used, 
-              render_push_buffer->combined_index_buffer_size,
-              indices, sizeof(indices[0]) * index_count);
+    quat rotation = get_quat_with_axis_angle(rotation_axis, rotation_angle);
+    PerObjectData per_object_data = {};
+    per_object_data.model = transpose(srt_m4x4(p, rotation, scale));
+    // per_object_data.model = transpose(st_m4x4(p, scale));
+    per_object_data.color = color;
 
-    entry->index_count += index_count; 
+#if 1
+    push_data(render_push_buffer->transient_buffer, 
+                &render_push_buffer->transient_buffer_used, 
+                render_push_buffer->transient_buffer_size,
+                &per_object_data, sizeof(per_object_data));
+#endif
+    
     entry->instance_count++;
 }
 

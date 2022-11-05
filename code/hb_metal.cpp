@@ -381,13 +381,13 @@ metal_draw_indexed(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType 
 
 inline void
 metal_draw_indexed_instances(id<MTLRenderCommandEncoder> render_encoder, MTLPrimitiveType primitive_type,
-                            id<MTLBuffer> index_buffer, u64 index_count, u64 instance_count)
+                            id<MTLBuffer> index_buffer, u64 index_buffer_offset, u64 index_count, u64 instance_count)
 {
     [render_encoder drawIndexedPrimitives:primitive_type
                     indexCount:index_count
                     indexType:MTLIndexTypeUInt32
                     indexBuffer:index_buffer 
-                    indexBufferOffset:0 
+                    indexBufferOffset:index_buffer_offset
                     instanceCount:instance_count];
 }
 

@@ -39,7 +39,6 @@ load_texture_asset(ThreadWorkQueue *gpu_work_queue, void *source, i32 width, i32
     return result;
 }
 
-
 // TODO(gh) Only loads VertexPN vertices
 // TODO(gh) Don't love that we need to pass and update the assetID, make this a tag-based search
 internal MeshAsset *

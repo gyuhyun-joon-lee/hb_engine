@@ -228,16 +228,13 @@ struct RenderEntryGlyph
 struct RenderEntryArbitraryMesh
 {
     RenderEntryHeader header;
-    v3 color; 
+    u32 instance_count;
+    u32 instance_buffer_offset; // offset to the instance data in the giant buffer
 
     // NOTE(gh) offset to the combined vertex & index buffer
     u32 vertex_buffer_offset;
     u32 index_buffer_offset;
     u32 index_count;
-
-    // NOTE(gh) Not actually used because we are not doing proper instanced rendering,
-    // but we will increment it for the record
-    u32 instance_count;
 }; 
 
 #endif

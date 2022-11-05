@@ -1396,6 +1396,38 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
     local_persist b32 added_velocity = false;
     if(true)
     {
+#if 1
+        for(i32 z = -2;
+                z < 2;
+                ++z)
+        {
+            for(i32 y = -2;
+                    y < 2;
+                    ++y)
+           {
+                for(i32 x = -2;
+                        x < 2;
+                        ++x)
+                {
+
+                    i32 cell_x = cube->cell_count.x/2+x;
+                    i32 cell_y = cube->cell_count.y/2+y;
+                    i32 cell_z = cube->cell_count.z/2+z;
+#if 1
+                    add_input_to_center(cube->v_x_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_y_source, 100*cosf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_z_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
+#else
+                    add_input_to_center(cube->v_x_source, 40, cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_y_source, 130, cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_z_source, 130, cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
+#endif
+                }
+            }
+        }
+#endif
+
+#if 0
         for(i32 z = 0;
                 z < cube->cell_count.z;
                 ++z)
@@ -1409,19 +1441,20 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                         ++x)
                 {
 #if 0
-                    add_input_to_center(cube->v_x_source, 5*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_x);
-                    add_input_to_center(cube->v_y_source, 30*cosf(t), x, y, z, cube->cell_count, FluidQuantityType_y);
-                    add_input_to_center(cube->v_z_source, 30*sinf(t), x, y, z, cube->cell_count, FluidQuantityType_z);
+                    add_input_to_center(cube->v_x_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_y_source, 100*cosf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_z_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
 #else
                     add_input_to_center(cube->v_x_source, 0, x, y, z, cube->cell_count, FluidQuantityType_x);
-                    add_input_to_center(cube->v_y_source, 30, x, y, z, cube->cell_count, FluidQuantityType_y);
-                    add_input_to_center(cube->v_z_source, 30, x, y, z, cube->cell_count, FluidQuantityType_z);
+                    add_input_to_center(cube->v_y_source, 130, x, y, z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_z_source, 130, x, y, z, cube->cell_count, FluidQuantityType_z);
 #endif
                 }
             }
         }
 
         added_velocity = true;
+#endif
     }
 
     update_with_input(cube->v_x_dest, cube->v_x_dest, cube->v_x_source, cube->total_x_count, dt);
@@ -1512,7 +1545,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
     zero_memory(cube->density_source, sizeof(f32)*cube->total_center_count);
 
     local_persist b32 added_density = false;
-    if(!added_density)
+    if((t > 10) && (t < 15))
     {
         add_input_to_center(cube->density_source, 10000, cube->cell_count.x/2, 0, cube->cell_count.z/2, cube->cell_count, FluidQuantityType_Center);
         for(i32 z = 0;

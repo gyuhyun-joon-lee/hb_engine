@@ -12,7 +12,7 @@ struct GBuffers
     float4 color [[color(2)]];
 };
 
-// NOTE(gh) : vertex is a prefix for vertex shader
+// IMPORTANT(gh) vertex always should be PN
 vertex GBufferVertexOutput
 singlepass_cube_vertex(uint vertexID [[vertex_id]],
             uint instanceID [[instance_id]],
@@ -27,24 +27,24 @@ singlepass_cube_vertex(uint vertexID [[vertex_id]],
 {
     GBufferVertexOutput result = {};
 
-    float4 world_p = per_object_data->model * 
+    float4 world_p = per_object_data[instanceID].model * 
                         float4(vertices[6*vertexID+0], 
                                 vertices[6*vertexID+1],
                                 vertices[6*vertexID+2],
                                 1.0f);
 
-    float4 world_normal = per_object_data->model * 
+    float4 world_normal = per_object_data[instanceID].model * 
                         float4(vertices[6*vertexID+3], 
                                 vertices[6*vertexID+4],
                                 vertices[6*vertexID+5],
                                 0.0f);
 
     result.clip_p = per_frame_data->proj_view * world_p;
-    result.color = per_object_data->color;
+    result.color = per_object_data[instanceID].color;
 
     result.p = world_p.xyz;
     result.N = normalize(world_normal.xyz);
-    result.color = per_object_data->color;
+    result.color = per_object_data[instanceID].color;
     result.depth = result.clip_p.z / result.clip_p.w;
 
     // NOTE(gh) because metal doesn't allow to pass the matrix to the fragment shader,

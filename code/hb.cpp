@@ -7,6 +7,7 @@
 #include "hb_math.h"
 #include "hb_random.h"
 #include "hb_font.h"
+#include "hb_shared_with_shader.h"
 #include "hb_render.h"
 #include "hb_simulation.h"
 #include "hb_entity.h"
@@ -44,8 +45,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     GameState *game_state = (GameState *)platform_memory->permanent_memory;
     if(!game_state->is_initialized)
     {
-        assert(platform_render_push_buffer->combined_vertex_buffer && 
-                platform_render_push_buffer->combined_index_buffer);
+        assert(platform_render_push_buffer->transient_buffer && 
+                platform_render_push_buffer->giant_buffer);
 
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(512));
 
@@ -104,12 +105,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 12;
         i32 fluid_cell_count_y = 12;
-        i32 fluid_cell_count_z = 8;
+        i32 fluid_cell_count_z = 12;
         initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
                             V3(0, 0, 0), fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 2, 3);
 
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, 
-                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 2);
+                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 4);
 
         load_game_assets(&game_state->assets, platform_api, gpu_work_queue);
         game_state->debug_fluid_force_z = 1;
@@ -442,30 +443,62 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     b32 enable_fluid_arrow_rendering = true;
     if(enable_fluid_arrow_rendering)
     {
-        // start_instanced_rendering =;
-        for(u32 cell_z = 0;
-                cell_z < fluid_cube->cell_count.z;
-                ++cell_z)
+        // NOTE(gh) Default arrow is looking down
+        VertexPN arrow_vertices[] = 
         {
-            for(u32 cell_y = 0;
-                    cell_y < fluid_cube->cell_count.y;
-                    ++cell_y)
-            {
-                for(u32 cell_x = 0;
-                        cell_x < fluid_cube->cell_count.x;
-                        ++cell_x)
-                {
-                    v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f);
+            {{V3(-0.5f, -0.5f, 0)}, {0, 0, 1}},
+            {{V3(0.5f, -0.5f, 0)}, {0, 0, 1}},
+            {{V3(-0.5f, 0.5f, 0)}, {0, 0, 1}},
+            {{V3(0.5f, 0.5f, 0)}, {0, 0, 1}},
 
-                    f32 v_x = get_mac_center_value_x(fluid_cube->v_x_dest, cell_x, cell_y, cell_z, fluid_cube->cell_count);
-                    f32 v_y = get_mac_center_value_y(fluid_cube->v_y_dest, cell_x, cell_y, cell_z, fluid_cube->cell_count);
-                    f32 v_z = get_mac_center_value_z(fluid_cube->v_z_dest, cell_x, cell_y, cell_z, fluid_cube->cell_count);
+            {{V3(0, 0, -1)}, {0, 0, -1}},
+        };
+
+        u32 arrow_indices[] = 
+        {
+            0, 1, 2,
+            1, 3, 2,
+            0, 4, 1,
+            1, 4, 3,
+            3, 4, 2,
+            2, 4, 0,
+        };
+
+        RenderEntryArbitraryMesh *entry = 
+            start_instanced_rendering(platform_render_push_buffer, 
+                                        arrow_vertices, array_count(arrow_vertices),
+                                        arrow_indices, array_count(arrow_indices));
+
+        for(u32 z = 0;
+                z < fluid_cube->cell_count.z;
+                ++z)
+        {
+            for(u32 y = 0;
+                    y < fluid_cube->cell_count.y;
+                    ++y)
+            {
+                for(u32 x = 0;
+                        x < fluid_cube->cell_count.x;
+                        ++x)
+                {
+                    v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(x+0.5f, y+0.5f, z+0.5f);
+
+                    if(x == fluid_cube->cell_count.x/2 && 
+                            y == 0 &&
+                            z == fluid_cube->cell_count.z/2)
+                    {
+                        int a = 1;
+                    }
+
+                    f32 v_x = get_mac_center_value_x(fluid_cube->v_x_dest, x, y, z, fluid_cube->cell_count);
+                    f32 v_y = get_mac_center_value_y(fluid_cube->v_y_dest, x, y, z, fluid_cube->cell_count);
+                    f32 v_z = get_mac_center_value_z(fluid_cube->v_z_dest, x, y, z, fluid_cube->cell_count);
 
                     v3 color = {};
 
-                    f32 scale = 0.15f;
+                    f32 scale = 0.5f;
                     v3 v = V3(v_x, v_y, v_z);
-                    f32 v_scale = clamp(0.0f, length(v), 2.0f*fluid_cube->cell_dim);
+                    f32 v_scale = clamp(0.0f, length(v), 1.0f*fluid_cube->cell_dim);
                     v = normalize(v);
 
                     if(compare_with_epsilon(length_square(v), 0))
@@ -477,47 +510,74 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         color = abs(v);
                     }
 
-                    // TODO(gh) Doesn't work when v == up vector, and what if the length of v is too small?
-                    v3 right = V3();
-                    if(v.x == 0 && v.y == 0 && v.z != 0.0f)
+                    v3 rotation_axis = {};
+                    f32 rotation_cos = 0;
+                    if(compare_with_epsilon(v.x, 0) && compare_with_epsilon(v.y, 0))
                     {
-                        right = scale*normalize(cross(v, V3(1, 0, 0)));
+                        rotation_axis = V3(1, 0, 0);
+
+                        if(compare_with_epsilon(v.z, 1))
+                        {
+                            rotation_cos = -1;
+                        }
                     }
                     else
                     {
-                        right = scale*normalize(cross(v, V3(0, 0, 1)));
+                        rotation_axis = normalize(cross(V3(0, 0, -1), v));
+                        // NOTE(gh) v is already normalized
+                        rotation_cos = dot(V3(0, 0, -1), v);
                     }
 
-                    v3 up = scale*normalize(cross(right, v));
-                    VertexPN arrow_vertices[] = 
-                    {
-                        {{center - right - up}, {1, 0, 0}},
-                        {{center + right - up}, {1, 0, 0}},
-                        {{center - right + up}, {1, 0, 0}},
-                        {{center + right + up},{1, 0, 0}},
-                        {{center + v_scale*v}, {1, 0, 0}},
-                    };
+                    f32 rotation_angle = acosf(rotation_cos)/2.0f;
 
-                    u32 arrow_indices[] = 
-                    {
-                        0, 3, 2,
-                        0, 1, 3,
-                        2, 3, 4, 
-                        3, 1, 4, 
-                        0, 4, 1, 
-                        0, 2, 4, 
-                    };
-
-                    push_arbitrary_mesh(platform_render_push_buffer, color, arrow_vertices, array_count(arrow_vertices), arrow_indices, array_count(arrow_indices));
+                    push_arbitrary_mesh_instance(platform_render_push_buffer, entry, center, V3(scale, scale, v_scale), rotation_axis, rotation_angle, color);
+                    // push_arbitrary_mesh(platform_render_push_buffer, color, arrow_vertices, array_count(arrow_vertices), arrow_indices, array_count(arrow_indices));
                 }
             }
         }
+
+        end_instanced_rendering(platform_render_push_buffer);
     }
 
-#if 1
-    b32 enable_ink_rendering = false;
+    b32 enable_ink_rendering = true;
     if(enable_ink_rendering)
     {
+        VertexPN cube_vertices[] = 
+        {
+            {{0.5f*V3(-1, -1, -1)}, {1, 0, 0}},
+            {{0.5f*V3(1, -1, -1)}, {1, 0, 0}},
+            {{0.5f*V3(-1, 1, -1)}, {1, 0, 0}},
+            {{0.5f*V3(1, 1, -1)}, {1, 0, 0}},
+
+            {{0.5f*V3(-1, -1, 1)}, {1, 0, 0}},
+            {{0.5f*V3(1, -1, 1)}, {1, 0, 0}},
+            {{0.5f*V3(-1, 1, 1)}, {1, 0, 0}},
+            {{0.5f*V3(1, 1, 1)}, {1, 0, 0}},
+        };
+
+        for(u32 i = 0;
+                i < array_count(cube_vertices);
+                ++i)
+        {
+            VertexPN *vertex = cube_vertices + i;
+            vertex->n = normalize(vertex->p);
+        }
+
+        u32 cube_indices[] = 
+        {
+            0, 1, 4, 1, 5, 4,
+            1, 3, 5, 3, 7, 5,
+            6, 7, 3, 6, 3, 2,
+            4, 2, 0, 4, 6, 2,
+            7, 6, 5, 5, 6, 4,
+            2, 1, 0, 2, 3, 1,
+        };
+
+        RenderEntryArbitraryMesh *entry = 
+            start_instanced_rendering(platform_render_push_buffer, 
+                    cube_vertices, array_count(cube_vertices),
+                    cube_indices, array_count(cube_indices));
+
         for(u32 cell_z = 0;
                 cell_z < fluid_cube->cell_count.z;
                 ++cell_z)
@@ -534,48 +594,17 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     u32 ID = get_mac_index_center(cell_x, cell_y, cell_z, fluid_cube->cell_count);
 
                     f32 density = fluid_cube->density_dest[ID];
+                    f32 scale = clamp(0.0f, density, fluid_cube->cell_dim);
                     // assert(density >= 0);
 
-                    f32 scale = clamp(0.0f, fluid_cube->cell_dim*density, 2.0f);
-                    {
-                        VertexPN cube_vertices[] = 
-                        {
-                            {{center + 0.5f*scale*V3(-1, -1, -1)}, {1, 0, 0}},
-                            {{center + 0.5f*scale*V3(1, -1, -1)}, {1, 0, 0}},
-                            {{center + 0.5f*scale*V3(-1, 1, -1)}, {1, 0, 0}},
-                            {{center + 0.5f*scale*V3(1, 1, -1)}, {1, 0, 0}},
-
-                            {{center + 0.5f*scale*V3(-1, -1, 1)}, {1, 0, 0}},
-                            {{center + 0.5f*scale*V3(1, -1, 1)}, {1, 0, 0}},
-                            {{center + 0.5f*scale*V3(-1, 1, 1)}, {1, 0, 0}},
-                            {{center + 0.5f*scale*V3(1, 1, 1)}, {1, 0, 0}},
-                        };
-
-                        for(u32 i = 0;
-                                i < array_count(cube_vertices);
-                                ++i)
-                        {
-                            VertexPN *vertex = cube_vertices + i;
-                            vertex->n = normalize(vertex->p - center);
-                        }
-
-                        u32 cube_indices[] = 
-                        {
-                            0, 1, 4, 1, 5, 4,
-                            1, 3, 5, 3, 7, 5,
-                            6, 7, 3, 6, 3, 2,
-                            4, 2, 0, 4, 6, 2,
-                            7, 6, 5, 5, 6, 4,
-                            2, 1, 0, 2, 3, 1,
-                        };
-
-                        push_arbitrary_mesh(platform_render_push_buffer, V3(1, 1, 1), cube_vertices, array_count(cube_vertices), cube_indices, array_count(cube_indices));
-                    }
+                    push_arbitrary_mesh_instance(platform_render_push_buffer, entry, 
+                                                center, scale*V3(1, 1, 1), V3(0, 0, 0), 0, V3(1, 1, 1));
                 }
             }
         }
+
+        end_instanced_rendering(platform_render_push_buffer);
     }
-#endif
 
     if(debug_platform_render_push_buffer)
     {
@@ -792,10 +821,8 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 
             // TODO(gh) Do we wanna keep this scale value?
             f32 scale = 0.5f;
-            debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
-            //debug_text_line(platform_render_push_buffer, assets, "Togplil", top_left_rel_p_px, scale);
-
-            debug_newline(&top_left_rel_p_px, scale, &assets->debug_font_asset);
+            // debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
+            //debug_newline(&top_left_rel_p_px, scale, &assets->debug_font_asset);
 
             atomic_exchange(&record->hit_count_cycle_count, 0);
         }

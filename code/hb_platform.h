@@ -331,15 +331,12 @@ struct PlatformRenderPushBuffer
     u32 total_size;
     u32 used;
 
-    // NOTE(gh) Cleared every frame, includes vertex, index buffer per frame 
-    // ONLY USED FOR SMALL MESHES, WHICH THEIR MESH INFORMATION IS NOT KNOWN AT BUILD TIME
-    // Good example would be a game frustum(but this can also be replaced with push_quad call)
-    void *combined_vertex_buffer;
-    u64 combined_vertex_buffer_size;
-    u64 combined_vertex_buffer_used;
-    void *combined_index_buffer;
-    u64 combined_index_buffer_size;
-    u64 combined_index_buffer_used;
+    // TODO(gh) Instead of passing these, make the game code 'request' for these buffers
+    // and use them instead? (We should also make them sync inside the game code)
+    // NOTE(gh) Cleared every frame, includes vertex, index, instance datas
+    void *transient_buffer;
+    u64 transient_buffer_size;
+    u64 transient_buffer_used;
 
     // MTLHeap?
     void *giant_buffer;
@@ -358,7 +355,6 @@ struct PlatformRenderPushBuffer
     f32 game_camera_far;
     f32 game_camera_fov;
 
-    // This is camera that we are looking into
     m4x4 render_camera_view;
     v3 render_camera_p;
     f32 render_camera_near;

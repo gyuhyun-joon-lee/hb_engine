@@ -125,8 +125,7 @@ struct MetalRenderContext
     u32 next_grass_double_buffer_index;
     id<MTLIndirectCommandBuffer> icb[2]; 
     MetalSharedBuffer icb_argument_buffer[2];
-    MetalSharedBuffer combined_vertex_buffer;
-    MetalSharedBuffer combined_index_buffer;
+    MetalSharedBuffer transient_buffer; // will be passed on to the game code
 
     MetalSharedBuffer giant_buffer; // will be passed on to the game code
 

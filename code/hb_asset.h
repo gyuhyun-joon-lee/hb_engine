@@ -10,7 +10,7 @@
 
 struct TextureAsset2D
 {
-    void *handle; // handle to the bitmap in GPU
+    void *handle; // handle to the texture in GPU
 
     // TODO(gh) Also keep the bitmap memory 
     // so that we can re-load the texture when the

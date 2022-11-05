@@ -1128,6 +1128,24 @@ Quat(v3 axis, f32 rad)
 }
 
 inline quat
+get_quat_with_axis_angle_cos(v3 axis, f32 cos)
+{
+    quat result = {};
+    result.s = cos;
+    result.v = sqrtf(1 - cos*cos)*axis;
+    return result;
+}
+
+inline quat
+get_quat_with_axis_angle(v3 axis, f32 rad)
+{
+    quat result = {};
+    result.s = cosf(rad);
+    result.v = sinf(rad)*axis;
+    return result;
+}
+
+inline quat
 operator +(quat a, quat b)
 {
     quat result = {};
@@ -1267,15 +1285,15 @@ rotation_quat_to_m3x3(quat q)
     // NOTE(gh) q is a unit-norm quaterion, whether pure or non-pure
     m3x3 result = {};
     result.e[0][0] = 1 - 2.0f*(q.y*q.y + q.z*q.z);
-    result.e[0][1] = 2.0f*(q.x*q.y + q.z*q.s);
-    result.e[0][2] = 2.0f*(q.x*q.z - q.y*q.s);
+    result.e[0][1] = 2.0f*(q.x*q.y - q.s*q.z);
+    result.e[0][2] = 2.0f*(q.x*q.z + q.s*q.y);
 
-    result.e[1][0] = 2.0f*(q.x*q.y - q.z*q.s);
+    result.e[1][0] = 2.0f*(q.x*q.y + q.s*q.z);
     result.e[1][1] = 1 - 2.0f*(q.x*q.x + q.z*q.z);
-    result.e[1][2] = 2.0f*(q.y*q.z - q.x*q.s);
+    result.e[1][2] = 2.0f*(q.y*q.z - q.s*q.x);
 
-    result.e[2][0] = 2.0f*(q.x*q.z - q.y*q.s);
-    result.e[2][1] = 2.0f*(q.y*q.z - q.x*q.s);
+    result.e[2][0] = 2.0f*(q.x*q.z - q.s*q.y);
+    result.e[2][1] = 2.0f*(q.y*q.z + q.x*q.s);
     result.e[2][2] = 1 - 2.0f*(q.x*q.x + q.y*q.y);
 
     return result;
