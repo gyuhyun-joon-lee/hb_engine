@@ -45,8 +45,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     GameState *game_state = (GameState *)platform_memory->permanent_memory;
     if(!game_state->is_initialized)
     {
-        assert(platform_render_push_buffer->transient_buffer && 
-                platform_render_push_buffer->giant_buffer);
+        assert(platform_render_push_buffer->transient_buffer);
 
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(512));
 
@@ -96,7 +95,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     add_floor_entity(game_state, &game_state->transient_arena, center, grid_dim, V3(0.25f, 0.1f, 0.04f), grass_on_floor_count_x, grass_on_floor_count_y);
 
                 GrassGrid *grid = game_state->grass_grids + y*game_state->grass_grid_count_x + x;
-                init_grass_grid(platform_render_push_buffer, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
+                init_grass_grid(gpu_work_queue, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
             }
         }
 
@@ -194,7 +193,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         data->one_past_end_x = grid->grass_count_x;
         data->one_past_end_y = grid->grass_count_x;
         data->time_elasped_from_start = platform_input->time_elasped_from_start;
-        data->perlin_noise_buffer = grid->perlin_noise_buffer;
+        data->perlin_noise_buffer = grid->perlin_noise_buffer.memory;
         thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_update_perlin_noise_buffer_callback, 0, (void *)data);
 
         assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
@@ -419,7 +418,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         {
             case EntityType_Floor:
             {
-                // TODO(gh) Don't pass platform api, device, mesh asset ID!!!
+                // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
                           &game_state->assets, gpu_work_queue,  
@@ -430,7 +429,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_Cube:
             case EntityType_Sphere:
             {
-                // TODO(gh) Don't pass platform api, device, mesh asset ID!!!
+                // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
                           &game_state->assets, gpu_work_queue,  

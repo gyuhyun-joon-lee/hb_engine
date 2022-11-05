@@ -233,22 +233,16 @@ enum GPUWorkType
 {
     GPUWorkType_Null,
     GPUWorkType_AllocateBuffer,
-    GPUWorkType_WriteEntireBuffer,
     GPUWorkType_AllocateTexture2D,
     GPUWorkType_WriteEntireTexture2D,
 };
 struct ThreadAllocateBufferData
 {
     void **handle_to_populate;
+    void **memory_to_populate;
     u64 size_to_allocate;
 };
-struct ThreadWriteEntireBufferData
-{
-    void *handle;
 
-    void *source;
-    u64 size_to_write;
-};
 struct ThreadAllocateTexture2DData
 {
     void **handle_to_populate;
@@ -337,11 +331,6 @@ struct PlatformRenderPushBuffer
     void *transient_buffer;
     u64 transient_buffer_size;
     u64 transient_buffer_used;
-
-    // MTLHeap?
-    void *giant_buffer;
-    u64 giant_buffer_size;
-    u64 giant_buffer_used;
 
 //////////// NOTE(gh) game code needs to fill these up
     GrassGrid *grass_grids;

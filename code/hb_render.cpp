@@ -223,46 +223,27 @@ rhs_to_lhs(m4x4 m)
 // TODO(gh) Later we would want to minimize passing the platform buffer here
 // TODO(gh) pass center & dim, instead of min & max?
 internal void
-init_grass_grid(PlatformRenderPushBuffer *render_push_buffer, Entity *floor, RandomSeries *series, 
+init_grass_grid(ThreadWorkQueue *gpu_work_queue, Entity *floor, RandomSeries *series, 
                 GrassGrid *grass_grid, u32 grass_count_x, u32 grass_count_y, v2 min, v2 max)
 {
     grass_grid->grass_count_x = grass_count_x;
     grass_grid->grass_count_y = grass_count_y;
-    grass_grid->updated_floor_z_buffer = false;
     grass_grid->min = min;
     grass_grid->max = max;
 
     u32 total_grass_count = grass_grid->grass_count_x * grass_grid->grass_count_y;
 
-    if(!grass_grid->floor_z_buffer)
+    grass_grid->floor_z_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32) * total_grass_count);
+
+    // TODO(gh) temp code, need to do proper raycast later
+    for(u32 grass_index = 0;
+            grass_index < grass_count_x * grass_count_y;
+            ++grass_index)
     {
-        grass_grid->floor_z_buffer = (f32 *)((u8 *)render_push_buffer->giant_buffer + render_push_buffer->giant_buffer_used);
-        grass_grid->floor_z_buffer_size = sizeof(f32) * total_grass_count;
-        grass_grid->floor_z_buffer_offset = render_push_buffer->giant_buffer_used;
-
-        render_push_buffer->giant_buffer_used += grass_grid->floor_z_buffer_size;
-        assert(render_push_buffer->giant_buffer_used <= render_push_buffer->giant_buffer_size);
-
-        // TODO(gh) temp code, need to do proper raycast later
-        for(u32 grass_index = 0;
-                grass_index < grass_count_x * grass_count_y;
-                ++grass_index)
-        {
-            *(f32 *)grass_grid->floor_z_buffer = 0;
-        }
-
-        grass_grid->updated_floor_z_buffer = true;
+        *(f32 *)grass_grid->floor_z_buffer.memory = 0;
     }
 
-    if(!grass_grid->perlin_noise_buffer)
-    {
-        grass_grid->perlin_noise_buffer = (f32 *)((u8 *)render_push_buffer->giant_buffer + render_push_buffer->giant_buffer_used);
-        grass_grid->perlin_noise_buffer_size = sizeof(f32) * total_grass_count;
-        grass_grid->perlin_noise_buffer_offset = render_push_buffer->giant_buffer_used;
-
-        render_push_buffer->giant_buffer_used += grass_grid->perlin_noise_buffer_size;
-        assert(render_push_buffer->giant_buffer_used <= render_push_buffer->giant_buffer_size);
-    }
+    grass_grid->perlin_noise_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32) * total_grass_count);
 }
 
 internal void
@@ -380,9 +361,9 @@ push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 colo
     // get the vertex and index information using tag and match vector
     MeshAsset *mesh_asset = get_mesh_asset(asset, gpu_work_queue, mesh_assetID, 
                                             vertices, vertex_count, indices, index_count);
-    entry->vertex_buffer_handle = mesh_asset->vertex_buffer_handle;
+    entry->vertex_buffer_handle = mesh_asset->vertex_buffer.handle;
     entry->vertex_count = mesh_asset->vertex_count;
-    entry->index_buffer_handle = mesh_asset->index_buffer_handle;
+    entry->index_buffer_handle = mesh_asset->index_buffer.handle;
     entry->index_count = mesh_asset->index_count;
 
     entry->p = p;

@@ -438,16 +438,11 @@ PLATFORM_DO_THREAD_WORK_ITEM(macos_do_gpu_work_item)
                 {
                     ThreadAllocateBufferData *d = (ThreadAllocateBufferData *)item->data;
                     MetalSharedBuffer buffer = metal_make_shared_buffer(render_context->device, d->size_to_allocate);
+
                     *(d->handle_to_populate) = (void *)buffer.buffer;
-                    assert(*(d->handle_to_populate));
-                }break;
+                    *(d->memory_to_populate) = (void *)buffer.memory;
 
-                case GPUWorkType_WriteEntireBuffer:
-                {
-                    ThreadWriteEntireBufferData *d = (ThreadWriteEntireBufferData *)item->data;
-
-                    void *dest = [(id<MTLBuffer>)d->handle contents];
-                    memcpy(dest, d->source, d->size_to_write);
+                    assert(*(d->handle_to_populate) && *(d->memory_to_populate));
                 }break;
 
                 case GPUWorkType_AllocateTexture2D:
@@ -904,8 +899,8 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 // offset is not needed because we are indexing the array using the grass index,
                 // which gets accumulated anyway
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_instance_buffer.buffer, 0, 1);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->perlin_noise_buffer_offset, 2);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 3);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->perlin_noise_buffer.handle, 0, 2);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->floor_z_buffer.handle, 0, 3);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 4);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 5);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &sphere_info, sizeof(sphere_info), 6);
@@ -1156,8 +1151,8 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
                 metal_set_vertex_bytes(forward_render_encoder, square_vertices, array_size(square_vertices), 0);
                 metal_set_vertex_bytes(forward_render_encoder, &square_dim, sizeof(square_dim), 1);
-                metal_set_vertex_buffer(forward_render_encoder, render_context->giant_buffer.buffer, grid->perlin_noise_buffer_offset, 2);
-                metal_set_vertex_buffer(forward_render_encoder, render_context->giant_buffer.buffer, grid->floor_z_buffer_offset, 3);
+                metal_set_vertex_buffer(forward_render_encoder, (id<MTLBuffer>)grid->perlin_noise_buffer.handle, 0, 2);
+                metal_set_vertex_buffer(forward_render_encoder, (id<MTLBuffer>)grid->floor_z_buffer.handle, 0, 3);
                 metal_set_vertex_bytes(forward_render_encoder, &grass_count, sizeof(grass_count), 4);
                 metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 5);
                 metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
@@ -1855,9 +1850,6 @@ int main(void)
     platform_render_push_buffer.transient_buffer = metal_render_context.transient_buffer.memory;
     platform_render_push_buffer.transient_buffer_used = 0;
     platform_render_push_buffer.transient_buffer_size = metal_render_context.transient_buffer.size;
-
-    platform_render_push_buffer.giant_buffer = metal_render_context.giant_buffer.memory;
-    platform_render_push_buffer.giant_buffer_size = metal_render_context.giant_buffer.size;
 
     PlatformRenderPushBuffer *debug_platform_render_push_buffer = 0;
 #if HB_DEBUG 

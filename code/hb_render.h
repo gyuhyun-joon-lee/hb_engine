@@ -15,6 +15,15 @@ struct VertexPN
     v3 n;
 };
 
+struct GPUVisibleBuffer
+{
+    void *handle; // handle to the GPU
+
+    void *memory; // CPU-writable memory
+    u64 size;
+    u64 used;
+};
+
 struct GrassGrid
 {
     b32 should_draw;
@@ -22,17 +31,8 @@ struct GrassGrid
     u32 grass_count_x;
     u32 grass_count_y;
 
-    f32 *floor_z_buffer;
-    u32 floor_z_buffer_size;
-    u32 floor_z_buffer_offset; // offset to the giant buffer, game code should not care about this
-    b32 updated_floor_z_buffer;
-
-    // TODO(gh) Also store offset x and y for smooth transition between grids, 
-    // or maybe make perlin noise to be seperate from the grid?
-    // For now, it is given free because of the fact that every grid is 256 x 256
-    f32 *perlin_noise_buffer;
-    u32 perlin_noise_buffer_size;
-    u32 perlin_noise_buffer_offset; // offset to the giant buffer, game code should not care about this
+    GPUVisibleBuffer floor_z_buffer;
+    GPUVisibleBuffer perlin_noise_buffer;
 
     v2 min;
     v2 max;

@@ -34,8 +34,8 @@ struct TextureAsset3D
 // is VertexPN, and index is u32
 struct MeshAsset
 {
-    void *vertex_buffer_handle; 
-    void *index_buffer_handle; 
+    GPUVisibleBuffer vertex_buffer;
+    GPUVisibleBuffer index_buffer;
 
     u32 vertex_count;
     u32 index_count;
