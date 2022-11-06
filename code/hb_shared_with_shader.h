@@ -109,42 +109,31 @@ struct GridInfo
 struct GrassInstanceData
 {
 #if INSIDE_METAL_SHADER
-#if 0
-
-#else
     packed_float3 p0;
     packed_float3 p1;
     packed_float3 p2;
-
-    packed_float3 v0;
-    packed_float3 v1;
-    packed_float3 v2;
 
     // TODO(gh) This can be calculated from the vertex shader using facing direction,
     // which is cos(hash) sin(hash)
     packed_float3 orthogonal_normal;
     uint hash;
 
-    packed_half3 color;
-    half wiggliness;
+    packed_float3 color;
+    float  wiggliness;
 
-    half blade_width;
-#endif
+    float blade_width;
 #elif INSIDE_VULKAN_SHADER
 #else
     f32 p0[3];
     f32 p1[3];
     f32 p2[3];
 
-    f32 v0[3];
-    f32 v1[3];
-    f32 v2[3];
-
     f32 orthogonal_normal[3];
     u32 hash;
 
-    f32 color_wig[2];
-    f32 pad;
+    f32 color[3];
+    f32 wiggliness;
+    f32 blade_width;
 #endif
 };
 

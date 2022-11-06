@@ -54,7 +54,9 @@ enum ElementTypeForBoundary
 // (i.e store u on vertical edges, and v on horizontal edges in 2D)
 struct FluidCubeMAC
 {
-    v3 left_bottom_p;
+    v3 min;
+    v3 max;
+
     v3i cell_count; // MAC does not store boundaries, we will explicitly handle the boundaries.
     f32 cell_dim; // each cell is a uniform cube
 

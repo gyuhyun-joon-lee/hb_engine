@@ -33,6 +33,7 @@ struct GrassGrid
 
     GPUVisibleBuffer floor_z_buffer;
     GPUVisibleBuffer perlin_noise_buffer;
+    GPUVisibleBuffer grass_instance_data_buffer;
 
     v2 min;
     v2 max;

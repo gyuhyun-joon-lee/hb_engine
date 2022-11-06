@@ -540,26 +540,30 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     }
 }
 
-#if 0
-struct ControlPoints
-{
-    packed_float3 p1;
-    packed_float3 p2;
-};
+#define target_seconds_per_frame (1/60.0f)
 
-packed_float3
-get_collided_control_points(constant ControlPoints *control_points, 
-                            packed_float3 p0, packed_float3 p2,
-                            packed_float3 sphere_center, packed_float3 sphere_r)
+// NOTE(gh) p0 is on the ground and does not move
+static void
+offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_float3 *p1, device packed_float3 *p2)
 {
-    float slope = (p2.y - p0.y) / (p2.x - p0.x);
-    float perpendicular_slope = -1/slope;
+    packed_float3 v = packed_float3(0, 0, 0);
 
+    float p0_p1_length = length(*p1 - *p0);
+    float p1_p2_length = length(*p2 - *p1);
+
+    packed_float3 p0_p1 = normalize(*p1 - *p0);
+    *p1 = *p0 + p0_p1_length*p0_p1;
+
+    // TODO(gh) We can re-adjust p2 after adjusting p1
+    packed_float3 p1_p2 = normalize(*p2 - *p1);
+    *p2 = *p1 + p1_p2_length*p1_p2;
+}
+
+kernel void
+initialize_grass_instance_data()
+{
 
 }
-#endif
-
-#define target_seconds_per_frame = (1/60.0f);
 
 kernel void
 fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
@@ -569,6 +573,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 const device GridInfo *grid_info [[buffer (4)]],
                                 constant float4x4 *game_proj_view [[buffer (5)]],
                                 constant SphereInfo *sphere_info [[buffer (6)]],
+                                // const device SphereInfo *sphere_info [[buffer (7)]],
                                 uint2 thread_count_per_grid [[threads_per_grid]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {
@@ -580,11 +585,12 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                   z);
     
     // TODO(gh) better hash function for each grass?
-    half noise = (half)perlin_noise_values[grass_index];
+    float noise = perlin_noise_values[grass_index];
     uint hash = 10000*(wang_hash(grass_index)/(float)0xffffffff);
-    half random01 = (half)hash/(half)(10000);
-    half length = 2.8h + random01;
-    half tilt = clamp(1.9h + 0.7h*random01 + (half)noise, 0.0h, length - 0.01h);
+    float random01 = (float)hash/(float)(10000);
+    float length = 2.8h + random01;
+    // half tilt = clamp(1.9h + 0.7h*random01 + (half)noise, 0.0h, length - 0.01h);
+    float tilt = clamp(1.9f + 0.7f*random01, 0.0f, length - 0.01f);
 
     // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
     // Also, we can make the length smaller based on the facing direction
@@ -596,17 +602,17 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
      
     if(is_inside_frustum(game_proj_view, min, max))
     {
-        // TODO(gh) should check if this is really 'atomic'
         uint grass_instance_index = atomic_fetch_add_explicit(grass_count, 1, memory_order_relaxed);
 
         float2 facing_direction = float2(cos((float)hash), sin((float)hash));
-        half stride = sqrt(length*length - tilt*tilt); // only horizontal length of the blade
-        half bend = 0.7h + 0.2h*random01;
+        float stride = sqrt(length*length - tilt*tilt); // only horizontal length of the blade
+        float bend = 0.7f + 0.2f*random01;
 
         float3 original_p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
         float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade, think it should be (y, -x)?
         float3 blade_normal = normalize(cross(original_p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
         float3 original_p1 = p0 + (2.5f/4.0f) * (original_p2 - p0) + bend * blade_normal;
+
 
         float3 force = 5 * noise * float3(1, 0, 0);
 
@@ -616,9 +622,9 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
 
         grass_instance_buffer[grass_instance_index].orthogonal_normal = packed_float3(orthogonal_normal);
         grass_instance_buffer[grass_instance_index].hash = hash; 
-        grass_instance_buffer[grass_instance_index].blade_width = 0.195h;
-        grass_instance_buffer[grass_instance_index].wiggliness = 2.0h + random01;
-        grass_instance_buffer[grass_instance_index].color = packed_half3(random01, 0.784h, 0.2h);
+        grass_instance_buffer[grass_instance_index].blade_width = 0.195f;
+        grass_instance_buffer[grass_instance_index].wiggliness = 2.0f + random01;
+        grass_instance_buffer[grass_instance_index].color = packed_float3(random01, 0.784h, 0.2h);
     }
 }
 
@@ -631,7 +637,7 @@ struct Arguments
 // TODO(gh) Use two different vertex functions to support distance-based LOD
 kernel void 
 encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
-                                            device atomic_uint *grass_start_count [[buffer(1)]],
+                                            device atomic_uint *grass_start_index [[buffer(1)]],
                                             const device uint *grass_count [[buffer(2)]],
                                             const device GrassInstanceData *grass_instance_buffer [[buffer(3)]],
                                             const device uint *indices [[buffer(4)]],
@@ -640,7 +646,7 @@ encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
                                             constant packed_float3 *game_camera_p [[buffer(7)]],
                                             constant float *time_elasped [[buffer(8)]])
 {
-    uint grass_start_index = atomic_exchange_explicit(grass_start_count, *grass_count, memory_order_relaxed);
+    uint start_index = atomic_exchange_explicit(grass_start_index, *grass_count, memory_order_relaxed);
     render_command command(arguments->cmd_buffer, 0);
 
     command.set_vertex_buffer(grass_instance_buffer, 0);
@@ -652,9 +658,9 @@ encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
     command.draw_indexed_primitives(primitive_type::triangle, // primitive type
                                     39, // index count TODO(gh) We can also just pass those in, too?
                                     indices, // index buffer
-                                    *grass_count-grass_start_index, // instance count
+                                    *grass_count-start_index, // instance count
                                     0, // base vertex
-                                    grass_start_index); //base instance
+                                    start_index); //base instance
 
 }
 

@@ -244,6 +244,9 @@ init_grass_grid(ThreadWorkQueue *gpu_work_queue, Entity *floor, RandomSeries *se
     }
 
     grass_grid->perlin_noise_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32) * total_grass_count);
+
+    grass_grid->grass_instance_data_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(GrassInstanceData)*total_grass_count);
+    assert(grass_grid->grass_instance_data_buffer.handle);
 }
 
 internal void

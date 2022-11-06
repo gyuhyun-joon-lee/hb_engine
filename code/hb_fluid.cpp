@@ -44,7 +44,6 @@
 internal void
 initialize_fluid_cube(FluidCube *fluid_cube, MemoryArena *arena, v3 left_bottom_p, u32 cell_count_x, u32 cell_count_y, u32 cell_count_z, f32 cell_dim, f32 viscosity)
 {
-    fluid_cube->left_bottom_p = left_bottom_p;
     fluid_cube->viscosity = viscosity;
     fluid_cube->cell_count = V3u(cell_count_x, cell_count_y, cell_count_z); 
     fluid_cube->cell_dim = cell_dim; 
@@ -635,7 +634,9 @@ validate_divergence(f32 *x, f32 *y, f32 *z, v3u cell_count, f32 cell_dim)
 internal void
 initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom_p, v3i cell_count, f32 cell_dim)
 {
-    cube->left_bottom_p = left_bottom_p;
+    cube->min = left_bottom_p;
+    cube->max = cube->min + V3(cell_dim*cell_count.x, cell_dim*cell_count.y, cell_dim*cell_count.z);
+
     cube->cell_count = cell_count;
     cube->cell_dim = cell_dim;
 

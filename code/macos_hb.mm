@@ -784,15 +784,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
     u32 grid_to_render_count = 0;
     if(render_push_buffer->enable_grass_rendering)
     {
-        // init grass count
-        // TODO(gh) not sure why, but it seems like this removes the nasty bug that I had before...
-        id<MTLComputeCommandEncoder> initialize_grass_counts_encoder = [command_buffer computeCommandEncoder];
-        metal_set_compute_pipeline(initialize_grass_counts_encoder, render_context->initialize_grass_counts_pipeline);
-        metal_set_compute_buffer(initialize_grass_counts_encoder, render_context->grass_start_count_buffer.buffer, 0, 0);
-        metal_set_compute_buffer(initialize_grass_counts_encoder, render_context->grass_count_buffer.buffer, 0, 1);
-        metal_dispatch_compute_threads(initialize_grass_counts_encoder, V3u(1, 1, 1), V3u(1, 1, 1));
-        metal_memory_barrier_with_scope(initialize_grass_counts_encoder, MTLBarrierScopeBuffers);
-        metal_end_encoding(initialize_grass_counts_encoder);
+
 
 #if 0
         metal_get_timestamp(&render_context->grass_rendering_start_timestamp, command_buffer, render_context->device);
@@ -866,6 +858,16 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 grass_grid_index < total_grid_count;
                 ++grass_grid_index)
         {
+            // init grass count
+            // TODO(gh) not sure why, but it seems like this removes the nasty bug that I had before...
+            id<MTLComputeCommandEncoder> initialize_grass_counts_encoder = [command_buffer computeCommandEncoder];
+            metal_set_compute_pipeline(initialize_grass_counts_encoder, render_context->initialize_grass_counts_pipeline);
+            metal_set_compute_buffer(initialize_grass_counts_encoder, render_context->grass_start_index_buffer.buffer, 0, 0);
+            metal_set_compute_buffer(initialize_grass_counts_encoder, render_context->grass_count_buffer.buffer, 0, 1);
+            metal_dispatch_compute_threads(initialize_grass_counts_encoder, V3u(1, 1, 1), V3u(1, 1, 1));
+            metal_memory_barrier_with_scope(initialize_grass_counts_encoder, MTLBarrierScopeBuffers);
+            metal_end_encoding(initialize_grass_counts_encoder);
+
             /*
                If the instance data per grass count is 64 bytes,
                64 * 256 * 256 = 4mb per grid.
@@ -898,7 +900,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_count_buffer.buffer, 0, 0);
                 // offset is not needed because we are indexing the array using the grass index,
                 // which gets accumulated anyway
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_instance_buffer.buffer, 0, 1);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->grass_instance_data_buffer.handle, 0, 1);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->perlin_noise_buffer.handle, 0, 2);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->floor_z_buffer.handle, 0, 3);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 4);
@@ -912,7 +914,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 grid_to_render_count++;
 
                 // flush the command every 4 grids or when we ran out of grids
-                if((grid_to_render_count % 4 == 0 && (grid_to_render_count != 0)) || (grass_grid_index == total_grid_count-1))
+                // if((grid_to_render_count % 4 == 0 && (grid_to_render_count != 0)) || (grass_grid_index == total_grid_count-1))
                 {
                     // Reset the indirect command buffer
                     id<MTLBlitCommandEncoder> icb_reset_encoder = [command_buffer blitCommandEncoder];
@@ -942,9 +944,9 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                             encode_instanced_grass_encoder, 
                             render_context->icb_argument_buffer[render_context->next_grass_double_buffer_index].buffer, 
                             0, 0);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_start_count_buffer.buffer, 0, 1);
+                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_start_index_buffer.buffer, 0, 1);
                     metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_count_buffer.buffer, 0, 2);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_instance_buffer.buffer, 0, 3);
+                    metal_set_compute_buffer(encode_instanced_grass_encoder, (id<MTLBuffer>)grid->grass_instance_data_buffer.handle, 0, 3);
                     metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_index_buffer.buffer, 0, 4);
                     metal_set_compute_bytes(encode_instanced_grass_encoder, &render_proj_view, sizeof(render_proj_view), 5);
                     metal_set_compute_bytes(encode_instanced_grass_encoder, &light_proj_view, sizeof(light_proj_view), 6);
@@ -963,7 +965,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
                     id<MTLRenderCommandEncoder> g_buffer_render_encoder = 
                         [command_buffer renderCommandEncoderWithDescriptor: render_context->g_buffer_renderpass];
-                    NSString *b = @"Fill Grass Instance Data";
+                    NSString *b = @"Render Grasses to the G Buffers";
                     g_buffer_render_encoder.label = [b stringByAppendingFormat:@"%u", grid_to_render_count];
 
                     metal_set_viewport(g_buffer_render_encoder, 0, 0, window_width, window_height, 0, 1);
@@ -977,13 +979,6 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                         executeCommandsInBuffer:render_context->icb[render_context->next_grass_double_buffer_index] 
                             withRange:NSMakeRange(0, 1)
                     ];
-#if 0
-                    // TODO(gh) not sure if we really need this fence?
-                    metal_signal_fence_after(
-                            g_buffer_render_encoder, 
-                            render_context->grass_double_buffer_fence[render_context->next_grass_double_buffer_index],
-                            MTLRenderStageVertex);
-#endif
                     metal_end_encoding(g_buffer_render_encoder);
 
                     render_context->next_grass_double_buffer_index = (render_context->next_grass_double_buffer_index+1)%2;
@@ -1575,10 +1570,8 @@ int main(void)
                             singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
                             view.depthStencilPixelFormat, 0, true);
 
-    metal_render_context.grass_start_count_buffer = metal_make_shared_buffer(device, sizeof(u32));
+    metal_render_context.grass_start_index_buffer = metal_make_shared_buffer(device, sizeof(u32));
     metal_render_context.grass_count_buffer = metal_make_shared_buffer(device, sizeof(u32));
-    // TODO(gh) Should be able to change this based on the game code grass count
-    metal_render_context.grass_instance_buffer = metal_make_shared_buffer(device, 24*sizeof(GrassInstanceData)*256*256);
 
     metal_render_context.grass_index_buffer = metal_make_shared_buffer(device, sizeof(u32)*39);
 

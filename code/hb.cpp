@@ -75,8 +75,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         // TODO(gh) Beware that when you change this value, you also need to change the size of grass instance buffer
         // and the indirect command count(for now)
-        u32 grass_on_floor_count_x = 256;
-        u32 grass_on_floor_count_y = 256;
+        u32 grass_per_grid_count_x = 256;
+        u32 grass_per_grid_count_y = 256;
 
         v2 floor_left_bottom_p = hadamard(-V2(game_state->grass_grid_count_x/2, game_state->grass_grid_count_y/2), grid_dim);
         for(u32 y = 0;
@@ -92,10 +92,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 v3 center = V3(0.5f*(min + max), 0);
 
                 Entity *floor_entity = 
-                    add_floor_entity(game_state, &game_state->transient_arena, center, grid_dim, V3(0.25f, 0.1f, 0.04f), grass_on_floor_count_x, grass_on_floor_count_y);
+                    add_floor_entity(game_state, &game_state->transient_arena, center, grid_dim, V3(0.25f, 0.1f, 0.04f), grass_per_grid_count_x, grass_per_grid_count_y);
 
                 GrassGrid *grid = game_state->grass_grids + y*game_state->grass_grid_count_x + x;
-                init_grass_grid(gpu_work_queue, floor_entity, &game_state->random_series, grid, grass_on_floor_count_x, grass_on_floor_count_y, min, max);
+                init_grass_grid(gpu_work_queue, floor_entity, &game_state->random_series, grid, grass_per_grid_count_x, grass_per_grid_count_y, min, max);
             }
         }
 
@@ -105,8 +105,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         i32 fluid_cell_count_x = 12;
         i32 fluid_cell_count_y = 12;
         i32 fluid_cell_count_z = 12;
-        initialize_fluid_cube(&game_state->fluid_cube, &game_state->transient_arena, 
-                            V3(0, 0, 0), fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z, 2, 3);
 
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, 
                                     V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 4);
@@ -480,7 +478,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         x < fluid_cube->cell_count.x;
                         ++x)
                 {
-                    v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(x+0.5f, y+0.5f, z+0.5f);
+                    v3 center = fluid_cube->min + fluid_cube->cell_dim*V3(x+0.5f, y+0.5f, z+0.5f);
 
                     if(x == fluid_cube->cell_count.x/2 && 
                             y == 0 &&
@@ -589,7 +587,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         cell_x < fluid_cube->cell_count.x;
                         ++cell_x)
                 {
-                    v3 center = fluid_cube->left_bottom_p + fluid_cube->cell_dim*V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f);
+                    v3 center = fluid_cube->min + fluid_cube->cell_dim*V3(cell_x+0.5f, cell_y+0.5f, cell_z+0.5f);
                     u32 ID = get_mac_index_center(cell_x, cell_y, cell_z, fluid_cube->cell_count);
 
                     f32 density = fluid_cube->density_dest[ID];
