@@ -862,8 +862,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
             // TODO(gh) not sure why, but it seems like this removes the nasty bug that I had before...
             id<MTLComputeCommandEncoder> initialize_grass_counts_encoder = [command_buffer computeCommandEncoder];
             metal_set_compute_pipeline(initialize_grass_counts_encoder, render_context->initialize_grass_counts_pipeline);
-            metal_set_compute_buffer(initialize_grass_counts_encoder, render_context->grass_start_index_buffer.buffer, 0, 0);
-            metal_set_compute_buffer(initialize_grass_counts_encoder, render_context->grass_count_buffer.buffer, 0, 1);
+            metal_set_compute_buffer(initialize_grass_counts_encoder, render_context->grass_count_buffer.buffer, 0, 0);
             metal_dispatch_compute_threads(initialize_grass_counts_encoder, V3u(1, 1, 1), V3u(1, 1, 1));
             metal_memory_barrier_with_scope(initialize_grass_counts_encoder, MTLBarrierScopeBuffers);
             metal_end_encoding(initialize_grass_counts_encoder);
@@ -944,14 +943,13 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                             encode_instanced_grass_encoder, 
                             render_context->icb_argument_buffer[render_context->next_grass_double_buffer_index].buffer, 
                             0, 0);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_start_index_buffer.buffer, 0, 1);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_count_buffer.buffer, 0, 2);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, (id<MTLBuffer>)grid->grass_instance_data_buffer.handle, 0, 3);
-                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_index_buffer.buffer, 0, 4);
-                    metal_set_compute_bytes(encode_instanced_grass_encoder, &render_proj_view, sizeof(render_proj_view), 5);
-                    metal_set_compute_bytes(encode_instanced_grass_encoder, &light_proj_view, sizeof(light_proj_view), 6);
-                    metal_set_compute_bytes(encode_instanced_grass_encoder, &render_push_buffer->game_camera_p, sizeof(render_push_buffer->game_camera_p), 7);
-                    metal_set_compute_bytes(encode_instanced_grass_encoder, &time_elasped_from_start, sizeof(time_elasped_from_start), 8);
+                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_count_buffer.buffer, 0, 1);
+                    metal_set_compute_buffer(encode_instanced_grass_encoder, (id<MTLBuffer>)grid->grass_instance_data_buffer.handle, 0, 2);
+                    metal_set_compute_buffer(encode_instanced_grass_encoder, render_context->grass_index_buffer.buffer, 0, 3);
+                    metal_set_compute_bytes(encode_instanced_grass_encoder, &render_proj_view, sizeof(render_proj_view), 4);
+                    metal_set_compute_bytes(encode_instanced_grass_encoder, &light_proj_view, sizeof(light_proj_view), 5);
+                    metal_set_compute_bytes(encode_instanced_grass_encoder, &render_push_buffer->game_camera_p, sizeof(render_push_buffer->game_camera_p), 6);
+                    metal_set_compute_bytes(encode_instanced_grass_encoder, &time_elasped_from_start, sizeof(time_elasped_from_start), 7);
 
                     // Tell Metal that we are going to write to the indirect command buffer
                     [encode_instanced_grass_encoder useResource:render_context->icb[render_context->next_grass_double_buffer_index] usage:MTLResourceUsageWrite];
@@ -1570,7 +1568,6 @@ int main(void)
                             singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
                             view.depthStencilPixelFormat, 0, true);
 
-    metal_render_context.grass_start_index_buffer = metal_make_shared_buffer(device, sizeof(u32));
     metal_render_context.grass_count_buffer = metal_make_shared_buffer(device, sizeof(u32));
 
     metal_render_context.grass_index_buffer = metal_make_shared_buffer(device, sizeof(u32)*39);

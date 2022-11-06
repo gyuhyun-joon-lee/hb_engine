@@ -613,7 +613,6 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         float3 blade_normal = normalize(cross(original_p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
         float3 original_p1 = p0 + (2.5f/4.0f) * (original_p2 - p0) + bend * blade_normal;
 
-
         float3 force = 5 * noise * float3(1, 0, 0);
 
         grass_instance_buffer[grass_instance_index].p0 = packed_float3(p0);
@@ -637,16 +636,14 @@ struct Arguments
 // TODO(gh) Use two different vertex functions to support distance-based LOD
 kernel void 
 encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
-                                            device atomic_uint *grass_start_index [[buffer(1)]],
-                                            const device uint *grass_count [[buffer(2)]],
-                                            const device GrassInstanceData *grass_instance_buffer [[buffer(3)]],
-                                            const device uint *indices [[buffer(4)]],
-                                            constant float4x4 *render_proj_view [[buffer(5)]],
-                                            constant float4x4 *light_proj_view [[buffer(6)]],
-                                            constant packed_float3 *game_camera_p [[buffer(7)]],
-                                            constant float *time_elasped [[buffer(8)]])
+                                            const device uint *grass_count [[buffer(1)]],
+                                            const device GrassInstanceData *grass_instance_buffer [[buffer(2)]],
+                                            const device uint *indices [[buffer(3)]],
+                                            constant float4x4 *render_proj_view [[buffer(4)]],
+                                            constant float4x4 *light_proj_view [[buffer(5)]],
+                                            constant packed_float3 *game_camera_p [[buffer(6)]],
+                                            constant float *time_elasped [[buffer(7)]])
 {
-    uint start_index = atomic_exchange_explicit(grass_start_index, *grass_count, memory_order_relaxed);
     render_command command(arguments->cmd_buffer, 0);
 
     command.set_vertex_buffer(grass_instance_buffer, 0);
@@ -658,9 +655,9 @@ encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
     command.draw_indexed_primitives(primitive_type::triangle, // primitive type
                                     39, // index count TODO(gh) We can also just pass those in, too?
                                     indices, // index buffer
-                                    *grass_count-start_index, // instance count
+                                    *grass_count, // instance count
                                     0, // base vertex
-                                    start_index); //base instance
+                                    0); //base instance
 
 }
 
@@ -759,10 +756,8 @@ instanced_grass_render_vertex(uint vertexID [[vertex_id]],
 }
 
 kernel void
-initialize_grass_counts(device atomic_uint *grass_start_count [[buffer(0)]],
-                        device atomic_uint *grass_count [[buffer(1)]])
+initialize_grass_counts(device atomic_uint *grass_count [[buffer(0)]])
 {
-    atomic_exchange_explicit(grass_start_count, 0, memory_order_relaxed);
     atomic_exchange_explicit(grass_count, 0, memory_order_relaxed);
 }
 

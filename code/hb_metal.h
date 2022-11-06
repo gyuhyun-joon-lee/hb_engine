@@ -129,8 +129,7 @@ struct MetalRenderContext
 
     MetalSharedBuffer giant_buffer; // will be passed on to the game code
 
-    MetalSharedBuffer grass_start_index_buffer; // updated when we encode the render command
-    MetalSharedBuffer grass_count_buffer;// This one just accumulates
+    MetalSharedBuffer grass_count_buffer;// This one gets initialized to 0 at the start of the rendering loop, and then accumulates
     MetalSharedBuffer grass_index_buffer;
 
     // Timestamps
