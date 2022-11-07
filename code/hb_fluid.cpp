@@ -921,11 +921,6 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                     rhs += a*(v_z[macID_z.ID1] - solid_wall_z1);
                 }
 
-                if(x == cell_count.x/2 && y == cell_count.y/2 && z == cell_count.z/2)
-                {
-                    int a = 1;
-                }
-
                 temp_buffer[get_mac_index_center(x, y, z, cell_count)] = rhs;
             }
         }
@@ -935,7 +930,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
     // TODO(gh) We will stick with the basic Jacobi iteration for now, but we might wanna
     // switch to a better and faster converging algorithm.
     for(u32 iter = 0;
-            iter < 40;
+            iter < 80;
             ++iter)
     {
         for(i32 z = 0;
@@ -1151,16 +1146,16 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
                 // NOTE(gh) Because forward euler method is unstable, we use backtracking which guarantees 
                 // the stable result(but might not be accute)
                 // TODO(gh) Use RK3 instead of linear interpolation, but the performance might not be great.
-                v3 previous_p = cell_rel_p - dt*cell_rel_v; 
+                v3 backtracked_p = cell_rel_p - dt*cell_rel_v; 
 
                 // TODO(gh) We are always clamping considering that we will be using cell centers for lerp,
                 // but do we wanna clamp it differently based on x, y, z, and scalar?
-                previous_p.x = clamp(0.5f, previous_p.x, cell_count.x-0.5f);
-                previous_p.y = clamp(0.5f, previous_p.y, cell_count.y-0.5f);
-                previous_p.z = clamp(0.5f, previous_p.z, cell_count.z-0.5f);
+                backtracked_p.x = clamp(0.5f, backtracked_p.x, cell_count.x-0.5f);
+                backtracked_p.y = clamp(0.5f, backtracked_p.y, cell_count.y-0.5f);
+                backtracked_p.z = clamp(0.5f, backtracked_p.z, cell_count.z-0.5f);
 
                 // TODO(gh) This might produce slightly wrong value?
-                v3 lerp_p = previous_p - V3(0.5f, 0.5f, 0.5f);
+                v3 lerp_p = backtracked_p - V3(0.5f, 0.5f, 0.5f);
                 i32 x0 = (i32)lerp_p.x;
                 i32 x1 = x0 + 1;
                 if(x1 == cell_count.x)
@@ -1354,13 +1349,6 @@ add_project_and_enforce_boundary_condition_work(ThreadWorkQueue *thread_work_que
     data->dt = dt;
     data->quantity_type = quantity_type;
 
-#if 0
-    ThreadFluidCubeWorkData *d = data;
-    project_and_enforce_boundary_condition(d->dest, d->source, cube->v_x_source, cube->v_y_source, cube->v_z_source, 
-            d->pressure, d->temp_buffer,
-            cube->cell_count, cube->cell_dim, d->dt, d->quantity_type);
-#endif
-
     thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_project_and_enforce_boundary_condition_calllback, 0, (void *)data);
 }
 
@@ -1396,7 +1384,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                     add_input_to_center(cube->v_y_source, 100*cosf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
 #else
-                    add_input_to_center(cube->v_x_source, 100, x, y, z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_x_source, 200, x, y, z, cube->cell_count, FluidQuantityType_x);
                     add_input_to_center(cube->v_y_source, 100, x, y, z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 0, x, y, z, cube->cell_count, FluidQuantityType_z);
 #endif

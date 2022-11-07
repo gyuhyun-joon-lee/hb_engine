@@ -102,12 +102,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
-        i32 fluid_cell_count_x = 16;
-        i32 fluid_cell_count_y = 16;
+        i32 fluid_cell_count_x = 32;
+        i32 fluid_cell_count_y = 32;
         i32 fluid_cell_count_z = 8;
 
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, gpu_work_queue,
-                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 2);
+                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 4);
 
         load_game_assets(&game_state->assets, platform_api, gpu_work_queue);
         game_state->debug_fluid_force_z = 1;
@@ -448,7 +448,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    b32 enable_fluid_arrow_rendering = true;
+    b32 enable_fluid_arrow_rendering = false;
     if(enable_fluid_arrow_rendering)
     {
         // NOTE(gh) Default arrow is looking down

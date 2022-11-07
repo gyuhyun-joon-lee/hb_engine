@@ -704,7 +704,7 @@ offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_
 {
     // TODO(gh) noise ranging from 0 to 1 produces worse result, 
     // mixing some negative values produces much natural looking result
-    noise -= 0.5f;
+    noise -= 0.2f;
     packed_float3 p0_p1 = normalize(*p1 + dt*noise*wind - *p0);
     *p1 = *p0 + original_p0_p1_length*p0_p1;
 
@@ -716,11 +716,11 @@ offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_
 
 static void
 offset_control_points_with_spring(thread packed_float3 *original_p1, thread packed_float3 *original_p2,
-                                   device packed_float3 *p1, device packed_float3 *p2, float dt)
+                                   device packed_float3 *p1, device packed_float3 *p2, float random01, float dt)
 {
-    float p1_spring_c = 10.5f;
+    float p1_spring_c = 3.5f + random01;
 
-    float p2_spring_c = p1_spring_c/5.0f;
+    float p2_spring_c = p1_spring_c/3.0f;
 
     *p1 += dt*p1_spring_c*(*original_p1 - *p1);
     *p2 += dt*p2_spring_c*(*original_p2 - *p2);
@@ -752,7 +752,7 @@ initialize_grass_grid(device GrassInstanceData *grass_instance_buffer [[buffer(0
     float3 original_p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
     float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade, think it should be (y, -x)?
     float3 blade_normal = normalize(cross(original_p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
-    float3 original_p1 = p0 + (2.5f/4.0f) * (original_p2 - p0) + bend * blade_normal;
+    float3 original_p1 = p0 + (2.0f/4.0f) * (original_p2 - p0) + bend * blade_normal;
 
     grass_instance_buffer[grass_index].p0 = packed_float3(p0);
     grass_instance_buffer[grass_index].p1 = packed_float3(original_p1);
@@ -791,8 +791,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
     uint hash = 10000*(wang_hash(grass_index)/(float)0xffffffff);
     float random01 = (float)hash/(float)(10000);
     float grass_length = 2.8h + random01;
-    float tilt = clamp(1.9f + 0.7f*random01 + 2.0f*(noise01 - 0.5f), 0.0f, grass_length - 0.01f);
-    // float tilt = clamp(1.9f + 0.7f*random01, 0.0f, grass_length - 0.01f);
+    float tilt = clamp(1.9f + 0.7f*random01 + (noise01-0.5f), 0.0f, grass_length - 0.01f);
 
 #if 0
     // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
@@ -824,7 +823,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         float original_p0_p1_length = length(original_p1 - p0);
         float original_p1_p2_length = length(original_p2 - original_p1);
 
-        packed_float3 wind_v = packed_float3(0, 0, 0);
+        packed_float3 wind_v = packed_float3(5, 0, 0);
         if(is_inside_cube(p0, *fluid_cube_min, *fluid_cube_max))
         {
             packed_float3 cell_p = (p0 - *fluid_cube_min) / *fluid_cube_cell_dim;
@@ -847,7 +846,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
 
         offset_control_points_with_spring(&original_p1, &original_p2,
                                             &grass_instance_buffer[grass_index].p1,
-                                            &grass_instance_buffer[grass_index].p2, target_seconds_per_frame);
+                                            &grass_instance_buffer[grass_index].p2, random01, target_seconds_per_frame);
     }
 }
 
