@@ -843,7 +843,6 @@ get_neighboring_pressure_with_boundary_condition(f32 *pressures, i32 center_x, i
     return result;
 }
 
-
 // NOTE(gh) N-S mementum equation does have a pressure term (-delP/density),
 // but we don't know the pressure that will satisfy the continuity equation (divergence(u) = 0)
 // So we need to get the pressure, and subtract it from the result of the N-S equation
