@@ -65,9 +65,10 @@ struct FluidCubeMAC
     i32 total_z_count; // (z+1)*y*x
     i32 total_center_count; // x*y*z
 
-    f32 *v_x; // count : 2*z*y*(x+1)
-    f32 *v_y; // count : 2*z*(y+1)*x
-    f32 *v_z; // count : 2*(z+1)*y*x
+    // TODO(gh)
+    GPUVisibleBuffer v_x; // count : 2*z*y*(x+1)
+    GPUVisibleBuffer v_y; // count : 2*z*(y+1)*x
+    GPUVisibleBuffer v_z; // count : 2*(z+1)*y*x
 
     f32 *densities; // count : x*y*z
 

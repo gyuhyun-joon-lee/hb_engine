@@ -632,7 +632,8 @@ validate_divergence(f32 *x, f32 *y, f32 *z, v3u cell_count, f32 cell_dim)
 
 
 internal void
-initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom_p, v3i cell_count, f32 cell_dim)
+initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *gpu_work_queue, 
+                        v3 left_bottom_p, v3i cell_count, f32 cell_dim)
 {
     cube->min = left_bottom_p;
     cube->max = cube->min + V3(cell_dim*cell_count.x, cell_dim*cell_count.y, cell_dim*cell_count.z);
@@ -645,9 +646,16 @@ initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom
     cube->total_z_count = cell_count.x*cell_count.y*(cell_count.z+1);
     cube->total_center_count = cell_count.x*cell_count.y*cell_count.z;
 
-    cube->v_x = push_array(arena, f32, 2*cube->total_x_count);
-    cube->v_y = push_array(arena, f32, 2*cube->total_y_count);
-    cube->v_z = push_array(arena, f32, 2*cube->total_z_count);
+    cube->v_x = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32)*2*cube->total_x_count);
+    cube->v_y = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32)*2*cube->total_y_count);
+    cube->v_z = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32)*2*cube->total_z_count);
+    zero_memory(cube->v_x.memory, sizeof(f32)*2*cube->total_x_count);
+    zero_memory(cube->v_y.memory, sizeof(f32)*2*cube->total_y_count);
+    zero_memory(cube->v_z.memory, sizeof(f32)*2*cube->total_z_count);
+    flush_gpu_visible_buffer(&cube->v_x);
+    flush_gpu_visible_buffer(&cube->v_y);
+    flush_gpu_visible_buffer(&cube->v_z);
+    cube->v_z = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32)*2*cube->total_z_count);
 
     cube->pressure_x = push_array(arena, f32, cube->total_center_count);
     cube->pressure_y = push_array(arena, f32, cube->total_center_count);
@@ -659,17 +667,14 @@ initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, v3 left_bottom
 
     cube->densities = push_array(arena, f32, 2*cube->total_center_count);
 
-    zero_memory(cube->v_x, sizeof(f32)*2*cube->total_x_count);
-    zero_memory(cube->v_y, sizeof(f32)*2*cube->total_y_count);
-    zero_memory(cube->v_z, sizeof(f32)*2*cube->total_z_count);
     zero_memory(cube->densities, sizeof(f32)*2*cube->total_center_count);
 
-    cube->v_x_dest = cube->v_x;
-    cube->v_x_source = cube->v_x_dest + cube->total_x_count;
-    cube->v_y_dest = cube->v_y;
-    cube->v_y_source = cube->v_y_dest + cube->total_y_count;
-    cube->v_z_dest = cube->v_z;
-    cube->v_z_source = cube->v_z_dest + cube->total_z_count;
+    cube->v_x_dest = (f32 *)cube->v_x.memory;
+    cube->v_x_source = (f32 *)cube->v_x_dest + cube->total_x_count;
+    cube->v_y_dest = (f32 *)cube->v_y.memory;
+    cube->v_y_source = (f32 *)cube->v_y_dest + cube->total_y_count;
+    cube->v_z_dest = (f32 *)cube->v_z.memory;
+    cube->v_z_source = (f32 *)cube->v_z_dest + cube->total_z_count;
 
     cube->density_dest = cube->densities;
     cube->density_source = cube->densities + cube->total_center_count;

@@ -887,9 +887,22 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 grid_info.max = grid->max;
                 grid_info.one_thread_worth_dim = one_thread_worth_dim;
 
-                SphereInfo sphere_info = {};
-                sphere_info.center = render_push_buffer->sphere_center;
-                sphere_info.r = render_push_buffer->sphere_r;
+                if(!grid->is_initialized)
+                {
+                    id<MTLComputeCommandEncoder> initialize_grass_grid_encoder = [command_buffer computeCommandEncoder];
+                    NSString *a = @"Initialize Grass Grid";
+                    initialize_grass_grid_encoder.label = [a stringByAppendingFormat:@"%u", grass_grid_index];
+
+                    metal_set_compute_pipeline(initialize_grass_grid_encoder, render_context->initialize_grass_grid_pipeline);
+                    metal_set_compute_buffer(initialize_grass_grid_encoder, (id<MTLBuffer>)grid->grass_instance_data_buffer.handle, 0, 0);
+                    metal_set_compute_buffer(initialize_grass_grid_encoder, (id<MTLBuffer>)grid->floor_z_buffer.handle, 0, 1);
+                    metal_set_compute_bytes(initialize_grass_grid_encoder, &grid_info, sizeof(grid_info), 2);
+                    metal_dispatch_compute_threads(initialize_grass_grid_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
+
+                    metal_end_encoding(initialize_grass_grid_encoder);
+
+                   grid->is_initialized = true;
+                }
 
                 id<MTLComputeCommandEncoder> fill_grass_instance_compute_encoder = [command_buffer computeCommandEncoder];
                 NSString *a = @"Fill Grass Instance Data";
@@ -897,14 +910,18 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 
                 metal_set_compute_pipeline(fill_grass_instance_compute_encoder, render_context->fill_grass_instance_data_pipeline);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_count_buffer.buffer, 0, 0);
-                // offset is not needed because we are indexing the array using the grass index,
-                // which gets accumulated anyway
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->grass_instance_data_buffer.handle, 0, 1);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->perlin_noise_buffer.handle, 0, 2);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->floor_z_buffer.handle, 0, 3);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 4);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 5);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &sphere_info, sizeof(sphere_info), 6);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &time_elasped_from_start, sizeof(time_elasped_from_start), 6);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_x->handle, render_push_buffer->fluid_cube_v_x_offset, 7);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_y->handle, render_push_buffer->fluid_cube_v_y_offset, 8);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_z->handle, render_push_buffer->fluid_cube_v_z_offset, 9);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_min, sizeof(render_push_buffer->fluid_cube_min), 10);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_max, sizeof(render_push_buffer->fluid_cube_max), 11);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_dim, sizeof(render_push_buffer->fluid_cube_cell_dim), 12);
 
                 metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
                 metal_memory_barrier_with_scope(fill_grass_instance_compute_encoder, MTLBarrierScopeBuffers);
@@ -1552,6 +1569,9 @@ int main(void)
 
     metal_render_context.initialize_grass_counts_pipeline = 
         metal_make_compute_pipeline(device, shader_library, "initialize_grass_counts");
+
+    metal_render_context.initialize_grass_grid_pipeline = 
+        metal_make_compute_pipeline(device, shader_library, "initialize_grass_grid");
 
     metal_render_context.fill_grass_instance_data_pipeline = 
         metal_make_compute_pipeline(device, shader_library, "fill_grass_instance_data_compute");

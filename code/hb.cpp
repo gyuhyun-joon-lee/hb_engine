@@ -106,7 +106,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         i32 fluid_cell_count_y = 12;
         i32 fluid_cell_count_z = 12;
 
-        initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, 
+        initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, gpu_work_queue,
                                     V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 4);
 
         load_game_assets(&game_state->assets, platform_api, gpu_work_queue);
@@ -334,6 +334,19 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     FluidCubeMAC *fluid_cube = &game_state->fluid_cube_mac;
     update_fluid_cube_mac(fluid_cube, &game_state->transient_arena, thread_work_queue, platform_input->dt_per_frame);
+    // TODO(gh) Only a temporary thing, remove this when we move the whole fluid simluation to the GPU
+    platform_render_push_buffer->fluid_cube_v_x = &fluid_cube->v_x;
+    platform_render_push_buffer->fluid_cube_v_y = &fluid_cube->v_y;
+    platform_render_push_buffer->fluid_cube_v_z = &fluid_cube->v_z;
+    platform_render_push_buffer->fluid_cube_min = fluid_cube->min;
+    platform_render_push_buffer->fluid_cube_max = fluid_cube->max;
+    platform_render_push_buffer->fluid_cube_cell_dim = fluid_cube->cell_dim;
+    platform_render_push_buffer->fluid_cube_v_x_offset = 
+        (fluid_cube->v_x_dest > fluid_cube->v_x_source) ? (u32)(fluid_cube->v_x_dest - fluid_cube->v_x_source) : 0;
+    platform_render_push_buffer->fluid_cube_v_y_offset = 
+        (fluid_cube->v_y_dest > fluid_cube->v_y_source) ? (u32)(fluid_cube->v_y_dest - fluid_cube->v_y_source) : 0;
+    platform_render_push_buffer->fluid_cube_v_z_offset = 
+        (fluid_cube->v_z_dest > fluid_cube->v_z_source) ? (u32)(fluid_cube->v_z_dest - fluid_cube->v_z_source) : 0;
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1

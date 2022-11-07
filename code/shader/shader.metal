@@ -484,16 +484,6 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
                                 uint2 threadgroup_count_per_grid [[threadgroups_per_grid]])
 {
     const object_data PerGrassData *per_grass_data = &(payload->per_grass_data[threadgroup_position.y * threadgroup_count_per_grid.x + threadgroup_position.x]);
-
-#if 1
-    // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
-    // Also, we can make the length smaller based on the facing direction
-    // These pad values are not well thought out, just throwing those in
-    float3 length = 0.6f*float3(per_grass_data->length, per_grass_data->length, 0.0f);
-    float3 min = per_grass_data->center - length;
-    float3 max = per_grass_data->center + length;
-    max.z += per_grass_data->tilt + 1.0f;
-#endif
     
     float low_lod_distance_square = 3000;
     // float low_lod_distance_square = 300000000;
@@ -544,25 +534,70 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
 
 // NOTE(gh) p0 is on the ground and does not move
 static void
-offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_float3 *p1, device packed_float3 *p2)
+offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_float3 *p1, device packed_float3 *p2, 
+                                        packed_float3 wind_direction, float3 wind_speed, float dt, float time_elasped_from_start)
 {
-    packed_float3 v = packed_float3(0, 0, 0);
+    packed_float3 wind = sin(time_elasped_from_start)*wind_speed*normalize(wind_direction);
 
     float p0_p1_length = length(*p1 - *p0);
     float p1_p2_length = length(*p2 - *p1);
 
-    packed_float3 p0_p1 = normalize(*p1 - *p0);
+    packed_float3 p0_p1 = normalize(*p1 + dt*wind - *p0);
     *p1 = *p0 + p0_p1_length*p0_p1;
 
     // TODO(gh) We can re-adjust p2 after adjusting p1
-    packed_float3 p1_p2 = normalize(*p2 - *p1);
+    packed_float3 p1_p2 = normalize(*p2 + dt*wind - *p1);
     *p2 = *p1 + p1_p2_length*p1_p2;
 }
 
-kernel void
-initialize_grass_instance_data()
+static void
+offset_control_points_with_spring(thread packed_float3 *original_p0, thread packed_float3 *original_p1, thread packed_float3 *original_p2,
+                                    device packed_float3 *p0, device packed_float3 *p1, device packed_float3 *p2, float dt)
 {
+    float p1_spring_c = 10.5f;
+    float p2_spring_c = p1_spring_c/3.0f;
 
+    *p1 += dt*p1_spring_c*(*original_p1 - *p1);
+    *p2 += dt*p2_spring_c*(*original_p2 - *p2);
+}
+
+kernel void
+initialize_grass_grid(device GrassInstanceData *grass_instance_buffer [[buffer(0)]],
+                                const device float *floor_z_values [[buffer (1)]],
+                                const device GridInfo *grid_info [[buffer (2)]],
+                                uint2 thread_count_per_grid [[threads_per_grid]],
+                                uint2 thread_position_in_grid [[thread_position_in_grid]])
+{
+    uint grass_index = thread_count_per_grid.x*thread_position_in_grid.y + thread_position_in_grid.x;
+    float z = floor_z_values[grass_index];
+    float3 p0 = packed_float3(grid_info->min, 0) + 
+                    packed_float3(grid_info->one_thread_worth_dim.x*thread_position_in_grid.x, 
+                                  grid_info->one_thread_worth_dim.y*thread_position_in_grid.y, 
+                                  z);
+    
+    uint hash = 10000*(wang_hash(grass_index)/(float)0xffffffff);
+    float random01 = (float)hash/(float)(10000);
+    float length = 2.8h + random01;
+    float tilt = clamp(1.9f + 0.7f*random01, 0.0f, length - 0.01f);
+
+    float2 facing_direction = float2(cos((float)hash), sin((float)hash));
+    float stride = sqrt(length*length - tilt*tilt); // only horizontal length of the blade
+    float bend = 0.6f + 0.2f*random01;
+
+    float3 original_p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
+    float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade, think it should be (y, -x)?
+    float3 blade_normal = normalize(cross(original_p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
+    float3 original_p1 = p0 + (2.5f/4.0f) * (original_p2 - p0) + bend * blade_normal;
+
+    grass_instance_buffer[grass_index].p0 = packed_float3(p0);
+    grass_instance_buffer[grass_index].p1 = packed_float3(original_p1);
+    grass_instance_buffer[grass_index].p2 = packed_float3(original_p2);
+
+    grass_instance_buffer[grass_index].orthogonal_normal = packed_float3(orthogonal_normal);
+    grass_instance_buffer[grass_index].hash = hash; 
+    grass_instance_buffer[grass_index].blade_width = 0.195f;
+    grass_instance_buffer[grass_index].wiggliness = 2.0f + random01;
+    grass_instance_buffer[grass_index].color = packed_float3(random01, 0.784h, 0.2h);
 }
 
 kernel void
@@ -572,14 +607,19 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 const device float *floor_z_values [[buffer (3)]],
                                 const device GridInfo *grid_info [[buffer (4)]],
                                 constant float4x4 *game_proj_view [[buffer (5)]],
-                                constant SphereInfo *sphere_info [[buffer (6)]],
-                                // const device SphereInfo *sphere_info [[buffer (7)]],
+                                constant float *time_elasped_from_start [[buffer (6)]],
+                                constant float *fluid_cube_v_x [[buffer (7)]],
+                                constant float *fluid_cube_v_y [[buffer (8)]],
+                                constant float *fluid_cube_v_z [[buffer (9)]],
+                                constant packed_float3 *fluid_cube_min [[buffer (10)]],
+                                constant packed_float3 *fluid_cube_max [[buffer (11)]],
+                                constant float *fluid_cube_cell_dim [[buffer (12)]],
                                 uint2 thread_count_per_grid [[threads_per_grid]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {
     uint grass_index = thread_count_per_grid.x*thread_position_in_grid.y + thread_position_in_grid.x;
     float z = floor_z_values[grass_index];
-    float3 p0 = packed_float3(grid_info->min, 0) + 
+    packed_float3 p0 = packed_float3(grid_info->min, 0) + 
                     packed_float3(grid_info->one_thread_worth_dim.x*thread_position_in_grid.x, 
                                   grid_info->one_thread_worth_dim.y*thread_position_in_grid.y, 
                                   z);
@@ -600,30 +640,32 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
     float3 max = p0 + length_pad;
     max.z += tilt + 1.0f;
      
-    if(is_inside_frustum(game_proj_view, min, max))
+    // TODO(gh) For now, we should disable this and rely on grid based frustum culling
+    // because we need to know the previous instance data in certain position
+    // which means the instance buffer cannot be mixed up. The solution for this would be some sort of hash table,
+    // but we should measure them and see which way would be faster.
+    // if(is_inside_frustum(game_proj_view, min, max))
     {
-        uint grass_instance_index = atomic_fetch_add_explicit(grass_count, 1, memory_order_relaxed);
+        atomic_fetch_add_explicit(grass_count, 1, memory_order_relaxed);
 
         float2 facing_direction = float2(cos((float)hash), sin((float)hash));
         float stride = sqrt(length*length - tilt*tilt); // only horizontal length of the blade
         float bend = 0.7f + 0.2f*random01;
 
-        float3 original_p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
-        float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade, think it should be (y, -x)?
-        float3 blade_normal = normalize(cross(original_p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
-        float3 original_p1 = p0 + (2.5f/4.0f) * (original_p2 - p0) + bend * blade_normal;
+        packed_float3 original_p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
+        packed_float3 orthogonal_normal = normalize(float3(-facing_direction.y, facing_direction.x, 0.0f)); // Direction of the width of the grass blade, think it should be (y, -x)?
+        packed_float3 blade_normal = normalize(cross(original_p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
+        packed_float3 original_p1 = p0 + (2.5f/4.0f) * (original_p2 - p0) + bend * blade_normal;
 
-        float3 force = 5 * noise * float3(1, 0, 0);
+        offset_control_points_with_dynamic_wind(&grass_instance_buffer[grass_index].p0, 
+                                                &grass_instance_buffer[grass_index].p1,
+                                                &grass_instance_buffer[grass_index].p2, 
+                                                packed_float3(1, 0, 0), 15.0f, target_seconds_per_frame, *time_elasped_from_start);
 
-        grass_instance_buffer[grass_instance_index].p0 = packed_float3(p0);
-        grass_instance_buffer[grass_instance_index].p1 = packed_float3(original_p1);
-        grass_instance_buffer[grass_instance_index].p2 = packed_float3(original_p2);
-
-        grass_instance_buffer[grass_instance_index].orthogonal_normal = packed_float3(orthogonal_normal);
-        grass_instance_buffer[grass_instance_index].hash = hash; 
-        grass_instance_buffer[grass_instance_index].blade_width = 0.195f;
-        grass_instance_buffer[grass_instance_index].wiggliness = 2.0f + random01;
-        grass_instance_buffer[grass_instance_index].color = packed_float3(random01, 0.784h, 0.2h);
+        offset_control_points_with_spring(&p0, &original_p1, &original_p2,
+                                                &grass_instance_buffer[grass_index].p0, 
+                                                &grass_instance_buffer[grass_index].p1,
+                                                &grass_instance_buffer[grass_index].p2, target_seconds_per_frame);
     }
 }
 

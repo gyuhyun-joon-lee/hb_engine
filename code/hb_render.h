@@ -27,6 +27,7 @@ struct GPUVisibleBuffer
 struct GrassGrid
 {
     b32 should_draw;
+    b32 is_initialized;
 
     u32 grass_count_x;
     u32 grass_count_y;

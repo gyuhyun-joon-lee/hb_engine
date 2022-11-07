@@ -337,6 +337,18 @@ struct PlatformRenderPushBuffer
     u32 grass_grid_count_x;
     u32 grass_grid_count_y;
 
+    // TODO(gh) Temporary thing, need to remove this when we move the whole fluid simluation
+    // to the GPU
+    GPUVisibleBuffer *fluid_cube_v_x;
+    u32 fluid_cube_v_x_offset;
+    GPUVisibleBuffer *fluid_cube_v_y;
+    u32 fluid_cube_v_y_offset;
+    GPUVisibleBuffer *fluid_cube_v_z;
+    u32 fluid_cube_v_z_offset;
+    v3 fluid_cube_min;
+    v3 fluid_cube_max;
+    f32 fluid_cube_cell_dim;
+
     // This is what the game 'thinks' the camera is
     m4x4 game_camera_view;
     v3 game_camera_p;
