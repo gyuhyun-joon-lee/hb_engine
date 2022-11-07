@@ -244,6 +244,20 @@ struct Payload
     PerGrassData per_grass_data[object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y];
 };
 
+bool
+is_inside_cube(packed_float3 p, packed_float3 min, packed_float3 max)
+{
+    bool result = true;
+    if(p.x < min.x || p.x > max.x ||
+        p.y < min.y || p.y > max.y ||    
+        p.z < min.z || p.z > max.z)
+    {
+        result = false;
+    }
+
+    return result;
+}
+
 // TODO(gh) Should be more conservative with the value,
 // and also change this to seperating axis test 
 bool 
@@ -530,32 +544,183 @@ void single_grass_mesh_function(SingleGrassTriangleMesh output_mesh,
     }
 }
 
+struct MACID
+{
+    // ID0 is smaller than ID1, no matter what axis that it's opertating on
+    int ID0;
+    int ID1;
+};
+
+// TODO(gh) Should double-check these functions
+static MACID
+get_mac_index_x(int x, int y, int z, packed_int3 cell_count)
+{
+    MACID result = {};
+    result.ID0 = cell_count.y*(cell_count.x+1)*z + (cell_count.x+1)*y + x;
+    result.ID1 = result.ID0+1;
+    return result;
+}
+
+static float
+get_mac_center_value_x(device float *x, int cell_x, int cell_y, int cell_z, constant packed_int3 *cell_count)
+{
+    MACID macID = get_mac_index_x(cell_x, cell_y, cell_z, *cell_count);
+
+    float result = 0.5f*(x[macID.ID0] + x[macID.ID1]);
+
+    return result;
+}
+
+static MACID
+get_mac_index_y(int x, int y, int z, packed_int3 cell_count)
+{
+    MACID result = {};
+    result.ID0 = cell_count.x*(cell_count.y+1)*z + (cell_count.y+1)*x + y;
+    result.ID1 = result.ID0+1;
+    return result;
+}
+
+static float
+get_mac_center_value_y(device float *y, int cell_x, int cell_y, int cell_z, constant packed_int3 *cell_count)
+{
+    MACID macID = get_mac_index_y(cell_x, cell_y, cell_z, *cell_count);
+
+    float result = 0.5f*(y[macID.ID0] + y[macID.ID1]);
+
+    return result;
+}
+
+static MACID
+get_mac_index_z(int x, int y, int z, packed_int3 cell_count)
+{
+    MACID result = {};
+    result.ID0 = cell_count.x*(cell_count.z+1)*y + (cell_count.z+1)*x + z;
+    result.ID1 = result.ID0+1;
+    return result;
+}
+
+static float
+get_mac_center_value_z(device float *z, int cell_x, int cell_y, int cell_z, constant packed_int3 *cell_count)
+{
+    MACID macID = get_mac_index_z(cell_x, cell_y, cell_z, *cell_count);
+
+    float result = 0.5f*(z[macID.ID0] + z[macID.ID1]);
+
+    return result;
+}
+
+static int
+get_mac_index_center(int x, int y, int z, packed_int3 cell_count)
+{
+    int result = cell_count.x*cell_count.y*z + cell_count.x*y + x;
+    return result;
+}
+
+static float
+lerp(float min, float t, float max)
+{
+    return min + (max-min)*t;
+}
+
+static packed_float3
+get_mac_bilinear_center_value(device float *x, device float *y, device float *z, packed_float3 p, 
+                                constant packed_int3 *cell_count)
+{
+    packed_float3 result;
+
+    p.x = clamp(p.x, 0.5f, cell_count->x-0.5f);
+    p.y = clamp(p.y, 0.5f, cell_count->y-0.5f);
+    p.z = clamp(p.z, 0.5f, cell_count->z-0.5f);
+
+    p -= packed_float3(0.5f, 0.5f, 0.5f);
+
+    // TODO(gh) This might produce slightly wrong value?
+    int x0 = floor(p.x);
+    int x1 = x0 + 1;
+    if(x1 == cell_count->x)
+    {
+        x0--;
+        x1--;
+    }
+    float xf = p.x-x0;
+
+    int y0 = floor(p.y);
+    int y1 = y0 + 1;
+    if(y1 == cell_count->y)
+    {
+        y0--;
+        y1--;
+    }
+    float yf = p.y-y0;
+
+    int z0 = floor(p.z);
+    int z1 = z0 + 1;
+    if(z1 == cell_count->z)
+    {
+        z0--;
+        z1--;
+    }
+    float zf = p.z - z0;
+
+    result.x =
+            lerp(
+                lerp(lerp(get_mac_center_value_x(x, x0, y0, z0, cell_count), xf, get_mac_center_value_x(x, x1, y0, z0, cell_count)), 
+                    yf, 
+                    lerp(get_mac_center_value_x(x, x0, y1, z0, cell_count), xf, get_mac_center_value_x(x, x1, y1, z0, cell_count))),
+                zf,
+                lerp(lerp(get_mac_center_value_x(x, x0, y0, z1, cell_count), xf, get_mac_center_value_x(x, x1, y0, z1, cell_count)), 
+                    yf, 
+                    lerp(get_mac_center_value_x(x, x0, y1, z1, cell_count), xf, get_mac_center_value_x(x, x1, y1, z1, cell_count))));
+
+    result.y = 
+            lerp(
+                lerp(lerp(get_mac_center_value_y(y, x0, y0, z0, cell_count), xf, get_mac_center_value_y(y, x1, y0, z0, cell_count)), 
+                    yf, 
+                    lerp(get_mac_center_value_y(y, x0, y1, z0, cell_count), xf, get_mac_center_value_y(y, x1, y1, z0, cell_count))),
+                zf,
+                lerp(lerp(get_mac_center_value_y(y, x0, y0, z1, cell_count), xf, get_mac_center_value_y(y, x1, y0, z1, cell_count)), 
+                    yf, 
+                    lerp(get_mac_center_value_y(y, x0, y1, z1, cell_count), xf, get_mac_center_value_y(y, x1, y1, z1, cell_count))));
+
+    result.z = 
+            lerp(
+                lerp(lerp(get_mac_center_value_z(z, x0, y0, z0, cell_count), xf, get_mac_center_value_z(z, x1, y0, z0, cell_count)), 
+                    yf, 
+                    lerp(get_mac_center_value_z(z, x0, y1, z0, cell_count), xf, get_mac_center_value_z(z, x1, y1, z0, cell_count))),
+                zf,
+                lerp(lerp(get_mac_center_value_z(z, x0, y0, z1, cell_count), xf, get_mac_center_value_z(z, x1, y0, z1, cell_count)), 
+                    yf, 
+                    lerp(get_mac_center_value_z(z, x0, y1, z1, cell_count), xf, get_mac_center_value_z(z, x1, y1, z1, cell_count))));
+    return result;
+}
+
 #define target_seconds_per_frame (1/60.0f)
 
 // NOTE(gh) p0 is on the ground and does not move
 static void
 offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_float3 *p1, device packed_float3 *p2, 
-                                        packed_float3 wind_direction, float3 wind_speed, float dt, float time_elasped_from_start)
+                                        float original_p0_p1_length, float original_p1_p2_length,
+                                         packed_float3 wind, float dt, float noise)
 {
-    packed_float3 wind = sin(time_elasped_from_start)*wind_speed*normalize(wind_direction);
+    // TODO(gh) noise ranging from 0 to 1 produces worse result, 
+    // mixing some negative values produces much natural looking result
+    noise -= 0.5f;
+    packed_float3 p0_p1 = normalize(*p1 + dt*noise*wind - *p0);
+    *p1 = *p0 + original_p0_p1_length*p0_p1;
 
-    float p0_p1_length = length(*p1 - *p0);
-    float p1_p2_length = length(*p2 - *p1);
-
-    packed_float3 p0_p1 = normalize(*p1 + dt*wind - *p0);
-    *p1 = *p0 + p0_p1_length*p0_p1;
 
     // TODO(gh) We can re-adjust p2 after adjusting p1
-    packed_float3 p1_p2 = normalize(*p2 + dt*wind - *p1);
-    *p2 = *p1 + p1_p2_length*p1_p2;
+    packed_float3 p1_p2 = normalize(*p2 + dt*noise*wind - *p1);
+    *p2 = *p1 + original_p1_p2_length*p1_p2;
 }
 
 static void
-offset_control_points_with_spring(thread packed_float3 *original_p0, thread packed_float3 *original_p1, thread packed_float3 *original_p2,
-                                    device packed_float3 *p0, device packed_float3 *p1, device packed_float3 *p2, float dt)
+offset_control_points_with_spring(thread packed_float3 *original_p1, thread packed_float3 *original_p2,
+                                   device packed_float3 *p1, device packed_float3 *p2, float dt)
 {
     float p1_spring_c = 10.5f;
-    float p2_spring_c = p1_spring_c/3.0f;
+
+    float p2_spring_c = p1_spring_c/5.0f;
 
     *p1 += dt*p1_spring_c*(*original_p1 - *p1);
     *p2 += dt*p2_spring_c*(*original_p2 - *p2);
@@ -607,31 +772,29 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 const device float *floor_z_values [[buffer (3)]],
                                 const device GridInfo *grid_info [[buffer (4)]],
                                 constant float4x4 *game_proj_view [[buffer (5)]],
-                                constant float *time_elasped_from_start [[buffer (6)]],
-                                constant float *fluid_cube_v_x [[buffer (7)]],
-                                constant float *fluid_cube_v_y [[buffer (8)]],
-                                constant float *fluid_cube_v_z [[buffer (9)]],
-                                constant packed_float3 *fluid_cube_min [[buffer (10)]],
-                                constant packed_float3 *fluid_cube_max [[buffer (11)]],
+                                device float *fluid_cube_v_x [[buffer (6)]],
+                                device float *fluid_cube_v_y [[buffer (7)]],
+                                device float *fluid_cube_v_z [[buffer (8)]],
+                                constant packed_float3 *fluid_cube_min [[buffer (9)]],
+                                constant packed_float3 *fluid_cube_max [[buffer (10)]],
+                                constant packed_int3 *fluid_cube_cell_count [[buffer (11)]],
                                 constant float *fluid_cube_cell_dim [[buffer (12)]],
                                 uint2 thread_count_per_grid [[threads_per_grid]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {
     uint grass_index = thread_count_per_grid.x*thread_position_in_grid.y + thread_position_in_grid.x;
-    float z = floor_z_values[grass_index];
-    packed_float3 p0 = packed_float3(grid_info->min, 0) + 
-                    packed_float3(grid_info->one_thread_worth_dim.x*thread_position_in_grid.x, 
-                                  grid_info->one_thread_worth_dim.y*thread_position_in_grid.y, 
-                                  z);
+    packed_float3 p0 = grass_instance_buffer[grass_index].p0;
     
     // TODO(gh) better hash function for each grass?
-    float noise = perlin_noise_values[grass_index];
+    // TODO(gh) Make noise to range from 0 to 1
+    float noise01 = perlin_noise_values[grass_index];
     uint hash = 10000*(wang_hash(grass_index)/(float)0xffffffff);
     float random01 = (float)hash/(float)(10000);
-    float length = 2.8h + random01;
-    // half tilt = clamp(1.9h + 0.7h*random01 + (half)noise, 0.0h, length - 0.01h);
-    float tilt = clamp(1.9f + 0.7f*random01, 0.0f, length - 0.01f);
+    float grass_length = 2.8h + random01;
+    float tilt = clamp(1.9f + 0.7f*random01 + 2.0f*(noise01 - 0.5f), 0.0f, grass_length - 0.01f);
+    // float tilt = clamp(1.9f + 0.7f*random01, 0.0f, grass_length - 0.01f);
 
+#if 0
     // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
     // Also, we can make the length smaller based on the facing direction
     // These pad values are not well thought out, just throwing those in
@@ -644,12 +807,13 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
     // because we need to know the previous instance data in certain position
     // which means the instance buffer cannot be mixed up. The solution for this would be some sort of hash table,
     // but we should measure them and see which way would be faster.
-    // if(is_inside_frustum(game_proj_view, min, max))
+    if(is_inside_frustum(game_proj_view, min, max))
+#endif
     {
         atomic_fetch_add_explicit(grass_count, 1, memory_order_relaxed);
 
         float2 facing_direction = float2(cos((float)hash), sin((float)hash));
-        float stride = sqrt(length*length - tilt*tilt); // only horizontal length of the blade
+        float stride = sqrt(grass_length*grass_length - tilt*tilt); // only horizontal length of the blade
         float bend = 0.7f + 0.2f*random01;
 
         packed_float3 original_p2 = p0 + stride * float3(facing_direction, 0.0f) + float3(0, 0, tilt);  
@@ -657,15 +821,33 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         packed_float3 blade_normal = normalize(cross(original_p2 - p0, orthogonal_normal)); // normal of the p0 and p2, will be used to get p1 
         packed_float3 original_p1 = p0 + (2.5f/4.0f) * (original_p2 - p0) + bend * blade_normal;
 
-        offset_control_points_with_dynamic_wind(&grass_instance_buffer[grass_index].p0, 
-                                                &grass_instance_buffer[grass_index].p1,
-                                                &grass_instance_buffer[grass_index].p2, 
-                                                packed_float3(1, 0, 0), 15.0f, target_seconds_per_frame, *time_elasped_from_start);
+        float original_p0_p1_length = length(original_p1 - p0);
+        float original_p1_p2_length = length(original_p2 - original_p1);
 
-        offset_control_points_with_spring(&p0, &original_p1, &original_p2,
-                                                &grass_instance_buffer[grass_index].p0, 
-                                                &grass_instance_buffer[grass_index].p1,
-                                                &grass_instance_buffer[grass_index].p2, target_seconds_per_frame);
+        packed_float3 wind_v = packed_float3(0, 0, 0);
+        if(is_inside_cube(p0, *fluid_cube_min, *fluid_cube_max))
+        {
+            packed_float3 cell_p = (p0 - *fluid_cube_min) / *fluid_cube_cell_dim;
+            int xi = floor(cell_p.x);
+            int yi = floor(cell_p.y);
+            int zi = floor(cell_p.z);
+#if 0
+            packed_float3 wind_v = get_mac_bilinear_center_value(fluid_cube_v_x, fluid_cube_v_y, fluid_cube_v_z, cell_p, fluid_cube_cell_count);
+#endif
+            wind_v += packed_float3(get_mac_center_value_x(fluid_cube_v_x, xi, yi, zi, fluid_cube_cell_count),
+                    get_mac_center_value_y(fluid_cube_v_y, xi, yi, zi, fluid_cube_cell_count),
+                    get_mac_center_value_z(fluid_cube_v_z, xi, yi, zi, fluid_cube_cell_count));
+        }
+
+        offset_control_points_with_dynamic_wind(&grass_instance_buffer[grass_index].p0, 
+                                                    &grass_instance_buffer[grass_index].p1,
+                                                    &grass_instance_buffer[grass_index].p2, 
+                                                    original_p0_p1_length, original_p1_p2_length,
+                                                    wind_v, target_seconds_per_frame, noise01);
+
+        offset_control_points_with_spring(&original_p1, &original_p2,
+                                            &grass_instance_buffer[grass_index].p1,
+                                            &grass_instance_buffer[grass_index].p2, target_seconds_per_frame);
     }
 }
 

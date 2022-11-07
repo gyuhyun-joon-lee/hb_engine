@@ -900,7 +900,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                 }
                 else if(x == cell_count.x-1)
                 {
-                    rhs += a*(v_x[macID_y.ID1] - solid_wall_x1);
+                    rhs += a*(v_x[macID_x.ID1] - solid_wall_x1);
                 }
 
                 if(y == 0)
@@ -1155,32 +1155,9 @@ advect(FluidCubeMAC *cube, f32 *dest, f32 *source, f32 *v_x, f32 *v_y, f32 *v_z,
 
                 // TODO(gh) We are always clamping considering that we will be using cell centers for lerp,
                 // but do we wanna clamp it differently based on x, y, z, and scalar?
-                if(previous_p.x < 0.5f)
-                {
-                    previous_p.x = 0.5f;
-                }
-                else if(previous_p.x > cell_count.x - 0.5f)
-                {
-                    previous_p.x = cell_count.x - 0.5f;
-                }
-
-                if(previous_p.y < 0.5f)
-                {
-                    previous_p.y = 0.5f;
-                }
-                else if(previous_p.y > cell_count.y - 0.5f)
-                {
-                    previous_p.y = cell_count.y - 0.5f;
-                }
-
-                if(previous_p.z < 0.5f)
-                {
-                    previous_p.z = 0.5f;
-                }
-                else if(previous_p.z > cell_count.z - 0.5f)
-                {
-                    previous_p.z = cell_count.z - 0.5f;
-                }
+                previous_p.x = clamp(0.5f, previous_p.x, cell_count.x-0.5f);
+                previous_p.y = clamp(0.5f, previous_p.y, cell_count.y-0.5f);
+                previous_p.z = clamp(0.5f, previous_p.z, cell_count.z-0.5f);
 
                 // TODO(gh) This might produce slightly wrong value?
                 v3 lerp_p = previous_p - V3(0.5f, 0.5f, 0.5f);
@@ -1402,30 +1379,26 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
     if(true)
     {
 #if 1
-        for(i32 z = -2;
-                z < 2;
+        for(i32 z = 0;
+                z < cube->cell_count.z;
                 ++z)
         {
-            for(i32 y = -2;
+            for(i32 y = 0;
                     y < 2;
                     ++y)
            {
-                for(i32 x = -2;
-                        x < 2;
+                for(i32 x = 0;
+                        x < cube->cell_count.x;
                         ++x)
                 {
-
-                    i32 cell_x = cube->cell_count.x/2+x;
-                    i32 cell_y = cube->cell_count.y/2+y;
-                    i32 cell_z = cube->cell_count.z/2+z;
-#if 1
+#if 0
                     add_input_to_center(cube->v_x_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_x);
                     add_input_to_center(cube->v_y_source, 100*cosf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
 #else
-                    add_input_to_center(cube->v_x_source, 40, cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_x);
-                    add_input_to_center(cube->v_y_source, 130, cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
-                    add_input_to_center(cube->v_z_source, 130, cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
+                    add_input_to_center(cube->v_x_source, 100, x, y, z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_y_source, 100, x, y, z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_z_source, 0, x, y, z, cube->cell_count, FluidQuantityType_z);
 #endif
                 }
             }
@@ -1438,11 +1411,11 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                 ++z)
         {
             for(i32 y = 0;
-                    y < 1;
+                    y < cube->cell_count.y;
                     ++y)
            {
                 for(i32 x = 0;
-                        x < cube->cell_count.x;
+                        x < 2;
                         ++x)
                 {
 #if 0
@@ -1450,16 +1423,16 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                     add_input_to_center(cube->v_y_source, 100*cosf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
 #else
-                    add_input_to_center(cube->v_x_source, 0, x, y, z, cube->cell_count, FluidQuantityType_x);
-                    add_input_to_center(cube->v_y_source, 130, x, y, z, cube->cell_count, FluidQuantityType_y);
-                    add_input_to_center(cube->v_z_source, 130, x, y, z, cube->cell_count, FluidQuantityType_z);
+                    add_input_to_center(cube->v_x_source, 100, x, y, z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_y_source, 100, x, y, z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_z_source, 0, x, y, z, cube->cell_count, FluidQuantityType_z);
 #endif
                 }
             }
         }
+#endif
 
         added_velocity = true;
-#endif
     }
 
     update_with_input(cube->v_x_dest, cube->v_x_dest, cube->v_x_source, cube->total_x_count, dt);

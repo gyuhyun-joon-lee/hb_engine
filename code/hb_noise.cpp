@@ -204,7 +204,7 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
             f32 xf = (x+d->offset_x) / (f32)d->total_x_count;
             f32 yf = y / (f32)d->total_y_count;
 
-            u32 high_frequency = 32;
+            u32 high_frequency = 24;
             u32 low_frequency = high_frequency/3;
             // u32 frequency = 32;
             // f32 wind_strength = 1.6f;
@@ -212,8 +212,9 @@ THREAD_WORK_CALLBACK(thread_update_perlin_noise_buffer_callback)
             // TODO(gh) Combining two perlin noise is pretty common, but I don't know whether it makes that of a difference
             f32 high_noise01 = perlin_noise01(high_frequency*xf, high_frequency*yf, 2*d->time_elasped_from_start, high_frequency);
             f32 low_noise01 = perlin_noise01(low_frequency*xf, low_frequency*yf, d->time_elasped_from_start, low_frequency);
-            f32 wind_strength = 1.3f;
-            f32 noise = wind_strength * (0.5f*(low_noise01 + high_noise01-1.0f));
+            assert(high_noise01 <= 1.0f && low_noise01 <= 1.0f);
+            f32 wind_strength = 1.0f;
+            f32 noise = wind_strength * (0.5f*(low_noise01 + high_noise01));
 
             *column++ = noise;
         }

@@ -102,12 +102,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
-        i32 fluid_cell_count_x = 12;
-        i32 fluid_cell_count_y = 12;
-        i32 fluid_cell_count_z = 12;
+        i32 fluid_cell_count_x = 16;
+        i32 fluid_cell_count_y = 16;
+        i32 fluid_cell_count_z = 8;
 
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, gpu_work_queue,
-                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 4);
+                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 2);
 
         load_game_assets(&game_state->assets, platform_api, gpu_work_queue);
         game_state->debug_fluid_force_z = 1;
@@ -340,13 +340,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     platform_render_push_buffer->fluid_cube_v_z = &fluid_cube->v_z;
     platform_render_push_buffer->fluid_cube_min = fluid_cube->min;
     platform_render_push_buffer->fluid_cube_max = fluid_cube->max;
+    platform_render_push_buffer->fluid_cube_cell_count = fluid_cube->cell_count;
     platform_render_push_buffer->fluid_cube_cell_dim = fluid_cube->cell_dim;
-    platform_render_push_buffer->fluid_cube_v_x_offset = 
-        (fluid_cube->v_x_dest > fluid_cube->v_x_source) ? (u32)(fluid_cube->v_x_dest - fluid_cube->v_x_source) : 0;
-    platform_render_push_buffer->fluid_cube_v_y_offset = 
-        (fluid_cube->v_y_dest > fluid_cube->v_y_source) ? (u32)(fluid_cube->v_y_dest - fluid_cube->v_y_source) : 0;
-    platform_render_push_buffer->fluid_cube_v_z_offset = 
-        (fluid_cube->v_z_dest > fluid_cube->v_z_source) ? (u32)(fluid_cube->v_z_dest - fluid_cube->v_z_source) : 0;
+    platform_render_push_buffer->fluid_cube_v_x_offset = clamp(0, (i32)((i64)fluid_cube->v_x_dest - (i64)fluid_cube->v_x_source), INT32_MAX);
+    platform_render_push_buffer->fluid_cube_v_y_offset = clamp(0, (i32)((i64)fluid_cube->v_y_dest - (i64)fluid_cube->v_y_source), INT32_MAX);
+    platform_render_push_buffer->fluid_cube_v_z_offset = clamp(0, (i32)((i64)fluid_cube->v_z_dest - (i64)fluid_cube->v_z_source), INT32_MAX);
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
@@ -493,13 +491,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 {
                     v3 center = fluid_cube->min + fluid_cube->cell_dim*V3(x+0.5f, y+0.5f, z+0.5f);
 
-                    if(x == fluid_cube->cell_count.x/2 && 
-                            y == 0 &&
-                            z == fluid_cube->cell_count.z/2)
-                    {
-                        int a = 1;
-                    }
-
                     f32 v_x = get_mac_center_value_x(fluid_cube->v_x_dest, x, y, z, fluid_cube->cell_count);
                     f32 v_y = get_mac_center_value_y(fluid_cube->v_y_dest, x, y, z, fluid_cube->cell_count);
                     f32 v_z = get_mac_center_value_z(fluid_cube->v_z_dest, x, y, z, fluid_cube->cell_count);
@@ -508,7 +499,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                     f32 scale = 0.5f;
                     v3 v = V3(v_x, v_y, v_z);
-                    f32 v_scale = clamp(0.0f, length(v), 1.0f*fluid_cube->cell_dim);
+                    f32 v_scale = length(v)/3;
                     v = normalize(v);
 
                     if(compare_with_epsilon(length_square(v), 0))
@@ -549,7 +540,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         end_instanced_rendering(platform_render_push_buffer);
     }
 
-    b32 enable_ink_rendering = true;
+    b32 enable_ink_rendering = false;
     if(enable_ink_rendering)
     {
         VertexPN cube_vertices[] = 

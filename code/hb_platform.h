@@ -347,6 +347,7 @@ struct PlatformRenderPushBuffer
     u32 fluid_cube_v_z_offset;
     v3 fluid_cube_min;
     v3 fluid_cube_max;
+    v3i fluid_cube_cell_count;
     f32 fluid_cube_cell_dim;
 
     // This is what the game 'thinks' the camera is
