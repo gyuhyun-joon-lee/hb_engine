@@ -147,7 +147,6 @@ enum RenderEntryType
     RenderEntryType_ArbitraryMesh,
 };
 
-// TODO(gh) Do we have enough reason to keep this header?
 struct RenderEntryHeader
 {
     // NOTE(gh) This should _always_ come first
@@ -156,6 +155,8 @@ struct RenderEntryHeader
     // This can be much smaller than 4 bytes to save space
     // TODO(gh) This thing is very easy to forget!
     u32 size;
+
+    u32 instance_count;
 };
 
 struct RenderEntryMeshPN
@@ -230,7 +231,6 @@ struct RenderEntryGlyph
 struct RenderEntryArbitraryMesh
 {
     RenderEntryHeader header;
-    u32 instance_count;
     u32 instance_buffer_offset; // offset to the instance data in the giant buffer
 
     // NOTE(gh) offset to the combined vertex & index buffer

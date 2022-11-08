@@ -704,7 +704,7 @@ offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_
 {
     // TODO(gh) noise ranging from 0 to 1 produces worse result, 
     // mixing some negative values produces much natural looking result
-    noise -= 0.2f;
+    noise = 0.0f;
     packed_float3 p0_p1 = normalize(*p1 + dt*noise*wind - *p0);
     *p1 = *p0 + original_p0_p1_length*p0_p1;
 
@@ -844,9 +844,11 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                                     original_p0_p1_length, original_p1_p2_length,
                                                     wind_v, target_seconds_per_frame, noise01);
 
+#if 1
         offset_control_points_with_spring(&original_p1, &original_p2,
                                             &grass_instance_buffer[grass_index].p1,
                                             &grass_instance_buffer[grass_index].p2, random01, target_seconds_per_frame);
+#endif
     }
 }
 

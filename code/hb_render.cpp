@@ -431,10 +431,10 @@ push_arbitrary_mesh(PlatformRenderPushBuffer *render_push_buffer, v3 color, Vert
     entry->index_count = index_count; 
 }
 
-// TODO(gh) This is not an actual instanced rendering... XD
-internal RenderEntryArbitraryMesh *
+internal RenderEntryHeader *
 start_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer, 
-                        VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+                        void *vertices, u32 single_vertex_size, u32 vertex_count, 
+                        void *indices, u32 single_index_size, u32 index_count)
 {
     assert(render_push_buffer->recording_instanced_rendering == false);
     render_push_buffer->recording_instanced_rendering = true;
@@ -442,26 +442,26 @@ start_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer,
     RenderEntryArbitraryMesh *entry = push_render_element(render_push_buffer, RenderEntryArbitraryMesh);
     entry->header.type = RenderEntryType_ArbitraryMesh;
     entry->header.size = sizeof(*entry);
+    entry->header.instance_count = 0;
 
     entry->vertex_buffer_offset = push_data(render_push_buffer->transient_buffer, 
                                             &render_push_buffer->transient_buffer_used, 
                                             render_push_buffer->transient_buffer_size,
-                                            vertices, sizeof(vertices[0]) * vertex_count);
+                                            vertices, single_vertex_size * vertex_count);
 
     entry->index_buffer_offset = push_data(render_push_buffer->transient_buffer, 
                                             &render_push_buffer->transient_buffer_used, 
                                             render_push_buffer->transient_buffer_size,
-                                            indices, sizeof(indices[0]) * index_count);
+                                            indices, single_index_size * index_count);
     entry->index_count = index_count;
 
     entry->instance_buffer_offset = render_push_buffer->transient_buffer_used;
-    entry->instance_count = 0;
 
-    return entry;
+    return (RenderEntryHeader *)entry;
 }
 
 internal void
-push_arbitrary_mesh_instance(PlatformRenderPushBuffer *render_push_buffer, RenderEntryArbitraryMesh *entry,
+push_render_entry_instance(PlatformRenderPushBuffer *render_push_buffer, RenderEntryHeader *entry_header,
                             v3 p, v3 scale, v3 rotation_axis, f32 rotation_angle, v3 color)
 {
     assert(render_push_buffer->recording_instanced_rendering == true);
@@ -469,17 +469,14 @@ push_arbitrary_mesh_instance(PlatformRenderPushBuffer *render_push_buffer, Rende
     quat rotation = get_quat_with_axis_angle(rotation_axis, rotation_angle);
     PerObjectData per_object_data = {};
     per_object_data.model = transpose(srt_m4x4(p, rotation, scale));
-    // per_object_data.model = transpose(st_m4x4(p, scale));
     per_object_data.color = color;
 
-#if 1
     push_data(render_push_buffer->transient_buffer, 
                 &render_push_buffer->transient_buffer_used, 
                 render_push_buffer->transient_buffer_size,
                 &per_object_data, sizeof(per_object_data));
-#endif
     
-    entry->instance_count++;
+    entry_header->instance_count++;
 }
 
 internal void

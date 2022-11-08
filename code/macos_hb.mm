@@ -1066,7 +1066,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_fragment_texture(g_buffer_render_encoder, render_context->directional_light_shadowmap_depth_texture.texture, 0);
 
                 metal_draw_indexed_instances(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
-                                            render_context->transient_buffer.buffer, entry->index_buffer_offset, entry->index_count, entry->instance_count);
+                                            render_context->transient_buffer.buffer, entry->index_buffer_offset, entry->index_count, header->instance_count);
             }break;
 
             default:

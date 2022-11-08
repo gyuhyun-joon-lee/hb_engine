@@ -472,10 +472,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             2, 4, 0,
         };
 
-        RenderEntryArbitraryMesh *entry = 
+        RenderEntryHeader *entry_header = 
             start_instanced_rendering(platform_render_push_buffer, 
-                                        arrow_vertices, array_count(arrow_vertices),
-                                        arrow_indices, array_count(arrow_indices));
+                                        arrow_vertices, sizeof(arrow_vertices[0]), array_count(arrow_vertices),
+                                        arrow_indices, sizeof(arrow_indices[0]), array_count(arrow_indices));
 
         for(u32 z = 0;
                 z < fluid_cube->cell_count.z;
@@ -531,7 +531,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                     f32 rotation_angle = acosf(rotation_cos)/2.0f;
 
-                    push_arbitrary_mesh_instance(platform_render_push_buffer, entry, center, V3(scale, scale, v_scale), rotation_axis, rotation_angle, color);
+                    push_render_entry_instance(platform_render_push_buffer, entry_header, center, V3(scale, scale, v_scale), rotation_axis, rotation_angle, color);
                     // push_arbitrary_mesh(platform_render_push_buffer, color, arrow_vertices, array_count(arrow_vertices), arrow_indices, array_count(arrow_indices));
                 }
             }
@@ -574,10 +574,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             2, 1, 0, 2, 3, 1,
         };
 
-        RenderEntryArbitraryMesh *entry = 
+        RenderEntryHeader *entry_header = 
             start_instanced_rendering(platform_render_push_buffer, 
-                    cube_vertices, array_count(cube_vertices),
-                    cube_indices, array_count(cube_indices));
+                    cube_vertices, sizeof(cube_vertices[0]), array_count(cube_vertices),
+                    cube_indices, sizeof(cube_indices[0]), array_count(cube_indices));
 
         for(u32 cell_z = 0;
                 cell_z < fluid_cube->cell_count.z;
@@ -598,7 +598,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     f32 scale = clamp(0.0f, density, fluid_cube->cell_dim);
                     // assert(density >= 0);
 
-                    push_arbitrary_mesh_instance(platform_render_push_buffer, entry, 
+                    push_render_entry_instance(platform_render_push_buffer, entry_header, 
                                                 center, scale*V3(1, 1, 1), V3(0, 0, 0), 0, V3(1, 1, 1));
                 }
             }

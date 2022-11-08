@@ -1145,6 +1145,31 @@ get_quat_with_axis_angle(v3 axis, f32 rad)
     return result;
 }
 
+#if 0
+inline quat
+get_quat_with_desired_lookat_v(v3 current, v3 desired)
+{
+    v3 rotation_axis = {};
+    f32 rotation_cos = 0;
+    if(compare_with_epsilon(desired.x, 0) && compare_with_epsilon(desired.y, 0))
+    {
+        if(compare_with_epsilon(v.z, 1))
+        {
+            rotation_axis = V3(1, 0, 0);
+            rotation_cos = -1;
+        }
+    }
+    else
+    {
+        rotation_axis = normalize(cross(V3(0, 0, -1), v));
+        // NOTE(gh) v is already normalized
+        rotation_cos = dot(V3(0, 0, -1), v);
+    }
+
+    f32 rotation_angle = acosf(rotation_cos)/2.0f;
+}
+#endif
+
 inline quat
 operator +(quat a, quat b)
 {
