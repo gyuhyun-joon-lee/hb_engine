@@ -231,10 +231,15 @@ init_grass_grid(ThreadWorkQueue *gpu_work_queue, Entity *floor, RandomSeries *se
     grass_grid->min = min;
     grass_grid->max = max;
 
+    v2 grass_seperation_dim = 
+        hadamard(grass_grid->max - grass_grid->min, 
+                V2(1.0f/grass_grid->grass_count_x, 1.0f/grass_grid->grass_count_y));
+
     u32 total_grass_count = grass_grid->grass_count_x * grass_grid->grass_count_y;
 
     grass_grid->floor_z_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32) * total_grass_count);
 
+#if 0
     // TODO(gh) temp code, need to do proper raycast later
     for(u32 grass_index = 0;
             grass_index < grass_count_x * grass_count_y;
@@ -242,11 +247,47 @@ init_grass_grid(ThreadWorkQueue *gpu_work_queue, Entity *floor, RandomSeries *se
     {
         *(f32 *)grass_grid->floor_z_buffer.memory = 0;
     }
+#endif
+
+    VertexPN v[3];
+    v[0].p = V3(0, 0, 0);
+    v[1].p = V3(1, 0, 0);
+    v[2].p = V3(0, 1, 0);
+
+    u32 indices[3];
+    indices[0] = 0;
+    indices[1] = 1;
+    indices[2] = 2;
+    raycast_straight_down_z_to_non_overlapping_mesh(V3(0.1f, 0.1f, 10000), 
+                        v, indices, 3, 
+                        V3(0, 0, 0));
+#if 1
+    for(u32 y = 0;
+            y < grass_count_y;
+            ++y)
+    {
+        for(u32 x = 0;
+                x < grass_count_x;
+                ++x)
+        {
+            // Using the z value that is high enough that no floor can be higher than this
+            v3 ray_origin = V3(grass_grid->min + hadamard(V2(x, y), grass_seperation_dim), 10000.0f);
+
+#if 1
+            f32 z = raycast_straight_down_z_to_non_overlapping_mesh(ray_origin, 
+                        floor->vertices, floor->indices, floor->index_count, 
+                        floor->p).z;
+#endif
+            //f32 z = 10.0f;
+
+            *((f32 *)grass_grid->floor_z_buffer.memory + y*grass_count_x + x) = z;
+        }
+    }
+#endif
 
     grass_grid->perlin_noise_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32) * total_grass_count);
 
     grass_grid->grass_instance_data_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(GrassInstanceData)*total_grass_count);
-    assert(grass_grid->grass_instance_data_buffer.handle);
 }
 
 internal void

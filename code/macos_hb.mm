@@ -912,16 +912,15 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_count_buffer.buffer, 0, 0);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->grass_instance_data_buffer.handle, 0, 1);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->perlin_noise_buffer.handle, 0, 2);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->floor_z_buffer.handle, 0, 3);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 4);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 5);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_x->handle, render_push_buffer->fluid_cube_v_x_offset, 6);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_y->handle, render_push_buffer->fluid_cube_v_y_offset, 7);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_z->handle, render_push_buffer->fluid_cube_v_z_offset, 8);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_min, sizeof(render_push_buffer->fluid_cube_min), 9);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_max, sizeof(render_push_buffer->fluid_cube_max), 10);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_count, sizeof(render_push_buffer->fluid_cube_cell_count), 11);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_dim, sizeof(render_push_buffer->fluid_cube_cell_dim), 12);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 3);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 4);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_x->handle, render_push_buffer->fluid_cube_v_x_offset, 5);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_y->handle, render_push_buffer->fluid_cube_v_y_offset, 6);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_z->handle, render_push_buffer->fluid_cube_v_z_offset, 7);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_min, sizeof(render_push_buffer->fluid_cube_min), 8);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_max, sizeof(render_push_buffer->fluid_cube_max), 9);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_count, sizeof(render_push_buffer->fluid_cube_cell_count), 10);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_dim, sizeof(render_push_buffer->fluid_cube_cell_dim), 11);
 
                 metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
                 metal_memory_barrier_with_scope(fill_grass_instance_compute_encoder, MTLBarrierScopeBuffers);

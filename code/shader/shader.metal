@@ -704,7 +704,7 @@ offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_
 {
     // TODO(gh) noise ranging from 0 to 1 produces worse result, 
     // mixing some negative values produces much natural looking result
-    noise = 0.0f;
+    noise -= 0.2f;
     packed_float3 p0_p1 = normalize(*p1 + dt*noise*wind - *p0);
     *p1 = *p0 + original_p0_p1_length*p0_p1;
 
@@ -720,7 +720,7 @@ offset_control_points_with_spring(thread packed_float3 *original_p1, thread pack
 {
     float p1_spring_c = 3.5f + random01;
 
-    float p2_spring_c = p1_spring_c/3.0f;
+    float p2_spring_c = p1_spring_c/3.f;
 
     *p1 += dt*p1_spring_c*(*original_p1 - *p1);
     *p2 += dt*p2_spring_c*(*original_p2 - *p2);
@@ -760,7 +760,7 @@ initialize_grass_grid(device GrassInstanceData *grass_instance_buffer [[buffer(0
 
     grass_instance_buffer[grass_index].orthogonal_normal = packed_float3(orthogonal_normal);
     grass_instance_buffer[grass_index].hash = hash; 
-    grass_instance_buffer[grass_index].blade_width = 0.195f;
+    grass_instance_buffer[grass_index].blade_width = 0.095f;
     grass_instance_buffer[grass_index].wiggliness = 2.0f + random01;
     grass_instance_buffer[grass_index].color = packed_float3(random01, 0.784h, 0.2h);
 }
@@ -769,16 +769,15 @@ kernel void
 fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 device GrassInstanceData *grass_instance_buffer [[buffer(1)]],
                                 const device float *perlin_noise_values [[buffer (2)]],
-                                const device float *floor_z_values [[buffer (3)]],
-                                const device GridInfo *grid_info [[buffer (4)]],
-                                constant float4x4 *game_proj_view [[buffer (5)]],
-                                device float *fluid_cube_v_x [[buffer (6)]],
-                                device float *fluid_cube_v_y [[buffer (7)]],
-                                device float *fluid_cube_v_z [[buffer (8)]],
-                                constant packed_float3 *fluid_cube_min [[buffer (9)]],
-                                constant packed_float3 *fluid_cube_max [[buffer (10)]],
-                                constant packed_int3 *fluid_cube_cell_count [[buffer (11)]],
-                                constant float *fluid_cube_cell_dim [[buffer (12)]],
+                                const device GridInfo *grid_info [[buffer (3)]],
+                                constant float4x4 *game_proj_view [[buffer (4)]],
+                                device float *fluid_cube_v_x [[buffer (5)]],
+                                device float *fluid_cube_v_y [[buffer (6)]],
+                                device float *fluid_cube_v_z [[buffer (7)]],
+                                constant packed_float3 *fluid_cube_min [[buffer (8)]],
+                                constant packed_float3 *fluid_cube_max [[buffer (9)]],
+                                constant packed_int3 *fluid_cube_cell_count [[buffer (10)]],
+                                constant float *fluid_cube_cell_dim [[buffer (11)]],
                                 uint2 thread_count_per_grid [[threads_per_grid]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {

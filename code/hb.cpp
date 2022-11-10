@@ -69,8 +69,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
         v2 grid_dim = V2(100, 100); // TODO(gh) just temporary, need to 'gather' the floors later
-        game_state->grass_grid_count_x = 4;
-        game_state->grass_grid_count_y = 4;
+        game_state->grass_grid_count_x = 1;
+        game_state->grass_grid_count_y = 1;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
         // TODO(gh) Beware that when you change this value, you also need to change the size of grass instance buffer

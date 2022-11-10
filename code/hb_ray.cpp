@@ -1044,6 +1044,56 @@ raycast_to_populate_floor_z_buffer(Entity *floor, void *floor_z_buffer)
 }
 #endif
 
+// NOTE(gh) This assumes that
+// 1. There is no overlapping triangles
+// 2. The ray direction is always 0, 0, -1
+// 3. The ray will _always_ hit the floor
+internal v3
+raycast_straight_down_z_to_non_overlapping_mesh(v3 ray_origin, VertexPN *vertices, u32 *indices, u32 index_count, 
+                                                v3 mesh_p_offset)
+{
+    v3 result = V3(flt_max, flt_max, 0);
+         
+    // Instead of moving the whole mesh, we offset the ray origin in the opposite direction
+    ray_origin -= mesh_p_offset;
+    v3 ray_dir = V3(0, 0, -1);
+    for(u32 i = 0;
+            i < index_count;
+            i += 3)
+    {
+        u32 i0 = indices[i];
+        u32 i1 = indices[i + 1];
+        u32 i2 = indices[i + 2];
+
+        v3 p0 = vertices[i0].p;
+        v3 p1 = vertices[i1].p;
+        v3 p2 = vertices[i2].p;
+
+        v3 edge01 = p1 - p0;
+        v3 edge02 = p2 - p0;
+        v3 p0_to_ray_origin = ray_origin - p0;
+
+        v3 n = cross(edge01, edge02);
+        f32 d = n.z; // dot(-ray_dir, n)
+        v3 e = V3(-p0_to_ray_origin.y, p0_to_ray_origin.x, 0);// cross(-ray_dir, p0_to_ray_origin);
+
+        f32 one_over_d = 1.0f/d;
+        f32 t = dot(p0_to_ray_origin, n)*one_over_d; 
+        f32 u01 = dot(edge02, e) * one_over_d;
+        f32 u02 = -dot(edge01, e) * one_over_d;
+
+        if(t >= 0.0f && u01 >= 0.0f && u02 >= 0.0f && u01+u02 <= 1.0f)
+        {
+            result = ray_origin + mesh_p_offset + t*ray_dir;
+            break;
+        }
+    }
+
+    assert(result.z < ray_origin.z);
+
+    return result;
+}
+
 
 
 
