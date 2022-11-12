@@ -590,6 +590,9 @@ metal_first_pass(MetalRenderContext *render_context)
                                1);
         metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
     }
+
+    metal_end_encoding(render_encoder);
+    metal_commit_command_buffer(command_buffer);
 }
 
 internal void
@@ -674,6 +677,8 @@ DEBUG_metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer 
 internal void
 metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 time_elasped_from_start)
 {
+
+
     id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
     // NOTE(gh) render shadow map
@@ -777,12 +782,10 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
     metal_end_encoding(shadowmap_render_encoder);
     // We can start working on things that don't require drawable_texture.
+    // Metal ensures that the previous draw is ready before using it (encoder based)
     metal_commit_command_buffer(shadow_command_buffer);
 
-    // TODO(gh) Do we need to check whether the shadowmap was fully rendered?
-
     id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
-
 
     id<MTLRenderCommandEncoder> clear_g_buffer_render_encoder = 
         [command_buffer renderCommandEncoderWithDescriptor: render_context->clear_g_buffer_renderpass];
@@ -948,6 +951,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_max, sizeof(render_push_buffer->fluid_cube_max), 9);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_count, sizeof(render_push_buffer->fluid_cube_cell_count), 10);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_dim, sizeof(render_push_buffer->fluid_cube_cell_dim), 11);
+                metal_set_compute_texture(fill_grass_instance_compute_encoder, render_context->wind_noise_texture.texture, 0);
 
                 metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
                 metal_memory_barrier_with_scope(fill_grass_instance_compute_encoder, MTLBarrierScopeBuffers);

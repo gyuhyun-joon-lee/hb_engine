@@ -163,12 +163,12 @@ generate_wind_noise_vert(uint vertexID [[vertex_id]],
 fragment float4
 generate_wind_noise_frag(GenerateWindNoiseVertexOutput vertex_output [[stage_in]])
 {
-    float factor = 8.0f;
+    float factor = 1.0f;
     float weight = 0.5f;
 
     float4 result = float4(0, 0, 0, 0);
     for(uint i = 0;
-            i < 4;
+            i < 16;
             ++i)
     {
         float x = factor * vertex_output.p0to1.x; 
@@ -183,7 +183,6 @@ generate_wind_noise_frag(GenerateWindNoiseVertexOutput vertex_output [[stage_in]
 
     return result;
 }
-
 
 struct ScreenSpaceTriangleVertexOutput
 {
@@ -752,12 +751,8 @@ offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_
                                         float original_p0_p1_length, float original_p1_p2_length,
                                          packed_float3 wind, float dt, float noise)
 {
-    // TODO(gh) noise ranging from 0 to 1 produces worse result, 
-    // mixing some negative values produces much natural looking result
-    noise -= 0.2f;
     packed_float3 p0_p1 = normalize(*p1 + dt*noise*wind - *p0);
     *p1 = *p0 + original_p0_p1_length*p0_p1;
-
 
     // TODO(gh) We can re-adjust p2 after adjusting p1
     packed_float3 p1_p2 = normalize(*p2 + dt*noise*wind - *p1);
@@ -779,7 +774,8 @@ offset_control_points_with_spring(thread packed_float3 *original_p1, thread pack
 kernel void
 initialize_grass_grid(device GrassInstanceData *grass_instance_buffer [[buffer(0)]],
                                 const device float *floor_z_values [[buffer (1)]],
-                                const device GridInfo *grid_info [[buffer (2)]],
+                                constant GridInfo *grid_info [[buffer (2)]],
+                                constant packed_float3 *wind_noise_texture_world_dim [[buffer (3)]],
                                 uint2 thread_count_per_grid [[threads_per_grid]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {
@@ -813,6 +809,7 @@ initialize_grass_grid(device GrassInstanceData *grass_instance_buffer [[buffer(0
     grass_instance_buffer[grass_index].blade_width = 0.095f;
     grass_instance_buffer[grass_index].wiggliness = 2.0f + random01;
     grass_instance_buffer[grass_index].color = packed_float3(random01, 0.784h, 0.2h);
+    grass_instance_buffer[grass_index].texture_p = p0;
 }
 
 kernel void
@@ -890,17 +887,24 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
 #endif
         }
 
+        constexpr sampler s = sampler(coord::normalized, address::repeat, filter::linear);
+
+        // TODO(gh) Should make this right!
+        float3 texcoord = grass_instance_buffer[grass_index].texture_p / 512.0f;
         offset_control_points_with_dynamic_wind(&grass_instance_buffer[grass_index].p0, 
                                                     &grass_instance_buffer[grass_index].p1,
                                                     &grass_instance_buffer[grass_index].p2, 
                                                     original_p0_p1_length, original_p1_p2_length,
-                                                    wind_v, target_seconds_per_frame, noise01);
+                                                    wind_v, target_seconds_per_frame, 
+                                                    wind_noise_texture.sample(s, texcoord).x);
 
 #if 1
         offset_control_points_with_spring(&original_p1, &original_p2,
                                             &grass_instance_buffer[grass_index].p1,
                                             &grass_instance_buffer[grass_index].p2, random01, target_seconds_per_frame);
 #endif
+
+        grass_instance_buffer[grass_index].texture_p -= target_seconds_per_frame*wind_v;
     }
 }
 

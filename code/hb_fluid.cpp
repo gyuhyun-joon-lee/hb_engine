@@ -1384,7 +1384,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                     add_input_to_center(cube->v_y_source, 100*cosf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
 #else
-                    add_input_to_center(cube->v_x_source, -100, x, y, z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_x_source, 100, x, y, z, cube->cell_count, FluidQuantityType_x);
                     add_input_to_center(cube->v_y_source, 150, x, y, z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 10, x, y, z, cube->cell_count, FluidQuantityType_z);
 #endif

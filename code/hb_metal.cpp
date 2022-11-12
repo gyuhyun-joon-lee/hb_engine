@@ -787,6 +787,14 @@ metal_set_compute_bytes(id<MTLComputeCommandEncoder> encoder, void *data, u64 le
 }
 
 inline void
+metal_set_compute_texture(id<MTLComputeCommandEncoder> encoder, id<MTLTexture> texture, u64 index)
+{
+    [encoder setTexture:
+        texture 
+        atIndex:index];
+}
+
+inline void
 metal_dispatch_compute_threads(id<MTLComputeCommandEncoder> encoder, v3u threads_per_grid, v3u threads_per_group)
 {
     // NOTE(gh)
