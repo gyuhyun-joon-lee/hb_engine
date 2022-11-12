@@ -220,10 +220,54 @@ rhs_to_lhs(m4x4 m)
     return result;
 }
 
+struct ThreadPopulateFloorZData
+{
+    u32 start_x;
+    u32 one_past_end_x;
+
+    u32 start_y;
+    u32 one_past_end_y;
+    
+    v2 grass_grid_min;
+    v2 grass_seperation_dim;
+
+    u32 grass_count_x;
+
+    Entity *floor;
+
+    void *floor_z_buffer;
+};
+
+internal
+THREAD_WORK_CALLBACK(thread_optimized_raycast_straight_down_z_to_non_overlapping_mesh)
+{
+    ThreadPopulateFloorZData *d = (ThreadPopulateFloorZData *)data;
+    Entity *floor = d->floor;
+
+    for(u32 y = d->start_y;
+            y < d->one_past_end_y;
+            ++y)
+    {
+        for(u32 x = d->start_x;
+                x < d->one_past_end_x;
+                ++x)
+        {
+            // Using the z value that is high enough that no floor can be higher than this
+            v3 ray_origin = V3(d->grass_grid_min + hadamard(V2(x, y), d->grass_seperation_dim), 10000.0f);
+
+            f32 z = optimized_raycast_straight_down_z_to_non_overlapping_mesh(ray_origin, 
+                        floor->vertices, floor->indices, floor->index_count, 
+                        floor->p).z;
+
+            *((f32 *)d->floor_z_buffer + y*d->grass_count_x + x) = z;
+        }
+    }
+}
+
 // TODO(gh) Later we would want to minimize passing the platform buffer here
 // TODO(gh) pass center & dim, instead of min & max?
 internal void
-init_grass_grid(ThreadWorkQueue *gpu_work_queue, Entity *floor, RandomSeries *series, 
+init_grass_grid(ThreadWorkQueue *general_work_queue, ThreadWorkQueue *gpu_work_queue, MemoryArena *arena, Entity *floor,  
                 GrassGrid *grass_grid, u32 grass_count_x, u32 grass_count_y, v2 min, v2 max)
 {
     grass_grid->grass_count_x = grass_count_x;
@@ -231,59 +275,45 @@ init_grass_grid(ThreadWorkQueue *gpu_work_queue, Entity *floor, RandomSeries *se
     grass_grid->min = min;
     grass_grid->max = max;
 
+    u32 total_grass_count = grass_grid->grass_count_x * grass_grid->grass_count_y;
     v2 grass_seperation_dim = 
         hadamard(grass_grid->max - grass_grid->min, 
                 V2(1.0f/grass_grid->grass_count_x, 1.0f/grass_grid->grass_count_y));
 
-    u32 total_grass_count = grass_grid->grass_count_x * grass_grid->grass_count_y;
-
     grass_grid->floor_z_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32) * total_grass_count);
-
-#if 0
-    // TODO(gh) temp code, need to do proper raycast later
-    for(u32 grass_index = 0;
-            grass_index < grass_count_x * grass_count_y;
-            ++grass_index)
-    {
-        *(f32 *)grass_grid->floor_z_buffer.memory = 0;
-    }
-#endif
-
-    VertexPN v[3];
-    v[0].p = V3(0, 0, 0);
-    v[1].p = V3(1, 0, 0);
-    v[2].p = V3(0, 1, 0);
-
-    u32 indices[3];
-    indices[0] = 0;
-    indices[1] = 1;
-    indices[2] = 2;
-    raycast_straight_down_z_to_non_overlapping_mesh(V3(0.1f, 0.1f, 10000), 
-                        v, indices, 3, 
-                        V3(0, 0, 0));
-#if 1
+    u32 work_count_x = 8;
+    u32 work_count_y = 8;
+    assert(grass_count_x % work_count_x == 0);
+    assert(grass_count_y % work_count_y == 0);
+    u32 grass_per_work_count_x = grass_count_x/work_count_x;
+    u32 grass_per_work_count_y = grass_count_y/work_count_y;
+    TempMemory work_memory = start_temp_memory(arena, sizeof(ThreadPopulateFloorZData)*work_count_x*work_count_y);
+    ThreadPopulateFloorZData *thread_data = push_array(&work_memory, ThreadPopulateFloorZData, work_count_x*work_count_y);
     for(u32 y = 0;
-            y < grass_count_y;
+            y < work_count_y;
             ++y)
     {
         for(u32 x = 0;
-                x < grass_count_x;
+                x < work_count_x;
                 ++x)
         {
-            // Using the z value that is high enough that no floor can be higher than this
-            v3 ray_origin = V3(grass_grid->min + hadamard(V2(x, y), grass_seperation_dim), 10000.0f);
+            ThreadPopulateFloorZData *data = thread_data + y*work_count_x + x;
+            data->start_x = x * grass_per_work_count_x;
+            data->one_past_end_x = data->start_x + grass_per_work_count_x;
 
-#if 1
-            f32 z = raycast_straight_down_z_to_non_overlapping_mesh(ray_origin, 
-                        floor->vertices, floor->indices, floor->index_count, 
-                        floor->p).z;
-#endif
-            //f32 z = 10.0f;
+            data->start_y = y * grass_per_work_count_y;
+            data->one_past_end_y = data->start_y + grass_per_work_count_y;
 
-            *((f32 *)grass_grid->floor_z_buffer.memory + y*grass_count_x + x) = z;
+            data->grass_grid_min = grass_grid->min;
+            data->grass_seperation_dim = grass_seperation_dim;
+
+            data->grass_count_x = grass_count_x;
+            data->floor = floor;
+            data->floor_z_buffer = grass_grid->floor_z_buffer.memory;
+
+            general_work_queue->add_thread_work_queue_item(general_work_queue, thread_optimized_raycast_straight_down_z_to_non_overlapping_mesh, 0, data);
         }
     }
-#endif
 
     grass_grid->perlin_noise_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32) * total_grass_count);
 

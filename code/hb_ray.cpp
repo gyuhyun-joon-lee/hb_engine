@@ -956,94 +956,6 @@ render_raytraced_image_tile(raytracer_data *data)
 }
 #endif
 
-#if 0
-// TODO(gh) Should be a way to optimize this...
-// TODO(gh) Later, we would want to gather arbitrary meshes
-internal void
-raycast_to_populate_floor_z_buffer(Entity *floor, void *floor_z_buffer)
-{
-    assert(floor->index_count % 3 == 0);
-
-    f32 quad_width = floor->dim.x / (f32)floor->x_quad_count;
-    f32 quad_height = floor->dim.y / (f32)floor->y_quad_count;
-
-    v3 floor_left_bottom_p = floor->p - V3(floor->dim.x/2, floor->dim.y/2, 0);
-
-    u32 floor_z_count = 0;
-    for(u32 y = 0;
-            y < floor->y_quad_count;
-            ++y)
-    {
-        for(u32 x = 0;
-                x < floor->x_quad_count;
-                ++x)
-        {
-            /*
-               NOTE(g): These should be already in counter clockwise order
-               v2-----v3
-               |       |
-               |       |
-               |       |
-               v0-----v1 -> indices : 012, 132
-            */
-            // 6 because we want quad, not just one triangle in quad
-            u32 base_i = 6*(y * floor->x_quad_count + x);
-
-            u32 i0 = floor->indices[base_i];
-            u32 i1 = floor->indices[base_i+1];
-            u32 i2 = floor->indices[base_i+2];
-            u32 i3 = floor->indices[base_i+4]; // +4 because the triangle indices are : (012, 132)
-
-            v3 p0 = floor->vertices[i0].p; 
-            v3 p1 = floor->vertices[i1].p; 
-            v3 p2 = floor->vertices[i2].p; 
-            v3 p3 = floor->vertices[i3].p;
-
-            v3 edge01 = p1 - p0;
-            v3 edge02 = p2 - p0;
-
-            // We don't care about z because we are ray casting straight down from z
-            // TODO(gh) For now, this will only trigger the bottom left triangle,
-            // but we can use noise here
-            v2 center = floor_left_bottom_p.xy + V2((x+0.4f) * quad_width, (y+0.4f)*quad_height);
-
-            // Again, don't care about z
-            f32 u = dot(edge01.xy, center - p0.xy) / length(edge01.xy);
-            f32 v = dot(edge02.xy, center - p0.xy) / length(edge02.xy);
-
-            f32 z = 0.0f;
-            // NOTE(gh) check the bary centric coordinate
-            if(u >= 0.0f && v >= 0.0f && (u+v) <= 1.0f)
-            {
-                z = p0.z + edge01.z*u + edge02.z*v;
-            }
-            else
-            {
-                // check the next triangle
-                v3 edge32 = p2 - p3;
-                v3 edge31 = p1 - p3;
-
-                u = dot(edge32.xy, center - p3.xy) / length(edge32.xy);
-                v = dot(edge31.xy, center - p3.xy) / length(edge31.xy);
-
-                if(u >= 0.0f && v >= 0.0f && (u+v) <= 1.0f)
-                {
-                    z = p3.z + edge32.z*u + edge31.z*v;
-                }
-                else
-                {
-                    assert(0);
-                }
-            }
-
-            *((f32 *)floor_z_buffer + floor_z_count++) = z;
-        }
-    }
-
-    assert(floor_z_count == floor->x_quad_count * floor->y_quad_count);
-}
-#endif
-
 // NOTE(gh) This assumes that
 // 1. There is no overlapping triangles
 // 2. The ray direction is always 0, 0, -1
@@ -1052,6 +964,7 @@ internal v3
 raycast_straight_down_z_to_non_overlapping_mesh(v3 ray_origin, VertexPN *vertices, u32 *indices, u32 index_count, 
                                                 v3 mesh_p_offset)
 {
+    TIMED_BLOCK();
     v3 result = V3(flt_max, flt_max, 0);
          
     // Instead of moving the whole mesh, we offset the ray origin in the opposite direction
@@ -1093,6 +1006,94 @@ raycast_straight_down_z_to_non_overlapping_mesh(v3 ray_origin, VertexPN *vertice
 
     return result;
 }
+
+internal v3
+optimized_raycast_straight_down_z_to_non_overlapping_mesh(v3 r_origin, VertexPN *vertices, u32 *indices, u32 index_count, 
+                                                v3 mesh_p_offset)
+{
+    TIMED_BLOCK();
+    v3 result = V3(flt_max, flt_max, flt_max);
+
+    v3 r_dir = V3(0, 0, -1);
+    simd_v3 ray_origin = Simd_v3(r_origin - mesh_p_offset);
+    simd_v3 ray_dir = Simd_v3(r_dir);
+
+    simd_f32 simd0 = Simd_f32(0.0f);
+    simd_f32 simd1 = Simd_f32(1.0f);
+
+    // TODO(gh) We can also do this per 4Xs 
+    for(u32 i = 0;
+            i < index_count;
+            i += 12)
+    {
+        // TODO(gh) We can make this faster by rearranging the data from the mesh
+        u32 i0 = indices[i];
+        u32 i1 = indices[i + 1];
+        u32 i2 = indices[i + 2];
+
+        u32 i3 = indices[i + 3];
+        u32 i4 = indices[i + 4];
+        u32 i5 = indices[i + 5];
+
+        u32 i6 = indices[i + 6];
+        u32 i7 = indices[i + 7];
+        u32 i8 = indices[i + 8];
+
+        u32 i9 = indices[i + 9];
+        u32 i10 = indices[i + 10];
+        u32 i11 = indices[i + 11];
+
+        simd_v3 p0 = Simd_v3(vertices[i0].p, vertices[i3].p, vertices[i6].p, vertices[i9].p);
+        simd_v3 p1 = Simd_v3(vertices[i1].p, vertices[i4].p, vertices[i7].p, vertices[i10].p);
+        simd_v3 p2 = Simd_v3(vertices[i2].p, vertices[i5].p, vertices[i8].p, vertices[i11].p);
+
+        simd_v3 edge01 = p1 - p0;
+        simd_v3 edge02 = p2 - p0;
+        simd_v3 p0_to_ray_origin = ray_origin - p0;
+
+        simd_v3 n = cross(edge01, edge02);
+        simd_f32 d = Simd_f32((f32 *)&n.z); // dot(-ray_dir, n)
+        simd_v3 e = Simd_v3(-p0_to_ray_origin.y, p0_to_ray_origin.x, simd0.v);// cross(-ray_dir, p0_to_ray_origin);
+
+        simd_f32 one_over_d = simd1/d;
+        simd_f32 t = dot(p0_to_ray_origin, n)*one_over_d; 
+        simd_f32 u01 = dot(edge02, e) * one_over_d;
+        simd_f32 u02 = -dot(edge01, e) * one_over_d;
+
+        simd_u32 mask = compare_greater_equal(t, simd0) &
+                        compare_greater_equal(u01, simd0) &
+                        compare_greater_equal(u02, simd0) &
+                        compare_less_equal(u01+u02, simd1);
+
+        if(!all_lanes_zero(mask))
+        {
+            f32 min_t = flt_max;
+            // TODO(gh) Formalize this!
+            if(get_lane(mask, 0))
+            {
+                min_t = get_lane(t, 0);
+            }
+            else if(get_lane(mask, 1))
+            {
+                min_t = get_lane(t, 1);
+            }
+            else if(get_lane(mask, 2))
+            {
+                min_t = get_lane(t, 2);
+            }
+            else if(get_lane(mask, 3))
+            {
+                min_t = get_lane(t, 3);
+            }
+            
+            result = r_origin + mesh_p_offset + min_t*r_dir;
+            break;
+        }
+    }
+
+    return result;
+}
+
 
 
 

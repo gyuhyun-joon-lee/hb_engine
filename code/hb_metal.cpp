@@ -558,7 +558,8 @@ metal_make_texture3D(id<MTLDevice> device, MTLPixelFormat pixel_format, i32 widt
     descriptor.width = width;
     descriptor.height = height;
     descriptor.depth = depth;
-    descriptor.usage |= usage;
+    descriptor.usage = usage;
+    descriptor.pixelFormat = pixel_format;
     descriptor.storageMode =  storage_mode;
     descriptor.mipmapLevelCount = 1;
 
@@ -644,7 +645,8 @@ metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
                       v4 *clear_colors, u32 clear_color_count,
                       MTLLoadAction depth_load_action, MTLStoreAction depth_store_action, 
                       id<MTLTexture> depth_texture,
-                      f32 depth_clear_value)
+                      f32 depth_clear_value,
+                      u32 render_target_array_length = 0)
 {
     assert(load_action_count == store_action_count); 
     if(textures)
@@ -658,6 +660,7 @@ metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
     }
 
     MTLRenderPassDescriptor *result = [MTLRenderPassDescriptor new];
+    result.renderTargetArrayLength = render_target_array_length;
 
     for(u32 color_attachment_index = 0;
             color_attachment_index < load_action_count;
@@ -681,10 +684,13 @@ metal_make_renderpass(MTLLoadAction *load_actions, u32 load_action_count,
         }
     }
 
-    result.depthAttachment.loadAction = depth_load_action;
-    result.depthAttachment.storeAction = depth_store_action;
-    result.depthAttachment.texture = depth_texture;
-    result.depthAttachment.clearDepth = depth_clear_value;
+    if(depth_texture)
+    {
+        result.depthAttachment.loadAction = depth_load_action;
+        result.depthAttachment.storeAction = depth_store_action;
+        result.depthAttachment.texture = depth_texture;
+        result.depthAttachment.clearDepth = depth_clear_value;
+    }
 
     return result;
 }

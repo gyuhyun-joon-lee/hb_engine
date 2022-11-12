@@ -94,6 +94,17 @@ constant uint grass_low_lod_indices[] =
     4, 6, 5,
 };
 
+constant float screen_quad[]
+{
+    -1.0f, -1.0f,
+    1.0f, 1.0f,
+    -1.0f, 1.0f,
+
+    -1.0f, -1.0f,
+    1.0f, -1.0f,
+    1.0f, 1.0f,
+};
+
 // Vertex shader for populating g buffer
 struct GBufferVertexOutput
 {

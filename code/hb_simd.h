@@ -36,7 +36,7 @@ typedef i32 simd_i32;
 
 //////////////////// simd_u32 //////////////////// 
 force_inline simd_u32
-simd_u32_(u32 value)
+Simd_u32(u32 value)
 {
     return value;
 }
@@ -139,13 +139,13 @@ all_lanes_zero(simd_u32 a)
 //////////////////// simd_f32 //////////////////// 
 
 force_inline simd_f32
-simd_f32_(f32 value)
+Simd_f32(f32 value)
 {
     return value;
 }
 
 force_inline simd_f32
-simd_f32_(f32 value0, f32 value1, f32 value2, f32 value3)
+Simd_f32(f32 value0, f32 value1, f32 value2, f32 value3)
 {
     return value0;
 }

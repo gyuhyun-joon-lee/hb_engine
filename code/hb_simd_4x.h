@@ -334,7 +334,7 @@ all_lanes_zero(simd_u32 a)
 //////////////////// simd_f32 //////////////////// 
 
 force_inline simd_f32
-simd_f32_(r32 dup)
+Simd_f32(r32 dup)
 {
     simd_f32 result = {};
     result.v = vdupq_n_f32(dup);
@@ -343,7 +343,7 @@ simd_f32_(r32 dup)
 }
 
 force_inline simd_f32
-simd_f32_(r32 value0, r32 value1, r32 value2, r32 value3)
+Simd_f32(r32 value0, r32 value1, r32 value2, r32 value3)
 {
     // TODO(joon): I assume that instead of using this path, it's much better to structure some kind of SOA
     simd_f32 result = {};
@@ -353,7 +353,7 @@ simd_f32_(r32 value0, r32 value1, r32 value2, r32 value3)
 }
 
 force_inline simd_f32
-simd_f32_load(r32 *ptr)
+Simd_f32(f32 *ptr)
 {
     simd_f32 result = {};
     result.v = vld1q_f32(ptr);
@@ -652,7 +652,7 @@ all_lanes_zero(simd_f32 a)
 
 // TODO(joon): we can also make this from operator=
 force_inline simd_v3
-simd_v3_(v3 dup)
+Simd_v3(v3 dup)
 {
     simd_v3 result = {};
 
@@ -673,7 +673,7 @@ simd_v3_(v3 dup)
 
 // NOTE(joon): This path is most likely for the initial steps of opitimization, consider using the SOA version instead!
 force_inline simd_v3
-simd_v3_(v3 value0, v3 value1, v3 value2, v3 value3)
+Simd_v3(v3 value0, v3 value1, v3 value2, v3 value3)
 {
     simd_v3 result = {};
 
@@ -685,13 +685,25 @@ simd_v3_(v3 value0, v3 value1, v3 value2, v3 value3)
 }
 
 force_inline simd_v3
-simd_v3_(simd_f32 value0, simd_f32 value1, simd_f32 value2)
+Simd_v3(simd_f32 value0, simd_f32 value1, simd_f32 value2)
 {
     simd_v3 result = {};
 
     result.x = value0.v;    
     result.y = value1.v;
     result.z = value2.v;
+
+    return result;
+}
+
+force_inline simd_v3
+Simd_v3(float32x4_t value0, float32x4_t value1, float32x4_t value2)
+{
+    simd_v3 result = {};
+
+    result.x = value0;    
+    result.y = value1;
+    result.z = value2;
 
     return result;
 }
@@ -1047,7 +1059,7 @@ random_between_0_1(simd_random_series *series)
 {
     xor_shift_32(&series->next_random);
 
-    simd_f32 max = simd_f32_((r32)U32_Max);
+    simd_f32 max = Simd_f32((r32)U32_Max);
 
     simd_f32 result = convert_f32_from_u32(series->next_random)/max;
 
@@ -1057,8 +1069,8 @@ random_between_0_1(simd_random_series *series)
 force_inline simd_f32
 random_between(simd_random_series *series, r32 min, r32 max)
 {
-    simd_f32 simd_min = simd_f32_(min);
-    simd_f32 simd_t = simd_f32_(max-min);
+    simd_f32 simd_min = Simd_f32(min);
+    simd_f32 simd_t = Simd_f32(max-min);
 
     return simd_min + simd_t*random_between_0_1(series);
 }
@@ -1066,8 +1078,8 @@ random_between(simd_random_series *series, r32 min, r32 max)
 force_inline simd_f32
 random_between_minus_1_1(simd_random_series *series)
 {
-    simd_f32 simd_2 = simd_f32_(2.0f);
-    simd_f32 simd_1 = simd_f32_(1.0f);
+    simd_f32 simd_2 = Simd_f32(2.0f);
+    simd_f32 simd_1 = Simd_f32(1.0f);
 
     simd_f32 result = (simd_2*random_between_0_1(series)) - simd_1;
     return result;

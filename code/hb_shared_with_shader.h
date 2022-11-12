@@ -113,6 +113,9 @@ struct GrassInstanceData
     packed_float3 p1;
     packed_float3 p2;
 
+    // NOTE(gh) Advances in a backward direction of the win
+    packed_float3 texcoord;
+
     // TODO(gh) This can be calculated from the vertex shader using facing direction,
     // which is cos(hash) sin(hash)
     packed_float3 orthogonal_normal;
@@ -127,6 +130,8 @@ struct GrassInstanceData
     f32 p0[3];
     f32 p1[3];
     f32 p2[3];
+
+    f32 texcoords[3];
 
     f32 orthogonal_normal[3];
     u32 hash;

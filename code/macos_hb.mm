@@ -565,6 +565,33 @@ initialize_thread_work_queue(ThreadWorkQueue *queue,
     pthread_attr_destroy(&attr);
 }
 
+// NOTE(gh) Called before the main loop
+internal void
+metal_first_pass(MetalRenderContext *render_context)
+{
+    id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
+    render_context->generate_wind_noise_renderpass.colorAttachments[0].texture = render_context->wind_noise_texture.texture;
+    id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->generate_wind_noise_renderpass];
+    metal_set_viewport(render_encoder, 0, 0, render_context->wind_noise_texture.width, render_context->wind_noise_texture.height, 0, 1);
+    metal_set_scissor_rect(render_encoder, 0, 0, render_context->wind_noise_texture.width, render_context->wind_noise_texture.height);
+    metal_set_depth_stencil_state(render_encoder, render_context->disabled_depth_state);
+    metal_set_triangle_fill_mode(render_encoder, MTLTriangleFillModeFill);
+    metal_set_cull_mode(render_encoder, MTLCullModeNone); 
+
+    metal_set_render_pipeline(render_encoder, render_context->generate_wind_noise_pipeline);
+    for(u32 z = 0;
+            z < render_context->wind_noise_texture.depth;
+            ++z)
+    {
+        metal_set_vertex_bytes(render_encoder, &z, sizeof(z), 0);
+        metal_set_vertex_bytes(render_encoder, 
+                               &render_context->wind_noise_texture.depth, 
+                               sizeof(render_context->wind_noise_texture.depth), 
+                               1);
+        metal_draw_non_indexed(render_encoder, MTLPrimitiveTypeTriangle, 0, 6);
+    }
+}
+
 internal void
 DEBUG_metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height)
 {
@@ -1587,6 +1614,19 @@ int main(void)
                             singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
                             view.depthStencilPixelFormat, 0, true);
 
+    {
+        MTLPixelFormat pixel_format[] = {MTLPixelFormatR32Float}; // This is the default pixel format for displaying
+        MTLColorWriteMask write_mask[] = {MTLColorWriteMaskAll};
+        metal_render_context.generate_wind_noise_pipeline = 
+            metal_make_render_pipeline(device, "Generate Wind Noise Pipeline", 
+                                "generate_wind_noise_vert", "generate_wind_noise_frag", 
+                                shader_library,
+                                MTLPrimitiveTopologyClassTriangle,
+                                pixel_format, array_count(pixel_format),
+                                write_mask, array_count(write_mask),
+                                MTLPixelFormatInvalid, 0, false);
+    }
+
     metal_render_context.grass_count_buffer = metal_make_shared_buffer(device, sizeof(u32));
 
     metal_render_context.grass_index_buffer = metal_make_shared_buffer(device, sizeof(u32)*39);
@@ -1691,6 +1731,10 @@ int main(void)
                               MTLTextureUsageRenderTarget,
                               MTLStorageModePrivate);
 
+    metal_render_context.wind_noise_texture = 
+        metal_make_texture3D(device, MTLPixelFormatR32Float, 128, 128, 64,
+                              MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead, MTLStorageModeShared);
+
     // NOTE(gh) Create samplers
     metal_render_context.shadowmap_sampler = 
         metal_make_sampler(device, true, MTLSamplerAddressModeClampToEdge, 
@@ -1745,6 +1789,35 @@ int main(void)
                               MTLLoadActionLoad, MTLStoreActionStore,  // store depth buffer for the forward pass
                               metal_render_context.g_buffer_depth_texture.texture,
                               1.0f);
+
+    {
+        MTLLoadAction load_actions[] = 
+        {
+            MTLLoadActionClear
+        };
+        MTLStoreAction store_actions[] = 
+        {
+            MTLStoreActionStore
+        };
+        id<MTLTexture> textures[] = 
+        {
+            metal_render_context.wind_noise_texture.texture,
+        };
+        v4 clear_colors[] = 
+        {
+            {0, 0, 0, 0}
+        };
+
+        metal_render_context.generate_wind_noise_renderpass = 
+            metal_make_renderpass(load_actions, array_count(load_actions),
+                                  store_actions, array_count(store_actions),
+                                  textures, array_count(textures),
+                                  clear_colors, array_count(clear_colors),
+                                  MTLLoadActionDontCare, MTLStoreActionDontCare,  // store depth buffer for the forward pass
+                                  0,
+                                  flt_max,
+                                  metal_render_context.wind_noise_texture.depth);
+    }
 
     MTLLoadAction deferred_renderpass_color_attachment_load_actions[] = 
     {
@@ -1875,6 +1948,8 @@ int main(void)
 
     [app activateIgnoringOtherApps:YES];
     [app run];
+
+    metal_first_pass(&metal_render_context);
 
     u64 last_time = mach_absolute_time();
     is_game_running = true;

@@ -77,6 +77,7 @@ struct MetalRenderContext
     id<MTLRenderPipelineState> singlepass_cube_pipeline;
     id<MTLRenderPipelineState> deferred_pipeline;
     id<MTLRenderPipelineState> instanced_grass_render_pipeline;
+    id<MTLRenderPipelineState> generate_wind_noise_pipeline;
 
     // Forward Pipelines
     id<MTLRenderPipelineState> forward_line_pipeline;
@@ -108,6 +109,7 @@ struct MetalRenderContext
     MTLRenderPassDescriptor *clear_g_buffer_renderpass; 
     MTLRenderPassDescriptor *g_buffer_renderpass; 
     MTLRenderPassDescriptor *deferred_renderpass; 
+    MTLRenderPassDescriptor *generate_wind_noise_renderpass;
 
     // Fences
     // Fence to detect whether the deferred rendering has been finished before doing the foward rendering
@@ -120,6 +122,7 @@ struct MetalRenderContext
     MetalTexture2D g_buffer_color_texture;
     MetalTexture2D g_buffer_depth_texture;
     MetalTexture2D directional_light_shadowmap_depth_texture;
+    MetalTexture3D wind_noise_texture;
 
     // Buffers
     u32 next_grass_double_buffer_index;

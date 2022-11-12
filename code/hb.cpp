@@ -69,8 +69,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
         v2 grid_dim = V2(100, 100); // TODO(gh) just temporary, need to 'gather' the floors later
-        game_state->grass_grid_count_x = 1;
-        game_state->grass_grid_count_y = 1;
+        game_state->grass_grid_count_x = 2;
+        game_state->grass_grid_count_y = 2;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
         // TODO(gh) Beware that when you change this value, you also need to change the size of grass instance buffer
@@ -95,7 +95,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     add_floor_entity(game_state, &game_state->transient_arena, center, grid_dim, V3(0.25f, 0.1f, 0.04f), grass_per_grid_count_x, grass_per_grid_count_y);
 
                 GrassGrid *grid = game_state->grass_grids + y*game_state->grass_grid_count_x + x;
-                init_grass_grid(gpu_work_queue, floor_entity, &game_state->random_series, grid, grass_per_grid_count_x, grass_per_grid_count_y, min, max);
+                init_grass_grid(thread_work_queue, gpu_work_queue, &game_state->transient_arena, floor_entity, grid, grass_per_grid_count_x, grass_per_grid_count_y, min, max);
             }
         }
 
@@ -822,8 +822,10 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 
             // TODO(gh) Do we wanna keep this scale value?
             f32 scale = 0.5f;
-            // debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
-            //debug_newline(&top_left_rel_p_px, scale, &assets->debug_font_asset);
+#if 0
+            debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
+            debug_newline(&top_left_rel_p_px, scale, &assets->debug_font_asset);
+#endif
 
             atomic_exchange(&record->hit_count_cycle_count, 0);
         }

@@ -82,7 +82,6 @@ u32 permutations255[] =
 internal f32 
 perlin_noise01(f32 x, f32 y, f32 z, u32 frequency)
 {
-
     u32 xi = (u32)x;
     u32 yi = (u32)y;
     u32 zi = (u32)z;

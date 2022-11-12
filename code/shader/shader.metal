@@ -4,6 +4,12 @@
 
 #include "shader_common.h"
 
+static float
+lerp(float min, float t, float max)
+{
+    return min + (max-min)*t;
+}
+
 float
 get_gradient_value(uint hash, float x, float y, float z)
 {
@@ -48,14 +54,14 @@ fade(float t)
 }
 
 float 
-perlin_noise01(float x, float y, float z)
+perlin_noise01(float x, float y, float z, uint frequency)
 {
     uint xi = floor(x);
     uint yi = floor(y);
     uint zi = floor(z);
-    uint x255 = xi % 255; // used for hashing from the random numbers
-    uint y255 = yi % 255; // used for hashing from the random numbers
-    uint z255 = zi % 255;
+    uint x255 = xi % frequency; // used for hashing from the random numbers
+    uint y255 = yi % frequency; // used for hashing from the random numbers
+    uint z255 = zi % frequency;
 
     float xf = x - (float)xi; // fraction part of x, should be in 0 to 1 range
     float yf = y - (float)yi; // fraction part of y, should be in 0 to 1 range
@@ -89,16 +95,22 @@ perlin_noise01(float x, float y, float z)
        The positions themselves do not matter that much, but the relative positions to each other
        are important as we need to interpolate in x, y, (and possibly z or w) directions.
     */
+     
+    // TODO(gh) We need to do this for now, because the perlin noise is per grid basis,
+    // which means the edge of grid 0 should be using the same value as the start of grid 1.
+    uint x255_inc = (x255+1)%frequency;
+    uint y255_inc = (y255+1)%frequency;
+    uint z255_inc = (z255+1)%frequency;
 
-    uint random_value0 = permutations255[permutations255[permutations255[x255]+y255]+z255];
-    uint random_value1 = permutations255[permutations255[permutations255[x255+1]+y255]+z255];
-    uint random_value2 = permutations255[permutations255[permutations255[x255]+y255+1]+z255];
-    uint random_value3 = permutations255[permutations255[permutations255[x255+1]+y255+1]+z255];
+    int random_value0 = permutations255[(permutations255[(permutations255[x255]+y255)%256]+z255)%256];
+    int random_value1 = permutations255[(permutations255[(permutations255[x255_inc]+y255)%256]+z255)%256];
+    int random_value2 = permutations255[(permutations255[(permutations255[x255]+y255_inc)%256]+z255)%256];
+    int random_value3 = permutations255[(permutations255[(permutations255[x255_inc]+y255_inc)%256]+z255)%256];
 
-    uint random_value4 = permutations255[permutations255[permutations255[x255]+y255]+z255+1];
-    uint random_value5 = permutations255[permutations255[permutations255[x255+1]+y255]+z255+1];
-    uint random_value6 = permutations255[permutations255[permutations255[x255]+y255+1]+z255+1];
-    uint random_value7 = permutations255[permutations255[permutations255[x255+1]+y255+1]+z255+1];
+    int random_value4 = permutations255[(permutations255[(permutations255[x255]+y255)%256]+z255_inc)%256];
+    int random_value5 = permutations255[(permutations255[(permutations255[x255_inc]+y255)%256]+z255_inc)%256];
+    int random_value6 = permutations255[(permutations255[(permutations255[x255]+y255_inc)%256]+z255_inc)%256];
+    int random_value7 = permutations255[(permutations255[(permutations255[x255_inc]+y255_inc)%256]+z255_inc)%256];
 
     // NOTE(gh) -1 are for getting the distance vector
     float gradient0 = get_gradient_value(random_value0, xf, yf, zf);
@@ -111,21 +123,67 @@ perlin_noise01(float x, float y, float z)
     float gradient6 = get_gradient_value(random_value6, xf, yf-1, zf-1);
     float gradient7 = get_gradient_value(random_value7, xf-1, yf-1, zf-1);
 
-    // NOTE(gh) mix == lerp
-    float lerp01 = mix(gradient0, gradient1, u); // lerp between 0 and 1
-    float lerp23 = mix(gradient2, gradient3, u); // lerp between 2 and 3 
-    float lerp0123 = mix(lerp01, lerp23, v); // lerp between '0-1' and '2-3', in y direction
+    float lerp01 = lerp(gradient0, u, gradient1); // lerp between 0 and 1
+    float lerp23 = lerp(gradient2, u, gradient3); // lerp between 2 and 3 
+    float lerp0123 = lerp(lerp01, v, lerp23); // lerp between '0-1' and '2-3', in y direction
 
-    float lerp45 = mix(gradient4, gradient5, u); // lerp between 4 and 5
-    float lerp67 = mix(gradient6, gradient7, u); // lerp between 6 and 7 
-    float lerp4567 = mix(lerp45, lerp67, v); // lerp between '4-5' and '6-7', in y direction
+    float lerp45 = lerp(gradient4, u, gradient5); // lerp between 4 and 5
+    float lerp67 = lerp(gradient6, u, gradient7); // lerp between 6 and 7 
+    float lerp4567 = lerp(lerp45, v, lerp67); // lerp between '4-5' and '6-7', in y direction
 
-    float lerp01234567 = mix(lerp0123, lerp4567, w);
+    float lerp01234567 = lerp(lerp0123, w, lerp4567);
 
     float result = (lerp01234567 + 1.0f) * 0.5f; // put into 0 to 1 range
+    // float result = (lerp0123 + 1.0f) * 0.5f; // put into 0 to 1 range
 
     return result;
 }
+
+struct GenerateWindNoiseVertexOutput
+{
+    float4 clip_p[[position]];
+    float3 p0to1;
+
+    uint layer [[render_target_array_index]];
+};
+
+vertex GenerateWindNoiseVertexOutput
+generate_wind_noise_vert(uint vertexID [[vertex_id]],
+                        constant uint *layer [[buffer(0)]],
+                        constant uint *max_layer [[buffer(1)]])
+{
+    GenerateWindNoiseVertexOutput result = {};
+    result.clip_p = float4(screen_quad[2*vertexID + 0], screen_quad[2*vertexID + 1], 0.0f, 1.0f);
+    result.layer = *layer;
+    result.p0to1 = float3(0.5f*result.clip_p.xy + float2(1, 1), result.layer/(float)*max_layer);
+    
+    return result;
+}
+
+fragment float4
+generate_wind_noise_frag(GenerateWindNoiseVertexOutput vertex_output [[stage_in]])
+{
+    float factor = 8.0f;
+    float weight = 0.5f;
+
+    float4 result = float4(0, 0, 0, 0);
+    for(uint i = 0;
+            i < 4;
+            ++i)
+    {
+        float x = factor * vertex_output.p0to1.x; 
+        float y = factor * vertex_output.p0to1.y; 
+        float z = factor * vertex_output.p0to1.z;
+
+        result += weight * float4(perlin_noise01(x, y, z, factor), 0, 0, 0);
+
+        factor *= 2;
+        weight *= 0.5f;
+    }
+
+    return result;
+}
+
 
 struct ScreenSpaceTriangleVertexOutput
 {
@@ -153,15 +211,12 @@ screen_space_triangle_frag(ScreenSpaceTriangleVertexOutput vertex_output [[stage
     float factor = 16.0f;
     float x = factor * vertex_output.p0to1.x; 
     float y = factor * vertex_output.p0to1.y; 
-    float perlin_noise_value = perlin_noise01(x, y, 0.0f);
+    float perlin_noise_value = perlin_noise01(x, y, 0.0f, 32);
 
     float4 result = float4(perlin_noise_value, perlin_noise_value, perlin_noise_value, 0.2f);
 
     return result;
 }
-
-
-
 
 struct ShadowmapVertexOutput
 {
@@ -616,11 +671,6 @@ get_mac_index_center(int x, int y, int z, packed_int3 cell_count)
     return result;
 }
 
-static float
-lerp(float min, float t, float max)
-{
-    return min + (max-min)*t;
-}
 
 static packed_float3
 get_mac_bilinear_center_value(device float *x, device float *y, device float *z, packed_float3 p, 
@@ -718,7 +768,7 @@ static void
 offset_control_points_with_spring(thread packed_float3 *original_p1, thread packed_float3 *original_p2,
                                    device packed_float3 *p1, device packed_float3 *p2, float random01, float dt)
 {
-    float p1_spring_c = 3.5f + random01;
+    float p1_spring_c = 5.5f + random01;
 
     float p2_spring_c = p1_spring_c/3.f;
 
@@ -778,6 +828,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
                                 constant packed_float3 *fluid_cube_max [[buffer (9)]],
                                 constant packed_int3 *fluid_cube_cell_count [[buffer (10)]],
                                 constant float *fluid_cube_cell_dim [[buffer (11)]],
+                                texture3d<float> wind_noise_texture [[texture(0)]],
                                 uint2 thread_count_per_grid [[threads_per_grid]],
                                 uint2 thread_position_in_grid [[thread_position_in_grid]])
 {
@@ -826,15 +877,17 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         if(is_inside_cube(p0, *fluid_cube_min, *fluid_cube_max))
         {
             packed_float3 cell_p = (p0 - *fluid_cube_min) / *fluid_cube_cell_dim;
+
+#if 1
+            wind_v += get_mac_bilinear_center_value(fluid_cube_v_x, fluid_cube_v_y, fluid_cube_v_z, cell_p, fluid_cube_cell_count);
+#else
             int xi = floor(cell_p.x);
             int yi = floor(cell_p.y);
             int zi = floor(cell_p.z);
-#if 0
-            packed_float3 wind_v = get_mac_bilinear_center_value(fluid_cube_v_x, fluid_cube_v_y, fluid_cube_v_z, cell_p, fluid_cube_cell_count);
-#endif
             wind_v += packed_float3(get_mac_center_value_x(fluid_cube_v_x, xi, yi, zi, fluid_cube_cell_count),
                     get_mac_center_value_y(fluid_cube_v_y, xi, yi, zi, fluid_cube_cell_count),
                     get_mac_center_value_z(fluid_cube_v_z, xi, yi, zi, fluid_cube_cell_count));
+#endif
         }
 
         offset_control_points_with_dynamic_wind(&grass_instance_buffer[grass_index].p0, 
