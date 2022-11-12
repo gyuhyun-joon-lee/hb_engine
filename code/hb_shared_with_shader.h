@@ -122,7 +122,7 @@ struct GrassInstanceData
     uint hash;
 
     packed_float3 color;
-    float  wiggliness;
+    float  spring_c;
 
     float blade_width;
 #elif INSIDE_VULKAN_SHADER
@@ -137,7 +137,7 @@ struct GrassInstanceData
     u32 hash;
 
     f32 color[3];
-    f32 wiggliness;
+    f32 spring_c;
     f32 blade_width;
 #endif
 };

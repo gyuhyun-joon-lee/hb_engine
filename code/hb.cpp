@@ -107,7 +107,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         i32 fluid_cell_count_z = 8;
 
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, gpu_work_queue,
-                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 4);
+                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 3);
 
         load_game_assets(&game_state->assets, platform_api, gpu_work_queue);
         game_state->debug_fluid_force_z = 1;
@@ -448,7 +448,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    b32 enable_fluid_arrow_rendering = true;
+    b32 enable_fluid_arrow_rendering = false;
     if(enable_fluid_arrow_rendering)
     {
         // NOTE(gh) Default arrow is looking down

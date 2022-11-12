@@ -752,24 +752,23 @@ offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_
                                         float original_p0_p1_length, float original_p1_p2_length,
                                          packed_float3 wind, float dt, float noise)
 {
-    packed_float3 p0_p1 = normalize(*p1 + dt*noise*wind - *p0);
-    *p1 = *p0 + original_p0_p1_length*p0_p1;
-
     // TODO(gh) We can re-adjust p2 after adjusting p1
     packed_float3 p1_p2 = normalize(*p2 + dt*noise*wind - *p1);
     *p2 = *p1 + original_p1_p2_length*p1_p2;
+
+    packed_float3 p0_p1 = normalize(*p1 + dt*noise*wind - *p0);
+    *p1 = *p0 + original_p0_p1_length*p0_p1;
 }
 
 static void
 offset_control_points_with_spring(thread packed_float3 *original_p1, thread packed_float3 *original_p2,
-                                   device packed_float3 *p1, device packed_float3 *p2, float random01, float noise, float dt)
+                                   device packed_float3 *p1, device packed_float3 *p2, float spring_c, float noise, float dt)
 {
-    float p1_spring_c = 6.5f + 3*random01;
+    float p2_spring_c = spring_c/3.f;
 
-    float p2_spring_c = p1_spring_c/3.f;
-
-    float one_minus_noise = 1-noise - 0.2f;
-    *p1 += dt*one_minus_noise*p1_spring_c*(*original_p1 - *p1);
+    // NOTE(gh) Reversing the wind noise to improve grass bobbing
+    float one_minus_noise = 1 - noise - 0.2f;
+    *p1 += dt*one_minus_noise*spring_c*(*original_p1 - *p1);
     *p2 += dt*one_minus_noise*p2_spring_c*(*original_p2 - *p2);
 }
 
@@ -808,8 +807,8 @@ initialize_grass_grid(device GrassInstanceData *grass_instance_buffer [[buffer(0
 
     grass_instance_buffer[grass_index].orthogonal_normal = packed_float3(orthogonal_normal);
     grass_instance_buffer[grass_index].hash = hash; 
-    grass_instance_buffer[grass_index].blade_width = 0.095f;
-    grass_instance_buffer[grass_index].wiggliness = 2.0f + random01;
+    grass_instance_buffer[grass_index].blade_width = 0.125f;
+    grass_instance_buffer[grass_index].spring_c = 8.5f + 3*random01;
     grass_instance_buffer[grass_index].color = packed_float3(random01, 0.784h, 0.2h);
     grass_instance_buffer[grass_index].texture_p = p0;
 }
@@ -875,7 +874,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         {
             packed_float3 cell_p = (p0 - *fluid_cube_min) / *fluid_cube_cell_dim;
 
-#if 1
+#if 0
             wind_v += get_mac_bilinear_center_value(fluid_cube_v_x, fluid_cube_v_y, fluid_cube_v_z, cell_p, fluid_cube_cell_count);
 #else
             int xi = floor(cell_p.x);
@@ -902,7 +901,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
 #if 1
         offset_control_points_with_spring(&original_p1, &original_p2,
                                             &grass_instance_buffer[grass_index].p1,
-                                            &grass_instance_buffer[grass_index].p2, random01, wind_noise, target_seconds_per_frame);
+                                            &grass_instance_buffer[grass_index].p2, grass_instance_buffer[grass_index].spring_c, wind_noise, target_seconds_per_frame);
 #endif
 
         grass_instance_buffer[grass_index].texture_p -= target_seconds_per_frame*wind_v;
