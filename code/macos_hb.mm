@@ -996,7 +996,6 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                     metal_set_compute_bytes(encode_instanced_grass_encoder, &render_proj_view, sizeof(render_proj_view), 4);
                     metal_set_compute_bytes(encode_instanced_grass_encoder, &light_proj_view, sizeof(light_proj_view), 5);
                     metal_set_compute_bytes(encode_instanced_grass_encoder, &render_push_buffer->game_camera_p, sizeof(render_push_buffer->game_camera_p), 6);
-                    metal_set_compute_bytes(encode_instanced_grass_encoder, &time_elasped_from_start, sizeof(time_elasped_from_start), 7);
 
                     // Tell Metal that we are going to write to the indirect command buffer
                     [encode_instanced_grass_encoder useResource:render_context->icb[render_context->next_grass_double_buffer_index] usage:MTLResourceUsageWrite];

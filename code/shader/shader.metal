@@ -890,7 +890,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         constexpr sampler s = sampler(coord::normalized, address::repeat, filter::linear);
 
         // TODO(gh) Should make this right! I guess this is the 'scale' that god of war used?
-        float3 texcoord = grass_instance_buffer[grass_index].texture_p/32;
+        float3 texcoord = grass_instance_buffer[grass_index].texture_p/64;
         float wind_noise = wind_noise_texture.sample(s, texcoord).x;
         offset_control_points_with_dynamic_wind(&grass_instance_buffer[grass_index].p0, 
                                                     &grass_instance_buffer[grass_index].p1,
@@ -923,8 +923,7 @@ encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
                                             const device uint *indices [[buffer(3)]],
                                             constant float4x4 *render_proj_view [[buffer(4)]],
                                             constant float4x4 *light_proj_view [[buffer(5)]],
-                                            constant packed_float3 *game_camera_p [[buffer(6)]],
-                                            constant float *time_elasped [[buffer(7)]])
+                                            constant packed_float3 *game_camera_p [[buffer(6)]])
 {
     render_command command(arguments->cmd_buffer, 0);
 
@@ -932,7 +931,6 @@ encode_instanced_grass_render_commands(device Arguments *arguments[[buffer(0)]],
     command.set_vertex_buffer(render_proj_view, 1);
     command.set_vertex_buffer(light_proj_view, 2);
     command.set_vertex_buffer(game_camera_p, 3);
-    command.set_vertex_buffer(time_elasped, 4);
 
     command.draw_indexed_primitives(primitive_type::triangle, // primitive type
                                     39, // index count TODO(gh) We can also just pass those in, too?
@@ -950,12 +948,9 @@ calculate_grass_vertex(const device GrassInstanceData *grass_instance_data,
                         constant float4x4 *light_proj_view,
                         constant packed_float3 *camera_p,
                         uint grass_vertex_count,
-                        uint grass_divide_count,
-                        float time_elasped)
+                        uint grass_divide_count)
 {
     half blade_width = grass_instance_data->blade_width;
-    half wiggliness = grass_instance_data->wiggliness;
-    uint hash = grass_instance_data->hash;
 
     const packed_float3 p0 = grass_instance_data->p0;
     const packed_float3 p1 = grass_instance_data->p1;
@@ -963,15 +958,8 @@ calculate_grass_vertex(const device GrassInstanceData *grass_instance_data,
     const packed_float3 orthogonal_normal = grass_instance_data->orthogonal_normal;
 
     float t = (float)(thread_index / 2) / (float)grass_divide_count;
-    float hash_value = hash*pi_32;
-    float wind_factor = t * wiggliness + hash_value + time_elasped;
 
-    // float3 modified_p2 = p2 + 0.18f * sin(wind_factor) * (-blade_normal);
-    float3 modified_p2 = p2 + float3(0, 0, 0.18f * sin(wind_factor));
-    float3 modified_p1 = p1 + float3(0, 0, 0.15f * sin(wind_factor));
-    // float3 modified_p2 = p2 + float3(0, 0, 0.15f * sin(wind_factor));
-
-    float3 world_p = quadratic_bezier(p0, modified_p1, modified_p2, t);
+    float3 world_p = quadratic_bezier(p0, p1, p2, t);
 
     if(thread_index == grass_vertex_count-1)
     {
@@ -1005,7 +993,7 @@ calculate_grass_vertex(const device GrassInstanceData *grass_instance_data,
     GBufferVertexOutput result;
     result.clip_p = (*proj_view) * float4(world_p, 1.0f);
     result.p = world_p;
-    result.N = normalize(cross(quadratic_bezier_first_derivative(p0, modified_p1, modified_p2, t), orthogonal_normal));
+    result.N = normalize(cross(quadratic_bezier_first_derivative(p0, p1, p2, t), orthogonal_normal));
     // TODO(gh) Also make this as a half?
     result.color = packed_float3(grass_instance_data->color);
     result.depth = result.clip_p.z / result.clip_p.w;
@@ -1021,8 +1009,7 @@ instanced_grass_render_vertex(uint vertexID [[vertex_id]],
                             const device GrassInstanceData *grass_instance_buffer [[buffer(0)]],
                             constant float4x4 *render_proj_view [[buffer(1)]],
                             constant float4x4 *light_proj_view [[buffer(2)]],
-                            constant packed_float3 *game_camera_p [[buffer(3)]],
-                            constant float *time_elasped [[buffer(4)]])
+                            constant packed_float3 *game_camera_p [[buffer(3)]])
                                             
 {
     GBufferVertexOutput result = calculate_grass_vertex(grass_instance_buffer + instanceID, 
@@ -1031,8 +1018,7 @@ instanced_grass_render_vertex(uint vertexID [[vertex_id]],
                                                         light_proj_view,
                                                         game_camera_p,
                                                         grass_high_lod_vertex_count,
-                                                        grass_high_lod_divide_count,
-                                                        *time_elasped);
+                                                        grass_high_lod_divide_count);
     
     return result;
 }
