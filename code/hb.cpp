@@ -448,7 +448,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    b32 enable_fluid_arrow_rendering = false;
+    b32 enable_fluid_arrow_rendering = true;
     if(enable_fluid_arrow_rendering)
     {
         // NOTE(gh) Default arrow is looking down

@@ -163,7 +163,8 @@ generate_wind_noise_vert(uint vertexID [[vertex_id]],
 fragment float4
 generate_wind_noise_frag(GenerateWindNoiseVertexOutput vertex_output [[stage_in]])
 {
-    float factor = 1.0f;
+    // NOTE(gh) starting from 8 or 16 seems like working well.
+    float factor = 16.0f;
     float weight = 0.5f;
 
     float4 result = float4(0, 0, 0, 0);
@@ -761,14 +762,15 @@ offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_
 
 static void
 offset_control_points_with_spring(thread packed_float3 *original_p1, thread packed_float3 *original_p2,
-                                   device packed_float3 *p1, device packed_float3 *p2, float random01, float dt)
+                                   device packed_float3 *p1, device packed_float3 *p2, float random01, float noise, float dt)
 {
-    float p1_spring_c = 5.5f + random01;
+    float p1_spring_c = 6.5f + 3*random01;
 
     float p2_spring_c = p1_spring_c/3.f;
 
-    *p1 += dt*p1_spring_c*(*original_p1 - *p1);
-    *p2 += dt*p2_spring_c*(*original_p2 - *p2);
+    float one_minus_noise = 1-noise - 0.2f;
+    *p1 += dt*one_minus_noise*p1_spring_c*(*original_p1 - *p1);
+    *p2 += dt*one_minus_noise*p2_spring_c*(*original_p2 - *p2);
 }
 
 kernel void
@@ -833,12 +835,10 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
     packed_float3 p0 = grass_instance_buffer[grass_index].p0;
     
     // TODO(gh) better hash function for each grass?
-    // TODO(gh) Make noise to range from 0 to 1
-    float noise01 = perlin_noise_values[grass_index];
     uint hash = 10000*(wang_hash(grass_index)/(float)0xffffffff);
     float random01 = (float)hash/(float)(10000);
     float grass_length = 2.8h + random01;
-    float tilt = clamp(1.9f + 0.7f*random01 + (noise01-0.5f), 0.0f, grass_length - 0.01f);
+    float tilt = clamp(1.9f + 0.7f*random01, 0.0f, grass_length - 0.01f);
 
 #if 0
     // TODO(gh) This does not take account of side curve of the plane, tilt ... so many things
@@ -889,19 +889,20 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
 
         constexpr sampler s = sampler(coord::normalized, address::repeat, filter::linear);
 
-        // TODO(gh) Should make this right!
-        float3 texcoord = grass_instance_buffer[grass_index].texture_p / 512.0f;
+        // TODO(gh) Should make this right! I guess this is the 'scale' that god of war used?
+        float3 texcoord = grass_instance_buffer[grass_index].texture_p/32;
+        float wind_noise = wind_noise_texture.sample(s, texcoord).x;
         offset_control_points_with_dynamic_wind(&grass_instance_buffer[grass_index].p0, 
                                                     &grass_instance_buffer[grass_index].p1,
                                                     &grass_instance_buffer[grass_index].p2, 
                                                     original_p0_p1_length, original_p1_p2_length,
                                                     wind_v, target_seconds_per_frame, 
-                                                    wind_noise_texture.sample(s, texcoord).x);
+                                                    wind_noise);
 
 #if 1
         offset_control_points_with_spring(&original_p1, &original_p2,
                                             &grass_instance_buffer[grass_index].p1,
-                                            &grass_instance_buffer[grass_index].p2, random01, target_seconds_per_frame);
+                                            &grass_instance_buffer[grass_index].p2, random01, wind_noise, target_seconds_per_frame);
 #endif
 
         grass_instance_buffer[grass_index].texture_p -= target_seconds_per_frame*wind_v;
