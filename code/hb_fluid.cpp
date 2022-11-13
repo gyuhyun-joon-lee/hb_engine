@@ -475,7 +475,7 @@ project(f32 *x, f32 *y, f32 *z, f32 *pressures, f32 *divergences, v3u cell_count
     set_boundary_values(divergences, cell_count, ElementTypeForBoundary_Continuous);
 
     for(u32 iter = 0;
-            iter < 128; // requires 40 to 80 iteration to make the error unnoticable
+            iter < 80; // requires 40 to 80 iteration to make the error unnoticable
             ++iter)
     {
         for(u32 cell_z = 1;
@@ -818,22 +818,29 @@ get_neighboring_pressure_with_boundary_condition(f32 *pressures, i32 center_x, i
     i32 y = center_y+offset.y;
     i32 z = center_z+offset.z;
 
-    b32 is_solid_wall = false;
+    b32 is_free_space = false;
+    // b32 is_solid_wall = false;
     if(x < 0 || x >= cell_count.x ||
         y < 0 || y >= cell_count.y ||
         z < 0 || z >= cell_count.z)
     {
-        // TODO(gh) For now, we will assume that the fluid cube is 
-        // covered with solid walls for now(which sets the pressure to the center cell)
-        // but we should also handle free-space case, which will just set the pressure to 0.
-        is_solid_wall = true;
+        // If free space, pressure = 0
+        // If solid wall, pressure = center pressure (but the rhs will be modified)
+        is_free_space = true;
     }
 
+#if 0
     if(is_solid_wall)
     {
         // Set the pressure to the center P, which effectively negates 1 from the coefficient of center P in the equation
         // (4 in 2D, 6 in 3D)
         result = pressures[get_mac_index_center(center_x, center_y, center_z, cell_count)];
+    }
+#endif
+
+    if(is_free_space)
+    {
+        result = 0;
     }
     else
     {
@@ -862,7 +869,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
     // Then, we can express each u or v with u(zero-div)= u(yes-div) - (density/dt)*gradient(P)
     // This works even if the cell was occupied by a solid wall, because we can think
     // of a solid wall having a 'ghost' pressure.
-    // The result looks like : P = ((-cell_dim*density/dt)*Divergence(u(yes-div)) + all of neighboring P)/6
+    // The result looks like : P = ((-cell_dim*cell_dim*density/dt)*Divergence(u(yes-div)) + all of neighboring P)/6
     for(i32 z = 0;
             z < cell_count.z;
             ++z)
@@ -879,12 +886,12 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                 MACID macID_y = get_mac_index_y(x, y, z, cell_count);
                 MACID macID_z = get_mac_index_z(x, y, z, cell_count);
 
-                // NOTE(gh) This is (-cell_dim*cell_dim*density/dt)*Divergence(u(yes-div)) - (cell_dim*density/dt)*(u - u)(soild-fluid or fluid-solid, depending on where the solid wall was located) 
-                // for each solid wall boundary)
-                f32 a = -(cell_dim*density/dt);
-                // simplified version of -(cell_dim*cell_dim*density/dt) * divergence;
-                f32 rhs = a*(v_x[macID_x.ID1]-v_x[macID_x.ID0]+v_y[macID_y.ID1]-v_y[macID_y.ID0]+v_z[macID_z.ID1]-v_z[macID_z.ID0]); 
-                 
+                f32 a = -(cell_dim*cell_dim*density/dt);
+                f32 divergence = (v_x[macID_x.ID1] - v_x[macID_x.ID0] +
+                                  v_y[macID_y.ID1] - v_y[macID_y.ID0] +
+                                  v_z[macID_z.ID1] - v_z[macID_z.ID0]) / cell_dim;
+                f32 rhs = a*divergence; 
+#if 0
                 // TODO(gh) Set these properly when we have moving object
                 f32 solid_wall_x0 = 0;
                 f32 solid_wall_x1 = 0;
@@ -920,6 +927,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                 {
                     rhs += a*(v_z[macID_z.ID1] - solid_wall_z1);
                 }
+#endif
 
                 temp_buffer[get_mac_index_center(x, y, z, cell_count)] = rhs;
             }
@@ -961,6 +969,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
     
     // NOTE(gh) Do u(n+1) = u(n) - (dt/density)*divergence(P)
     f32 c = (dt/(density*cell_dim));
+    f32 free_space_pressure = 0;
     for(i32 z = 0;
             z < cell_count.z;
             ++z)
@@ -974,29 +983,28 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                     ++x)
             {
                 f32 center_pressure = pressures[get_mac_index_center(x,y,z,cell_count)];
-                // TODO(gh) For now, we assume the solid wall is not moving 
-                // later, we need to change this with the velocity of solid wall based on x, y, z direction
+                // NOTE(gh) This code assumes that the fluid space is encapsulated by air,
+                // which is the region where the pressure is constant(0 in our case)
                 switch(quantity_type)
                 {
                     case FluidQuantityType_x:
                     {
                         MACID macID = get_mac_index_x(x, y, z, cell_count);
 
-                        if(x == cell_count.x-1)
+                        if(x == 0)
                         {
-                            // fluid - solid
-                            dest[macID.ID1] = 0;
+                            // We always(and only) set the dest with higher ID, 
+                            // so we need to explicitly set the left boundary
+                            dest[macID.ID0] = source[macID.ID0] - c*(center_pressure - free_space_pressure);
+                        }
+                        else if(x == cell_count.x-1)
+                        {
+                            dest[macID.ID1] = source[macID.ID1] - c*(free_space_pressure - center_pressure);
                         }
                         else
                         {
-                            // We always(and only) set the dest with higher ID, so we need to explicitly set the left boundary
-                            if(x == 0)
-                            {
-                                // solid - fluid
-                                dest[macID.ID0] = 0;
-                            }
-
-                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x+1,y,z,cell_count)] - center_pressure);
+                            dest[macID.ID1] = source[macID.ID1] - 
+                                              c*(pressures[get_mac_index_center(x+1,y,z,cell_count)] - center_pressure);
                         }
                     }break;
 
@@ -1004,28 +1012,20 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                     {
                         MACID macID = get_mac_index_y(x, y, z, cell_count);
 
-                        if(y == cell_count.y-1)
+                        if(y == 0)
                         {
-                            /*
-                               solid
-                                 |
-                               fluid
-                            */
-                            dest[macID.ID1] = 0;
+                            // We always(and only) set the dest with higher ID, 
+                            // so we need to explicitly set the left boundary
+                            dest[macID.ID0] = source[macID.ID0] - c*(center_pressure - free_space_pressure);
+                        }
+                        else if(y == cell_count.y-1)
+                        {
+                            dest[macID.ID1] = source[macID.ID1] - c*(free_space_pressure - center_pressure);
                         }
                         else
                         {
-                            if(y == 0)
-                            {
-                                /*
-                                   fluid
-                                   |
-                                   solid
-                                   */
-                                dest[macID.ID0] = 0;
-                            }
-
-                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x,y+1,z,cell_count)] - center_pressure);
+                            dest[macID.ID1] = source[macID.ID1] - 
+                                              c*(pressures[get_mac_index_center(x,y+1,z,cell_count)] - center_pressure);
                         }
                     }break;
 
@@ -1033,27 +1033,20 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                     {
                         MACID macID = get_mac_index_z(x, y, z, cell_count);
 
-                        if(z == cell_count.z-1)
+                        if(z == 0)
                         {
-                            /*
-                               solid
-                                 |
-                               fluid
-                            */
-                            dest[macID.ID1] = 0;
+                            // We always(and only) set the dest with higher ID, 
+                            // so we need to explicitly set the left boundary
+                            dest[macID.ID0] = source[macID.ID0] - c*(center_pressure - free_space_pressure);
+                        }
+                        else if(z == cell_count.z-1)
+                        {
+                            dest[macID.ID1] = source[macID.ID1] - c*(free_space_pressure - center_pressure);
                         }
                         else
                         {
-                            if(z == 0)
-                            {
-                                /*
-                                   fluid
-                                   |
-                                   solid
-                                   */
-                                dest[macID.ID0] = 0;
-                            }
-                            dest[macID.ID1] = source[macID.ID1] - c*(pressures[get_mac_index_center(x,y,z+1,cell_count)] - center_pressure);
+                            dest[macID.ID1] = source[macID.ID1] - 
+                                              c*(pressures[get_mac_index_center(x,y,z+1,cell_count)] - center_pressure);
                         }
                     }break;
                 }
@@ -1384,8 +1377,8 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                     add_input_to_center(cube->v_y_source, 100*cosf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
 #else
-                    add_input_to_center(cube->v_x_source, 20, x, y, z, cube->cell_count, FluidQuantityType_x);
-                    add_input_to_center(cube->v_y_source, 1, x, y, z, cube->cell_count, FluidQuantityType_y);
+                    add_input_to_center(cube->v_x_source, -5, x, y, z, cube->cell_count, FluidQuantityType_x);
+                    add_input_to_center(cube->v_y_source, 5, x, y, z, cube->cell_count, FluidQuantityType_y);
                     add_input_to_center(cube->v_z_source, 0, x, y, z, cube->cell_count, FluidQuantityType_z);
 #endif
                 }

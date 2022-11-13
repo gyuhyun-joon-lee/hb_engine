@@ -314,8 +314,8 @@ init_grass_grid(ThreadWorkQueue *general_work_queue, ThreadWorkQueue *gpu_work_q
             general_work_queue->add_thread_work_queue_item(general_work_queue, thread_optimized_raycast_straight_down_z_to_non_overlapping_mesh, 0, data);
         }
     }
-
-    grass_grid->perlin_noise_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32) * total_grass_count);
+    general_work_queue->complete_all_thread_work_queue_items(general_work_queue, true);
+    end_temp_memory(&work_memory);
 
     grass_grid->grass_instance_data_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(GrassInstanceData)*total_grass_count);
 }

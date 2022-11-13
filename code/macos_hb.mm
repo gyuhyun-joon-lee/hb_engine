@@ -598,10 +598,13 @@ metal_first_pass(MetalRenderContext *render_context)
 internal void
 DEBUG_metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height)
 {
-    id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
+@autoreleasepool
+{
     id <MTLTexture> drawable_texture =  render_context->view.currentDrawable.texture;
     if(drawable_texture)
     {
+        id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
+
         render_context->forward_renderpass.colorAttachments[0].texture = drawable_texture;
         id<MTLRenderCommandEncoder> forward_render_encoder = [command_buffer renderCommandEncoderWithDescriptor: render_context->forward_renderpass];
         forward_render_encoder.label = @"DEBUG Render";
@@ -667,9 +670,9 @@ DEBUG_metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer 
         }
 
         metal_end_encoding(forward_render_encoder);
+        metal_commit_command_buffer(command_buffer);
     }
-
-    metal_commit_command_buffer(command_buffer);
+} // autoreleasepool
 }
 
 // TODO(gh) Later, we can make this to also 'stream' the meshes(just like the other assets), 
@@ -677,8 +680,8 @@ DEBUG_metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer 
 internal void
 metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *render_push_buffer, u32 window_width, u32 window_height, f32 time_elasped_from_start)
 {
-
-
+@autoreleasepool
+{
     id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
     // NOTE(gh) render shadow map
@@ -941,16 +944,15 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_compute_pipeline(fill_grass_instance_compute_encoder, render_context->fill_grass_instance_data_pipeline);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, render_context->grass_count_buffer.buffer, 0, 0);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->grass_instance_data_buffer.handle, 0, 1);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->perlin_noise_buffer.handle, 0, 2);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 3);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 4);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_x->handle, render_push_buffer->fluid_cube_v_x_offset, 5);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_y->handle, render_push_buffer->fluid_cube_v_y_offset, 6);
-                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_z->handle, render_push_buffer->fluid_cube_v_z_offset, 7);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_min, sizeof(render_push_buffer->fluid_cube_min), 8);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_max, sizeof(render_push_buffer->fluid_cube_max), 9);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_count, sizeof(render_push_buffer->fluid_cube_cell_count), 10);
-                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_dim, sizeof(render_push_buffer->fluid_cube_cell_dim), 11);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 2);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 3);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_x->handle, render_push_buffer->fluid_cube_v_x_offset, 4);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_y->handle, render_push_buffer->fluid_cube_v_y_offset, 5);
+                metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_z->handle, render_push_buffer->fluid_cube_v_z_offset, 6);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_min, sizeof(render_push_buffer->fluid_cube_min), 7);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_max, sizeof(render_push_buffer->fluid_cube_max), 8);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_count, sizeof(render_push_buffer->fluid_cube_cell_count), 9);
+                metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_dim, sizeof(render_push_buffer->fluid_cube_cell_dim), 10);
                 metal_set_compute_texture(fill_grass_instance_compute_encoder, render_context->wind_noise_texture.texture, 0);
 
                 metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));
@@ -1155,50 +1157,6 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
         metal_set_front_facing_winding(forward_render_encoder, MTLWindingCounterClockwise);
         metal_set_cull_mode(forward_render_encoder, MTLCullModeBack); 
 
-
-        // TODO(gh) Also put this inside the game code, and make it as a render entry(with instance count support?)
-        if(render_push_buffer->enable_show_perlin_noise_grid)
-        {
-            for(u32 grass_grid_index = 0;
-                    grass_grid_index < render_push_buffer->grass_grid_count_x * render_push_buffer->grass_grid_count_y;
-                    ++grass_grid_index)
-            {
-                GrassGrid *grid = render_push_buffer->grass_grids + grass_grid_index;
-                v2 grid_dim = grid->max - grid->min;
-                v2 square_dim = V2(grid_dim.x / (f32)grid->grass_count_x, grid_dim.y / (f32)grid->grass_count_y);
-                v2u grass_count = V2u(grid->grass_count_x, grid->grass_count_y);
-
-                v2 square_left_bottom_p = grid->min;
-                v2 square_right_bottom_p = square_left_bottom_p + V2(square_dim.x, 0);
-                v2 square_top_left_p = square_left_bottom_p + V2(0, square_dim.y);
-                v2 square_top_right_p = square_top_left_p + V2(square_dim.x, 0);
-                v2 square_vertices[] = 
-                {
-                    square_left_bottom_p,
-                    square_right_bottom_p,
-                    square_top_left_p,
-
-                    square_right_bottom_p,
-                    square_top_right_p,
-                    square_top_left_p
-                };
-
-                // TODO(gh) Don't think this routine should be this slow, maybe try another instance drawing or 
-                // indierct draw method?
-                // NOTE(gh) z value will come from the floor z buffer
-                metal_set_render_pipeline(forward_render_encoder, render_context->forward_render_perlin_noise_grid_pipeline);
-
-                metal_set_vertex_bytes(forward_render_encoder, square_vertices, array_size(square_vertices), 0);
-                metal_set_vertex_bytes(forward_render_encoder, &square_dim, sizeof(square_dim), 1);
-                metal_set_vertex_buffer(forward_render_encoder, (id<MTLBuffer>)grid->perlin_noise_buffer.handle, 0, 2);
-                metal_set_vertex_buffer(forward_render_encoder, (id<MTLBuffer>)grid->floor_z_buffer.handle, 0, 3);
-                metal_set_vertex_bytes(forward_render_encoder, &grass_count, sizeof(grass_count), 4);
-                metal_set_vertex_bytes(forward_render_encoder, &per_frame_data, sizeof(per_frame_data), 5);
-                metal_draw_non_indexed_instances(forward_render_encoder, MTLPrimitiveTypeTriangle,
-                        0, 6, 0, grid->grass_count_x * grid->grass_count_y);
-            }
-        }
-
          for(u32 consumed = 0;
                 consumed < render_push_buffer->used;
                 )
@@ -1251,10 +1209,13 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
          
         // TODO(gh) properly sync with the frame!
     }
+} // autoreleasepool
 }
 
 internal void
 metal_display(MetalRenderContext *render_context)
+{
+@autoreleasepool
 {
     // TODO(gh) My understading is metal will automatically sync with the display when I request presenting,
     // but double check
@@ -1262,6 +1223,7 @@ metal_display(MetalRenderContext *render_context)
 
     [present_command_buffer presentDrawable: render_context->view.currentDrawable];
     metal_commit_command_buffer(present_command_buffer);
+} // autoreleasepool
 }
  
 

@@ -371,7 +371,6 @@ struct PlatformRenderPushBuffer
 
     // Configurations
     b32 enable_shadow;
-    b32 enable_show_perlin_noise_grid; // show perlin noise on top of the floor
     b32 enable_grass_rendering;
 };
 

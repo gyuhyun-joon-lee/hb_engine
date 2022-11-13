@@ -119,5 +119,11 @@ struct GBufferVertexOutput
     float3 p_in_light_coordinate;
 };
 
+static float
+lerp(float min, float t, float max)
+{
+    return min + (max-min)*t;
+}
+
 #endif
 

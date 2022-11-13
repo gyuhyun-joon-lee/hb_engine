@@ -110,7 +110,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                     V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 3);
 
         load_game_assets(&game_state->assets, platform_api, gpu_work_queue);
-        game_state->debug_fluid_force_z = 1;
 
         game_state->is_initialized = true;
     }
@@ -120,8 +119,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     Camera *render_camera = game_camera;
     //render_camera = debug_camera;
-    b32 show_perlin_noise_grid = false;
-
+     
     if(render_camera == debug_camera)
     {
         game_camera->roll += 0.8f * platform_input->dt_per_frame;
@@ -164,37 +162,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     if(platform_input->move_left)
     {
         render_camera->p += -camera_speed*camera_right_dir;
-    }
-
-    u32 update_perlin_noise_buffer_data_count = game_state->grass_grid_count_x * game_state->grass_grid_count_y;
-    TempMemory perlin_noise_temp_memory = 
-        start_temp_memory(&game_state->transient_arena, 
-                sizeof(ThreadUpdatePerlinNoiseBufferData)*update_perlin_noise_buffer_data_count);
-    ThreadUpdatePerlinNoiseBufferData *update_perlin_noise_buffer_data = 
-        push_array(&perlin_noise_temp_memory, ThreadUpdatePerlinNoiseBufferData, update_perlin_noise_buffer_data_count);
-
-    u32 update_perlin_noise_buffer_data_used_count = 0;
-    // TODO(gh) populate the perlin noise buffer in each grid, but should the perlin noise be one giant thing 
-    // on top of the map?
-    for(u32 grass_grid_index = 0;
-            grass_grid_index < game_state->grass_grid_count_x*game_state->grass_grid_count_y;
-            ++grass_grid_index)
-    {
-        GrassGrid *grid = game_state->grass_grids + grass_grid_index;
-
-        ThreadUpdatePerlinNoiseBufferData *data = update_perlin_noise_buffer_data + update_perlin_noise_buffer_data_used_count++;
-        data->total_x_count = grid->grass_count_x;
-        data->total_y_count = grid->grass_count_y;
-        data->start_x = 0;
-        data->start_y = 0;
-        data->offset_x = game_state->offset_x;
-        data->one_past_end_x = grid->grass_count_x;
-        data->one_past_end_y = grid->grass_count_x;
-        data->time_elasped_from_start = platform_input->time_elasped_from_start;
-        data->perlin_noise_buffer = grid->perlin_noise_buffer.memory;
-        thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_update_perlin_noise_buffer_callback, 0, (void *)data);
-
-        assert(update_perlin_noise_buffer_data_used_count <= update_perlin_noise_buffer_data_count);
     }
 
     // NOTE(gh) update entity start
@@ -410,7 +377,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             V3(0, 0, 0), true);
     platform_render_push_buffer->enable_shadow = false;
     platform_render_push_buffer->enable_grass_rendering = true;
-    platform_render_push_buffer->enable_show_perlin_noise_grid = show_perlin_noise_grid;
 
     if(debug_platform_render_push_buffer)
     {
@@ -448,7 +414,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    b32 enable_fluid_arrow_rendering = false;
+    b32 enable_fluid_arrow_rendering = true;
     if(enable_fluid_arrow_rendering)
     {
         // NOTE(gh) Default arrow is looking down
@@ -702,17 +668,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
     
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue, true);
-
-    end_temp_memory(&perlin_noise_temp_memory);
-
-    // TODO(gh) simplify variables that can effect the wind 
-    // maybe with world unit speed
-    game_state->time_until_offset_x_inc += platform_input->dt_per_frame;
-    if(game_state->time_until_offset_x_inc > 0.02f)
-    {
-        game_state->offset_x++;
-        game_state->time_until_offset_x_inc = 0;
-    }
 }
 
 // TODO(gh) we can use this function to make the p relative to bottom_left!

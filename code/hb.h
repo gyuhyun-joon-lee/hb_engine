@@ -31,10 +31,6 @@ struct GameState
 
     FluidCubeMAC fluid_cube_mac;
 
-    u32 offset_x;
-    f32 time_until_offset_x_inc;
-    u32 debug_fluid_force_z;
-
     GameAssets assets;
 
     TextureAsset3D vector_field;
