@@ -19,9 +19,9 @@ If you have one of the apple sillicon Macs and wanna build the project, please f
 
 # Features
 For now, HB engine is capable of :
-- Rendering 1M procedural grasses using the traditional pipelines, or 260K grasses using mesh shading in 60FPS.
-    - Inspired by Ghost of Tsushima https://youtu.be/Ibe1JBF5i5Y
-- Multi-threaded Perlin noise generation to simulate wind.
+- Rendering 1M procedural grasses using the traditional compute/vertex pipelines, or 260K grasses using mesh shading in 60FPS.
+    - Inspired by the game Ghost of Tsushima https://youtu.be/Ibe1JBF5i5Y
+- Static & dynamic wind using fluid dynamics
 - Live code editing, which allows you to edit game code without closing the application.
 
 # Showcase
