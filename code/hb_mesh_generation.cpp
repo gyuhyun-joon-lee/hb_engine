@@ -104,7 +104,7 @@ generate_floor_mesh(Entity *entity, MemoryArena *arena, v2 floor_dim, u32 x_quad
             f32 xf = (f32)x/((f32)x_vertex_count - 1); // -1 so that xf range from 0 to 1
             u32 frequency = 4;
 
-            f32 pz = 10.0f * perlin_noise01(frequency*xf, frequency*yf, 0, frequency);
+            f32 pz = 14.0f * perlin_noise01(frequency*xf, frequency*yf, 0, frequency);
 
             entity->vertices[populated_vertex_count].p = V3(px, py, pz);
             entity->vertices[populated_vertex_count].n = V3(0, 0, 0);

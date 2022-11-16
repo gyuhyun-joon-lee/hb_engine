@@ -708,9 +708,8 @@ Simd_v3(float32x4_t value0, float32x4_t value1, float32x4_t value2)
     return result;
 }
 
-// NOTE(joon): This is a much more preferred version of loading in the data
 force_inline simd_v3
-simd_v3_load(r32 *array_of_x, r32 *array_of_y, r32 *array_of_z)
+Simd_v3(r32 *array_of_x, r32 *array_of_y, r32 *array_of_z)
 {
     simd_v3 result = {};
 

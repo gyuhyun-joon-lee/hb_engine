@@ -233,7 +233,11 @@ struct ThreadPopulateFloorZData
 
     u32 grass_count_x;
 
-    Entity *floor;
+    simd_v3 *p0;
+    simd_v3 *p1;
+    simd_v3 *p2;
+    u32 simd_vertex_count;
+    v3 mesh_offset_p;
 
     void *floor_z_buffer;
 };
@@ -242,7 +246,6 @@ internal
 THREAD_WORK_CALLBACK(thread_optimized_raycast_straight_down_z_to_non_overlapping_mesh)
 {
     ThreadPopulateFloorZData *d = (ThreadPopulateFloorZData *)data;
-    Entity *floor = d->floor;
 
     for(u32 y = d->start_y;
             y < d->one_past_end_y;
@@ -256,8 +259,8 @@ THREAD_WORK_CALLBACK(thread_optimized_raycast_straight_down_z_to_non_overlapping
             v3 ray_origin = V3(d->grass_grid_min + hadamard(V2(x, y), d->grass_seperation_dim), 10000.0f);
 
             f32 z = optimized_raycast_straight_down_z_to_non_overlapping_mesh(ray_origin, 
-                        floor->vertices, floor->indices, floor->index_count, 
-                        floor->p).z;
+                        d->p0, d->p1, d->p2, d->simd_vertex_count,
+                        d->mesh_offset_p).z;
 
             *((f32 *)d->floor_z_buffer + y*d->grass_count_x + x) = z;
         }
@@ -289,6 +292,42 @@ init_grass_grid(ThreadWorkQueue *general_work_queue, ThreadWorkQueue *gpu_work_q
     u32 grass_per_work_count_y = grass_count_y/work_count_y;
     TempMemory work_memory = start_temp_memory(arena, sizeof(ThreadPopulateFloorZData)*work_count_x*work_count_y);
     ThreadPopulateFloorZData *thread_data = push_array(&work_memory, ThreadPopulateFloorZData, work_count_x*work_count_y);
+
+    assert(floor->index_count%(3*4) == 0);
+    TempMemory mesh_memory = start_temp_memory(arena, sizeof(simd_v3)*(floor->index_count/4));
+    simd_v3 *p0 = push_array(&mesh_memory, simd_v3, floor->index_count/12);
+    simd_v3 *p1 = push_array(&mesh_memory, simd_v3, floor->index_count/12);
+    simd_v3 *p2 = push_array(&mesh_memory, simd_v3, floor->index_count/12);
+
+    u32 simd_vertex_count = 0;
+    for(u32 i = 0;
+            i < floor->index_count;
+            i += 12)
+    {
+        u32 i0 = floor->indices[i];
+        u32 i1 = floor->indices[i + 1];
+        u32 i2 = floor->indices[i + 2];
+
+        u32 i3 = floor->indices[i + 3];
+        u32 i4 = floor->indices[i + 4];
+        u32 i5 = floor->indices[i + 5];
+
+        u32 i6 = floor->indices[i + 6];
+        u32 i7 = floor->indices[i + 7];
+        u32 i8 = floor->indices[i + 8];
+
+        u32 i9 = floor->indices[i + 9];
+        u32 i10 = floor->indices[i + 10];
+        u32 i11 = floor->indices[i + 11];
+
+        p0[simd_vertex_count] = Simd_v3(floor->vertices[i0].p, floor->vertices[i3].p, floor->vertices[i6].p, floor->vertices[i9].p);
+        p1[simd_vertex_count] = Simd_v3(floor->vertices[i1].p, floor->vertices[i4].p, floor->vertices[i7].p, floor->vertices[i10].p);
+        p2[simd_vertex_count] = Simd_v3(floor->vertices[i2].p, floor->vertices[i5].p, floor->vertices[i8].p, floor->vertices[i11].p);
+
+        simd_vertex_count++;
+    }
+    assert(simd_vertex_count == (floor->index_count/12));
+
     for(u32 y = 0;
             y < work_count_y;
             ++y)
@@ -308,7 +347,11 @@ init_grass_grid(ThreadWorkQueue *general_work_queue, ThreadWorkQueue *gpu_work_q
             data->grass_seperation_dim = grass_seperation_dim;
 
             data->grass_count_x = grass_count_x;
-            data->floor = floor;
+            data->p0 = p0;
+            data->p1 = p1;
+            data->p2 = p2;
+            data->simd_vertex_count = simd_vertex_count;
+            data->mesh_offset_p = floor->p;
             data->floor_z_buffer = grass_grid->floor_z_buffer.memory;
 
             general_work_queue->add_thread_work_queue_item(general_work_queue, thread_optimized_raycast_straight_down_z_to_non_overlapping_mesh, 0, data);
@@ -316,6 +359,7 @@ init_grass_grid(ThreadWorkQueue *general_work_queue, ThreadWorkQueue *gpu_work_q
     }
     general_work_queue->complete_all_thread_work_queue_items(general_work_queue, true);
     end_temp_memory(&work_memory);
+    end_temp_memory(&mesh_memory);
 
     grass_grid->grass_instance_data_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(GrassInstanceData)*total_grass_count);
 }

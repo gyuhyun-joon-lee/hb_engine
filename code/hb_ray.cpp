@@ -1008,7 +1008,7 @@ raycast_straight_down_z_to_non_overlapping_mesh(v3 ray_origin, VertexPN *vertice
 }
 
 internal v3
-optimized_raycast_straight_down_z_to_non_overlapping_mesh(v3 r_origin, VertexPN *vertices, u32 *indices, u32 index_count, 
+optimized_raycast_straight_down_z_to_non_overlapping_mesh(v3 r_origin, simd_v3 *simd_p0, simd_v3 *simd_p1, simd_v3 *simd_p2, u32 simd_vertex_count, 
                                                 v3 mesh_p_offset)
 {
     TIMED_BLOCK();
@@ -1023,33 +1023,17 @@ optimized_raycast_straight_down_z_to_non_overlapping_mesh(v3 r_origin, VertexPN 
 
     // TODO(gh) We can also do this per 4Xs 
     for(u32 i = 0;
-            i < index_count;
-            i += 12)
+            i < simd_vertex_count;
+            i++)
     {
         // TODO(gh) We can make this faster by rearranging the data from the mesh
-        u32 i0 = indices[i];
-        u32 i1 = indices[i + 1];
-        u32 i2 = indices[i + 2];
+        simd_v3 *p0 = simd_p0 + i;
+        simd_v3 *p1 = simd_p1 + i;
+        simd_v3 *p2 = simd_p2 + i;
 
-        u32 i3 = indices[i + 3];
-        u32 i4 = indices[i + 4];
-        u32 i5 = indices[i + 5];
-
-        u32 i6 = indices[i + 6];
-        u32 i7 = indices[i + 7];
-        u32 i8 = indices[i + 8];
-
-        u32 i9 = indices[i + 9];
-        u32 i10 = indices[i + 10];
-        u32 i11 = indices[i + 11];
-
-        simd_v3 p0 = Simd_v3(vertices[i0].p, vertices[i3].p, vertices[i6].p, vertices[i9].p);
-        simd_v3 p1 = Simd_v3(vertices[i1].p, vertices[i4].p, vertices[i7].p, vertices[i10].p);
-        simd_v3 p2 = Simd_v3(vertices[i2].p, vertices[i5].p, vertices[i8].p, vertices[i11].p);
-
-        simd_v3 edge01 = p1 - p0;
-        simd_v3 edge02 = p2 - p0;
-        simd_v3 p0_to_ray_origin = ray_origin - p0;
+        simd_v3 edge01 = *p1 - *p0;
+        simd_v3 edge02 = *p2 - *p0;
+        simd_v3 p0_to_ray_origin = ray_origin - *p0;
 
         simd_v3 n = cross(edge01, edge02);
         simd_f32 d = Simd_f32((f32 *)&n.z); // dot(-ray_dir, n)
