@@ -69,8 +69,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
         v2 grid_dim = V2(100, 100); // TODO(gh) just temporary, need to 'gather' the floors later
-        game_state->grass_grid_count_x = 2;
-        game_state->grass_grid_count_y = 2;
+        game_state->grass_grid_count_x = 4;
+        game_state->grass_grid_count_y = 4;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
         // TODO(gh) Beware that when you change this value, you also need to change the size of grass instance buffer
@@ -105,9 +105,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         i32 fluid_cell_count_x = 32;
         i32 fluid_cell_count_y = 32;
         i32 fluid_cell_count_z = 8;
+        f32 fluid_cell_dim = 16;
+        v3 fluid_cell_left_bottom_p = V3(-fluid_cell_dim*fluid_cell_count_x/2, -fluid_cell_dim*fluid_cell_count_y/2, 0);
+        // v3 fluid_cell_left_bottom_p = V3(0, 0, 0);
 
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, gpu_work_queue,
-                                    V3(0, 0, 0), V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 3);
+                                    fluid_cell_left_bottom_p, V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 
+                                    fluid_cell_dim);
 
         load_game_assets(&game_state->assets, platform_api, gpu_work_queue);
 
