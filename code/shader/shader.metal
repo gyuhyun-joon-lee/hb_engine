@@ -159,7 +159,7 @@ fragment float4
 generate_wind_noise_frag(GenerateWindNoiseVertexOutput vertex_output [[stage_in]])
 {
     // NOTE(gh) starting from 8 or 16 seems like working well.
-    float factor = 16.0f;
+    float factor = 4.0f;
     float weight = 0.5f;
 
     float4 result = float4(0, 0, 0, 0);

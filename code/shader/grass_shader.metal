@@ -360,7 +360,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         constexpr sampler s = sampler(coord::normalized, address::repeat, filter::linear);
 
         // TODO(gh) Should make this right! I guess this is the 'scale' that god of war used?
-        float3 texcoord = grass_instance_buffer[grass_index].texture_p/64;
+        float3 texcoord = grass_instance_buffer[grass_index].texture_p/(*fluid_cube_cell_dim);
         float wind_noise = wind_noise_texture.sample(s, texcoord).x;
 
         tilt -= wind_noise - 0.5f;
