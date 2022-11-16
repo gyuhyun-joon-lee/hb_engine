@@ -26,12 +26,15 @@ For now, HB engine is capable of :
 
 # Showcase
 Showcase #1(2022/10/12)
+
 Change: Procedural grass rendering using mesh shading(Metal 3)
-https://youtu.be/kZ75YueSfdk
+Link : https://youtu.be/kZ75YueSfdk
 ![Sample 1](showcase/2022_10_12.png)
 
 Showcase #2(2022/11/16)
+
 Change: Rudimentary dynamic wind using fluid dynamics(optimized with SIMD and multi-threading)
+Link : https://youtu.be/ZSOzv4C9urE
 ![Sample 2](showcase/2022_11_16.png)
 
 
