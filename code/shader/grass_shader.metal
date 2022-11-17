@@ -250,7 +250,7 @@ offset_control_points_with_spring(thread packed_float3 *original_p1, thread pack
 
     // NOTE(gh) Reversing the wind noise(and offsetting by some amount) 
     // to improve grass bobbing
-    float one_minus_noise = (1.0f - noise - 0.3f);
+    float one_minus_noise = (1.0f - noise - 0.2f);
     *p1 += dt*one_minus_noise*spring_c*(powr(2, length(*original_p1 - *p1))-1)*normalize(*original_p1 - *p1);
     *p2 += dt*one_minus_noise*p2_spring_c*(powr(2, length(*original_p2 - *p2))-1)*normalize(*original_p2 - *p2);
 }
@@ -291,7 +291,7 @@ initialize_grass_grid(device GrassInstanceData *grass_instance_buffer [[buffer(0
     grass_instance_buffer[grass_index].orthogonal_normal = packed_float3(orthogonal_normal);
     grass_instance_buffer[grass_index].hash = hash; 
     grass_instance_buffer[grass_index].blade_width = 0.165f;
-    grass_instance_buffer[grass_index].spring_c = 6.5f + 7*random01;
+    grass_instance_buffer[grass_index].spring_c = 3.5f + 4*random01;
     grass_instance_buffer[grass_index].color = packed_float3(random01, 0.784h, 0.2h);
     grass_instance_buffer[grass_index].texture_p = p0;
 }
@@ -345,7 +345,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         {
             packed_float3 cell_p = (p0 - *fluid_cube_min) / *fluid_cube_cell_dim;
 
-#if 1
+#if 0
             wind_v += get_mac_bilinear_center_value(fluid_cube_v_x, fluid_cube_v_y, fluid_cube_v_z, cell_p, fluid_cube_cell_count);
 #else
             int xi = floor(cell_p.x);
@@ -363,7 +363,6 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         float3 texcoord = grass_instance_buffer[grass_index].texture_p/(*fluid_cube_cell_dim);
         float wind_noise = wind_noise_texture.sample(s, texcoord).x;
 
-        tilt -= wind_noise - 0.5f;
         float2 facing_direction = float2(cos((float)hash), sin((float)hash));
         float stride = sqrt(grass_length*grass_length - tilt*tilt); // only horizontal length of the blade
         float bend = 0.7f + 0.2f*random01;

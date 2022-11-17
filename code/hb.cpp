@@ -102,10 +102,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
-        i32 fluid_cell_count_x = 32;
-        i32 fluid_cell_count_y = 32;
+        i32 fluid_cell_count_x = 24;
+        i32 fluid_cell_count_y = 24;
         i32 fluid_cell_count_z = 8;
-        f32 fluid_cell_dim = 10;
+        f32 fluid_cell_dim = 2;
         v3 fluid_cell_left_bottom_p = V3(-fluid_cell_dim*fluid_cell_count_x/2, -fluid_cell_dim*fluid_cell_count_y/2, 0);
         // v3 fluid_cell_left_bottom_p = V3(0, 0, 0);
 

@@ -636,7 +636,7 @@ initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueu
                         v3 left_bottom_p, v3i cell_count, f32 cell_dim)
 {
     cube->min = left_bottom_p;
-    cube->max = cube->min + V3(cell_dim*cell_count.x, cell_dim*cell_count.y, cell_dim*cell_count.z);
+    cube->max = cube->min + cell_dim*V3(cell_count.x, cell_count.y, cell_count.z);
 
     cube->cell_count = cell_count;
     cube->cell_dim = cell_dim;
@@ -655,7 +655,6 @@ initialize_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueu
     flush_gpu_visible_buffer(&cube->v_x);
     flush_gpu_visible_buffer(&cube->v_y);
     flush_gpu_visible_buffer(&cube->v_z);
-    cube->v_z = get_gpu_visible_buffer(gpu_work_queue, sizeof(f32)*2*cube->total_z_count);
 
     cube->pressure_x = push_array(arena, f32, cube->total_center_count);
     cube->pressure_y = push_array(arena, f32, cube->total_center_count);
@@ -768,27 +767,58 @@ add_input_to_center(f32 *input, f32 value, i32 x, i32 y, i32 z, v3i cell_count, 
         case FluidQuantityType_x:
         {
             MACID macID = get_mac_index_x(x, y, z, cell_count);
-            input[macID.ID0] += 0.5f*value;
-            input[macID.ID1] += 0.5f*value;
+            input[macID.ID0] += value;
         }break;
 
         case FluidQuantityType_y:
         {
             MACID macID = get_mac_index_y(x, y, z, cell_count);
-            input[macID.ID0] += 0.5f*value;
-            input[macID.ID1] += 0.5f*value;
+            input[macID.ID0] += value;
         }break;
 
         case FluidQuantityType_z:
         {
             MACID macID = get_mac_index_z(x, y, z, cell_count);
-            input[macID.ID0] += 0.5f*value;
-            input[macID.ID1] += 0.5f*value;
+            input[macID.ID0] += value;
         }break;
 
         case FluidQuantityType_Center:
         {
             input[get_mac_index_center(x, y, z, cell_count)] += value;
+        }break;
+    }
+}
+
+internal void
+overwrite_input_to_center(f32 *dest, f32 value, i32 x, i32 y, i32 z, v3i cell_count, FluidQuantityType quantity_type)
+{
+    assert(x >= 0 && x < cell_count.x);
+    assert(y >= 0 && y < cell_count.y);
+    assert(z >= 0 && z < cell_count.z);
+
+    switch(quantity_type)
+    {
+        case FluidQuantityType_x:
+        {
+            MACID macID = get_mac_index_x(x, y, z, cell_count);
+            dest[macID.ID0] = value;
+        }break;
+
+        case FluidQuantityType_y:
+        {
+            MACID macID = get_mac_index_y(x, y, z, cell_count);
+            dest[macID.ID0] = value;
+        }break;
+
+        case FluidQuantityType_z:
+        {
+            MACID macID = get_mac_index_z(x, y, z, cell_count);
+            dest[macID.ID0] = value;
+        }break;
+
+        case FluidQuantityType_Center:
+        {
+            dest[get_mac_index_center(x, y, z, cell_count)] += value;
         }break;
     }
 }
@@ -801,10 +831,6 @@ update_with_input(f32 *dest, f32 *source, f32 *input, u32 total_count, f32 dt)
             i < total_count;
             ++i)
     {
-        if(input[i] > 0.0f)
-        {
-            int a = 1;
-        }
         dest[i] = source[i] + dt*input[i];
     }
 }
@@ -896,29 +922,29 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
                 // we should set the 'ghost' pressure with the solid wall velocity
                 if(x == 0)
                 {
-                    rhs -= a*(v_x[macID_x.ID0] - solid_wall_x0);
+                    rhs += a*(v_x[macID_x.ID0] - solid_wall_x0);
                 }
                 else if(x == cell_count.x-1)
                 {
-                    rhs += a*(v_x[macID_x.ID1] - solid_wall_x1);
+                    rhs -= a*(v_x[macID_x.ID1] - solid_wall_x1);
                 }
 
                 if(y == 0)
                 {
-                    rhs -= a*(v_y[macID_y.ID0] - solid_wall_y0);
+                    rhs += a*(v_y[macID_y.ID0] - solid_wall_y0);
                 }
                 else if(y == cell_count.y-1)
                 {
-                    rhs += a*(v_y[macID_y.ID1] - solid_wall_y1);
+                    rhs -= a*(v_y[macID_y.ID1] - solid_wall_y1);
                 }
 
                 if(z == 0)
                 {
-                    rhs -= a * (v_z[macID_z.ID0] - solid_wall_z0);
+                    rhs += a * (v_z[macID_z.ID0] - solid_wall_z0);
                 }
                 else if(z == cell_count.z-1)
                 {
-                    rhs += a*(v_z[macID_z.ID1] - solid_wall_z1);
+                    rhs -= a*(v_z[macID_z.ID1] - solid_wall_z1);
                 }
 
                 temp_buffer[get_mac_index_center(x, y, z, cell_count)] = rhs;
@@ -930,7 +956,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
     // TODO(gh) We will stick with the basic Jacobi iteration for now, but we might wanna
     // switch to a better and faster converging algorithm.
     for(u32 iter = 0;
-            iter < 80;
+            iter < 160;
             ++iter)
     {
         for(i32 z = 0;
@@ -1333,7 +1359,6 @@ add_project_and_enforce_boundary_condition_work(ThreadWorkQueue *thread_work_que
                                                 FluidCubeMAC *cube, f32 *dest, f32 *source, 
                                                 f32 *pressure, f32 *temp_buffer, FluidQuantityType quantity_type, f32 dt)
 {
-
     zero_memory(pressure, sizeof(f32)*cube->total_center_count);
     zero_memory(temp_buffer, sizeof(f32)*cube->total_center_count);
 
@@ -1352,6 +1377,20 @@ add_project_and_enforce_boundary_condition_work(ThreadWorkQueue *thread_work_que
     thread_work_queue->add_thread_work_queue_item(thread_work_queue, thread_project_and_enforce_boundary_condition_calllback, 0, (void *)data);
 }
 
+internal b32
+intersect_plane_aab(v3 min, v3 max, v3 normal, f32 d)
+{
+    v3 center = 0.5f*(min + max);
+    v3 half_dim = max - center;
+
+    f32 r = half_dim.x*abs(normal.x) + half_dim.y*abs(normal.y) + half_dim.z*abs(normal.z);
+    f32 s = dot(normal, center) - d;
+
+    b32 result = (abs(s) <= r);
+
+    return result;
+}
+
 internal void
 update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *thread_work_queue, f32 dt)
 {
@@ -1367,7 +1406,39 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
     i32 ti = (i32)t;
     if(true)
     {
-#if 1
+        for(i32 z = 0;
+                z < cube->cell_count.z;
+                ++z)
+        {
+            for(i32 y = 0;
+                    y < cube->cell_count.y;
+                    ++y)
+            {
+                for(i32 x = 0;
+                        x < cube->cell_count.x;
+                        ++x)
+                {
+                    v3 min = cube->min + cube->cell_dim*V3(x, y, z);
+                    v3 max = min + cube->cell_dim*V3(1, 1, 1);
+
+                    v3 plane_normal = normalize(V3(cosf(0), sinf(0), 0.2f));
+                    f32 d = dot(plane_normal, V3(0, 0, 0));
+                    if(intersect_plane_aab(min, max, plane_normal, d))
+                    {
+                        f32 strength = 0.0f;
+                        plane_normal *= strength;
+                        // overwrite_input_to_center(cube->v_x_dest, plane_normal.x, x, y, z, cube->cell_count, FluidQuantityType_x);
+                        // overwrite_input_to_center(cube->v_y_dest, plane_normal.y, x, y, z, cube->cell_count, FluidQuantityType_y);
+                        // overwrite_input_to_center(cube->v_z_dest, plane_normal.z, x, y, z, cube->cell_count, FluidQuantityType_z);
+
+                        add_input_to_center(cube->v_x_source, plane_normal.x, x, y, z, cube->cell_count, FluidQuantityType_x);
+                        add_input_to_center(cube->v_y_source, plane_normal.y, x, y, z, cube->cell_count, FluidQuantityType_y);
+                        add_input_to_center(cube->v_z_source, plane_normal.z, x, y, z, cube->cell_count, FluidQuantityType_z);
+                    }
+                }
+            }
+        }
+#if 0
         for(i32 z = 0;
                 z < cube->cell_count.z / 1.5f;
                 ++z)
@@ -1424,9 +1495,11 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
         added_velocity = true;
     }
 
+#if 1
     update_with_input(cube->v_x_dest, cube->v_x_dest, cube->v_x_source, cube->total_x_count, dt);
     update_with_input(cube->v_y_dest, cube->v_y_dest, cube->v_y_source, cube->total_y_count, dt);
     update_with_input(cube->v_z_dest, cube->v_z_dest, cube->v_z_source, cube->total_z_count, dt);
+#endif
 
     swap(cube->v_x_dest, cube->v_x_source);
     swap(cube->v_y_dest, cube->v_y_source);
