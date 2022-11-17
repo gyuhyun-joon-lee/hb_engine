@@ -229,7 +229,7 @@ get_mac_bilinear_center_value(device float *x, device float *y, device float *z,
 // NOTE(gh) p0 is on the ground and does not move
 static void
 offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_float3 *p1, device packed_float3 *p2, 
-                                        float original_p0_p1_length, float original_p1_p2_length,
+                                        float original_p0_p1_length, float original_p0_p2_length,
                                          packed_float3 wind, float dt, float noise)
 {
     // TODO(gh) We can re-adjust p2 after adjusting p1
@@ -237,8 +237,8 @@ offset_control_points_with_dynamic_wind(device packed_float3 *p0, device packed_
     packed_float3 p0_p1 = normalize(*p1 + dt*one_minus_noise*wind - *p0);
     *p1 = *p0 + original_p0_p1_length*p0_p1;
 
-    packed_float3 p1_p2 = normalize(*p2 + dt*one_minus_noise*wind - *p1);
-    *p2 = *p1 + original_p1_p2_length*p1_p2;
+    packed_float3 p0_p2 = normalize(*p2 + dt*one_minus_noise*wind - *p0);
+    *p2 = *p0 + original_p0_p2_length*p0_p2;
 
 }
 
@@ -246,11 +246,11 @@ static void
 offset_control_points_with_spring(thread packed_float3 *original_p1, thread packed_float3 *original_p2,
                                    device packed_float3 *p1, device packed_float3 *p2, float spring_c, float noise, float dt)
 {
-    float p2_spring_c = spring_c/4.f;
+    float p2_spring_c = spring_c/2.f;
 
     // NOTE(gh) Reversing the wind noise(and offsetting by some amount) 
     // to improve grass bobbing
-    float one_minus_noise = (1.0f - noise - 0.2f);
+    float one_minus_noise = (1.0f - noise - 0.3f);
     *p1 += dt*one_minus_noise*spring_c*(powr(2, length(*original_p1 - *p1))-1)*normalize(*original_p1 - *p1);
     *p2 += dt*one_minus_noise*p2_spring_c*(powr(2, length(*original_p2 - *p2))-1)*normalize(*original_p2 - *p2);
 }
@@ -291,7 +291,7 @@ initialize_grass_grid(device GrassInstanceData *grass_instance_buffer [[buffer(0
     grass_instance_buffer[grass_index].orthogonal_normal = packed_float3(orthogonal_normal);
     grass_instance_buffer[grass_index].hash = hash; 
     grass_instance_buffer[grass_index].blade_width = 0.165f;
-    grass_instance_buffer[grass_index].spring_c = 3.5f + 4*random01;
+    grass_instance_buffer[grass_index].spring_c = 4.5f + 4*random01;
     grass_instance_buffer[grass_index].color = packed_float3(random01, 0.784h, 0.2h);
     grass_instance_buffer[grass_index].texture_p = p0;
 }
@@ -374,12 +374,12 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
         packed_float3 original_p1 = p0 + (2.5f/4.0f) * (original_p2 - p0) + bend * blade_normal;
 
         float original_p0_p1_length = length(original_p1 - p0);
-        float original_p1_p2_length = length(original_p2 - original_p1);
+        float original_p0_p2_length = length(original_p2 - p0);
 
         offset_control_points_with_dynamic_wind(&grass_instance_buffer[grass_index].p0, 
                                                     &grass_instance_buffer[grass_index].p1,
                                                     &grass_instance_buffer[grass_index].p2, 
-                                                    original_p0_p1_length, original_p1_p2_length,
+                                                    original_p0_p1_length, original_p0_p2_length,
                                                     wind_v, target_seconds_per_frame, 
                                                     wind_noise);
 
@@ -389,7 +389,7 @@ fill_grass_instance_data_compute(device atomic_uint *grass_count [[buffer(0)]],
 
         // grass_instance_buffer[grass_index].orthogonal_normal = normalize(cross(packed_float3(0, 0, 1), grass_instance_buffer[grass_index].p2 - grass_instance_buffer[grass_index].p1));
 
-        grass_instance_buffer[grass_index].texture_p -= target_seconds_per_frame*wind_v;
+        grass_instance_buffer[grass_index].texture_p -= target_seconds_per_frame*wind_noise*wind_v;
     }
 }
 

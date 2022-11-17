@@ -296,18 +296,6 @@ forward_advect(f32 *dest, f32 *source, f32 *temp, f32 *v_x, f32 *v_y, f32 *v_z, 
                     ++cell_x)
             {
                 u32 ID = get_index(cell_count, cell_x, cell_y, cell_z);
-                if(source[ID] != 0)
-                {
-                    int a= 1;
-                }
-                if(ID == get_index(cell_count, cell_count.x/2, 1, cell_count.z/2) &&
-                        element_type == ElementTypeForBoundary_Continuous)
-                {
-                    if(temp[ID] != 0)
-                    {
-                        int a =1;
-                    }
-                }
 
                 v3 v = V3(v_x[ID], v_y[ID], v_z[ID]);
 
@@ -1406,6 +1394,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
     i32 ti = (i32)t;
     if(true)
     {
+#if 0
         for(i32 z = 0;
                 z < cube->cell_count.z;
                 ++z)
@@ -1421,11 +1410,11 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                     v3 min = cube->min + cube->cell_dim*V3(x, y, z);
                     v3 max = min + cube->cell_dim*V3(1, 1, 1);
 
-                    v3 plane_normal = normalize(V3(cosf(0), sinf(0), 0.2f));
+                    v3 plane_normal = normalize(V3(cosf(t/2.9f), sinf(0), 0.2f));
                     f32 d = dot(plane_normal, V3(0, 0, 0));
                     if(intersect_plane_aab(min, max, plane_normal, d))
                     {
-                        f32 strength = 0.0f;
+                        f32 strength = 100.0f;
                         plane_normal *= strength;
                         // overwrite_input_to_center(cube->v_x_dest, plane_normal.x, x, y, z, cube->cell_count, FluidQuantityType_x);
                         // overwrite_input_to_center(cube->v_y_dest, plane_normal.y, x, y, z, cube->cell_count, FluidQuantityType_y);
@@ -1438,7 +1427,8 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
                 }
             }
         }
-#if 0
+#endif
+#if 1
         for(i32 z = 0;
                 z < cube->cell_count.z / 1.5f;
                 ++z)
