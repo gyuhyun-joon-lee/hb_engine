@@ -69,14 +69,17 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
         v2 grid_dim = V2(80, 80); // TODO(gh) just temporary, need to 'gather' the floors later
-        game_state->grass_grid_count_x = 2;
-        game_state->grass_grid_count_y = 2;
+        game_state->grass_grid_count_x = 1;
+        game_state->grass_grid_count_y = 1;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
         // TODO(gh) Beware that when you change this value, you also need to change the size of grass instance buffer
         // and the indirect command count(for now)
-        u32 grass_per_grid_count_x = 256;
-        u32 grass_per_grid_count_y = 256;
+        // u32 grass_per_grid_count_x = 256;
+        // u32 grass_per_grid_count_y = 256;
+
+        u32 grass_per_grid_count_x = 64;
+        u32 grass_per_grid_count_y = 64;
 
         v2 floor_left_bottom_p = hadamard(-V2(game_state->grass_grid_count_x/2, game_state->grass_grid_count_y/2), grid_dim);
         for(u32 y = 0;
@@ -102,9 +105,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
-        i32 fluid_cell_count_x = 24;
-        i32 fluid_cell_count_y = 24;
-        i32 fluid_cell_count_z = 8;
+        i32 fluid_cell_count_x = 16;
+        i32 fluid_cell_count_y = 16;
+        i32 fluid_cell_count_z = 16;
         f32 fluid_cell_dim = 12;
         v3 fluid_cell_left_bottom_p = V3(-fluid_cell_dim*fluid_cell_count_x/2, -fluid_cell_dim*fluid_cell_count_y/2, 0);
         // v3 fluid_cell_left_bottom_p = V3(0, 0, 0);
@@ -418,7 +421,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    b32 enable_fluid_arrow_rendering = true;
+    b32 enable_fluid_arrow_rendering = false;
     if(enable_fluid_arrow_rendering)
     {
         // NOTE(gh) Default arrow is looking down
@@ -730,6 +733,7 @@ internal void
 output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, GameAssets *assets, v2 top_left_rel_p_px)
 {
     FontAsset *font_asset = &assets->debug_font_asset;
+#if 1
     {
         f32 scale = 1.5f;
         // This does not take account of kerning, but
@@ -758,6 +762,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 
         debug_newline(&top_left_rel_p_px, scale, font_asset);
     }
+#endif
 #if HB_DEBUG
     u64 total_cycle_count = 0;
     for(u32 record_index = 0;
@@ -781,7 +786,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 
             // TODO(gh) Do we wanna keep this scale value?
             f32 scale = 0.5f;
-#if 0
+#if 1
             debug_text_line(platform_render_push_buffer, font_asset, buffer, top_left_rel_p_px, scale);
             debug_newline(&top_left_rel_p_px, scale, &assets->debug_font_asset);
 #endif

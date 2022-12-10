@@ -293,7 +293,7 @@ init_grass_grid(ThreadWorkQueue *general_work_queue, ThreadWorkQueue *gpu_work_q
     TempMemory work_memory = start_temp_memory(arena, sizeof(ThreadPopulateFloorZData)*work_count_x*work_count_y);
     ThreadPopulateFloorZData *thread_data = push_array(&work_memory, ThreadPopulateFloorZData, work_count_x*work_count_y);
 
-    assert(floor->index_count%(3*4) == 0);
+    assert(floor->index_count%(3*HB_LANE_WIDTH) == 0);
     TempMemory mesh_memory = start_temp_memory(arena, sizeof(simd_v3)*(floor->index_count/4));
     simd_v3 *p0 = push_array(&mesh_memory, simd_v3, floor->index_count/12);
     simd_v3 *p1 = push_array(&mesh_memory, simd_v3, floor->index_count/12);

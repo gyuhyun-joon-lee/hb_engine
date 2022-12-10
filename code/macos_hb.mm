@@ -340,8 +340,6 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
 
 struct MacOSThread
 {
-    // TODO(gh) only used to allocate resources(texture, buffer...)
-    id<MTLDevice> device;
     u32 ID;
     ThreadWorkQueue *queue;
 
@@ -1340,7 +1338,7 @@ int main(void)
     platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
 
     // TODO(gh) get monitor width and height and use that 
-#if 1
+#if 0
     // 2.5k -ish
     i32 window_width = 3200;
     i32 window_height = 1800;

@@ -48,7 +48,7 @@ enum ElementTypeForBoundary
     ElementTypeForBoundary_Continuous,
 };
 
-// NOTE(gh) This is fluid cube using MAC grid, which is a grid that stores different quantities
+// NOTE(gh) This is fluid cube using MAC grid which is a grid that stores different quantities
 // in different locations. For example, we store pressure in the center of the grid, 
 // while storing velocities on the edge(or center of the face in 3D) of the grid.
 // (i.e store u on vertical edges, and v on horizontal edges in 2D)
@@ -99,6 +99,11 @@ enum FluidQuantityType
     FluidQuantityType_x, 
     FluidQuantityType_y, 
     FluidQuantityType_z,
+};
+
+// Fluid simulation using LBM(lattice boltzmann method)
+struct FluidCubeLBM
+{
 };
 
 #endif

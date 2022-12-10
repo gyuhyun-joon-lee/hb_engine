@@ -944,7 +944,7 @@ project_and_enforce_boundary_condition(f32 *dest, f32 *source, f32 *v_x, f32 *v_
     // TODO(gh) We will stick with the basic Jacobi iteration for now, but we might wanna
     // switch to a better and faster converging algorithm.
     for(u32 iter = 0;
-            iter < 160;
+            iter < 80;
             ++iter)
     {
         for(i32 z = 0;
@@ -1444,7 +1444,7 @@ update_fluid_cube_mac(FluidCubeMAC *cube, MemoryArena *arena, ThreadWorkQueue *t
 #if 0
                     add_input_to_center(cube->v_x_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_x);
                     add_input_to_center(cube->v_y_source, 100*cosf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_y);
-                    add_input_to_center(cube->v_z_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
+                    // add_input_to_center(cube->v_z_source, 100*sinf(t/1.3f), cell_x, cell_y, cell_z, cube->cell_count, FluidQuantityType_z);
 #else
                     add_input_to_center(cube->v_x_source, 50*cosf(t/4.0f), x, y, z, cube->cell_count, FluidQuantityType_x);
                     add_input_to_center(cube->v_y_source, 50*sinf(t/4.0f), x, y, z, cube->cell_count, FluidQuantityType_y);
