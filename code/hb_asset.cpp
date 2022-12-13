@@ -9,8 +9,11 @@
 internal void
 flush_gpu_visible_buffer(GPUVisibleBuffer *buffer)
 {
+#if HB_WINDOWS || HB_LINUX
     // TODO(gh) This does nothing for now(unified memory), 
     // but should be implemented in other platforms
+    assert(0);
+#endif
 }
 
 internal TextureAsset2D
@@ -61,18 +64,60 @@ get_gpu_visible_buffer(ThreadWorkQueue *gpu_work_queue, u64 size)
     return result;
 }
 
+internal Asset *
+get_tag_based_asset(GameAssets *assets, ThreadWorkQueue *gpu_work_queue,
+                    AssetTag tag)
+{
+    Asset *result = 0;
+
+    // TODO(gh) Using a simple for loop here, but can be speed up using
+    // different search scheme
+    for(u32 asset_index = 0;
+            asset_index < assets->asset_count;
+            ++asset_index)
+    {
+        Asset *asset = assets->assets + asset_index;
+        if(asset->tag == tag)
+        {
+            result = asset;
+            break;
+        }
+    }
+
+    assert(result);
+
+    return result;
+}
+
 // TODO(gh) Only loads VertexPN vertices
 internal MeshAsset *
-get_mesh_asset(GameAssets *asset, ThreadWorkQueue *gpu_work_queue, u32 *assetID, VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count)
+get_mesh_asset(GameAssets *asset, ThreadWorkQueue *gpu_work_queue, 
+                AssetTag tag,
+                VertexPN *vertices, u32 vertex_count, 
+                u32 *indices, u32 index_count)
 {
     MeshAsset *result = 0;
 
-    // TODO(gh) Don't love that we need to pass and update the assetID, make this a tag-based search
-    if(*assetID == 0)
+    for(u32 i = 0;
+            i < asset->populated_mesh_asset;
+            ++i)
     {
-        *assetID = asset->populated_mesh_asset++;
-        result = asset->mesh_assets + *assetID;
-        
+        MeshAsset *mesh_asset = asset->mesh_assets + i;
+        if(mesh_asset->tag == tag)
+        {
+            result = mesh_asset;
+            break;
+        }
+    }
+
+    if(!result)
+    {
+        // NOTE(gh) Couldn't find the asset that was already loaded,
+        // so need to load a new asset
+
+        result = asset->mesh_assets + asset->populated_mesh_asset++;
+
+        // NOTE(gh) Load the vertex buffer
         {
             u64 vertex_buffer_size = sizeof(vertices[0])*vertex_count;
             result->vertex_buffer = get_gpu_visible_buffer(gpu_work_queue, vertex_buffer_size);
@@ -83,6 +128,7 @@ get_mesh_asset(GameAssets *asset, ThreadWorkQueue *gpu_work_queue, u32 *assetID,
             result->vertex_count = vertex_count;
         }
          
+        // NOTE(gh) Load the index buffer
         {
             u64 index_buffer_size = sizeof(indices[0])*index_count;
             result->index_buffer = get_gpu_visible_buffer(gpu_work_queue, index_buffer_size);
@@ -93,13 +139,6 @@ get_mesh_asset(GameAssets *asset, ThreadWorkQueue *gpu_work_queue, u32 *assetID,
             result->index_count = index_count;
         }
     }
-    else
-    {
-        // The asset has already been loaded 
-        result = asset->mesh_assets + *assetID;
-    }
-
-    assert(result != 0);
 
     return result;
 }
@@ -162,9 +201,6 @@ end_load_font(LoadFontInfo *load_font_info)
 internal void
 add_glyph_asset(LoadFontInfo *load_font_info, ThreadWorkQueue *gpu_work_queue, u32 unicode_codepoint)
 {
-    int glyphID_that_doesnt_exist = stbtt_FindGlyphIndex(&load_font_info->font_info, 11111);     
-    assert(stbtt_FindGlyphIndex(&load_font_info->font_info, unicode_codepoint)!=glyphID_that_doesnt_exist);
-
     u16 glyphID = load_font_info->populated_glyph_count++;
     assert(load_font_info->populated_glyph_count <= load_font_info->font_asset->max_glyph_count);
     load_font_info->font_asset->codepoint_to_glyphID_table[unicode_codepoint] = glyphID;
@@ -211,21 +247,24 @@ load_game_assets(GameAssets *assets, PlatformAPI *platform_api, ThreadWorkQueue 
 #endif
     u32 max_glyph_count = 2048;
     LoadFontInfo load_font_info = {};
+
     begin_load_font(&load_font_info, &assets->debug_font_asset, 
                     "/System/Library/Fonts/Supplemental/applemyungjo.ttf", platform_api, 
                     max_glyph_count, 128.0f);
-    // space works just like other glyphs, but without any texture
-    add_glyph_asset(&load_font_info, gpu_work_queue, ' ');
-    for(u32 codepoint = '!';
-            codepoint <= '~';
-            ++codepoint)
     {
-        add_glyph_asset(&load_font_info, gpu_work_queue, codepoint);
+        // space works just like other glyphs, but without any texture
+        add_glyph_asset(&load_font_info, gpu_work_queue, ' ');
+        for(u32 codepoint = '!';
+                codepoint <= '~';
+                ++codepoint)
+        {
+            add_glyph_asset(&load_font_info, gpu_work_queue, codepoint);
+        }
+        add_glyph_asset(&load_font_info, gpu_work_queue, 0x8349);
+        add_glyph_asset(&load_font_info, gpu_work_queue, 0x30a8);
+        add_glyph_asset(&load_font_info, gpu_work_queue, 0x30f3);
+        add_glyph_asset(&load_font_info, gpu_work_queue, 0x30b8);
     }
-    add_glyph_asset(&load_font_info, gpu_work_queue, 0x8349);
-    add_glyph_asset(&load_font_info, gpu_work_queue, 0x30a8);
-    add_glyph_asset(&load_font_info, gpu_work_queue, 0x30f3);
-    add_glyph_asset(&load_font_info, gpu_work_queue, 0x30b8);
     end_load_font(&load_font_info);
 }
 

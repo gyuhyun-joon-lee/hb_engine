@@ -46,9 +46,6 @@ struct Entity
     v2 tilt_direction; // only x and y values, z == 0
     u32 hash;
 
-    // TODO(gh) Don't love this, this means the entities that are sharing the 
-    //same mesh will end up loading the same mesh into the GPU more than once!!
-    u32 mesh_assetID; // 0 means that the asset has not been loaded to the GPU
     VertexPN *vertices;
     u32 vertex_count;
     // TODO(gh) We don't really need to hold the indices, 

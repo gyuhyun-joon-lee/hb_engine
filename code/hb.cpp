@@ -403,9 +403,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
+                          AssetTag_FloorMesh,
                           &game_state->assets, gpu_work_queue,  
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
-                          &entity->mesh_assetID, false);
+                          false);
             }break;
             case EntityType_AABB:
             case EntityType_Cube:
@@ -414,9 +415,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
+                          AssetTag_SphereMesh,
                           &game_state->assets, gpu_work_queue,  
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
-                          &entity->mesh_assetID, true);
+                          true);
             }break;
         }
     }
