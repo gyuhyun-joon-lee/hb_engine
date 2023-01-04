@@ -138,6 +138,8 @@ get_mesh_asset(GameAssets *asset, ThreadWorkQueue *gpu_work_queue,
 
             result->index_count = index_count;
         }
+
+        result->tag = tag;
     }
 
     return result;

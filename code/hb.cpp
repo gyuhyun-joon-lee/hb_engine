@@ -69,17 +69,17 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
         v2 grid_dim = V2(80, 80); // TODO(gh) just temporary, need to 'gather' the floors later
-        game_state->grass_grid_count_x = 1;
-        game_state->grass_grid_count_y = 1;
+        game_state->grass_grid_count_x = 2;
+        game_state->grass_grid_count_y = 2;
         game_state->grass_grids = push_array(&game_state->transient_arena, GrassGrid, game_state->grass_grid_count_x*game_state->grass_grid_count_y);
 
         // TODO(gh) Beware that when you change this value, you also need to change the size of grass instance buffer
         // and the indirect command count(for now)
-        // u32 grass_per_grid_count_x = 256;
-        // u32 grass_per_grid_count_y = 256;
+        u32 grass_per_grid_count_x = 256;
+        u32 grass_per_grid_count_y = 256;
 
-        u32 grass_per_grid_count_x = 64;
-        u32 grass_per_grid_count_y = 64;
+        // u32 grass_per_grid_count_x = 64;
+        // u32 grass_per_grid_count_y = 64;
 
         v2 floor_left_bottom_p = hadamard(-V2(game_state->grass_grid_count_x/2, game_state->grass_grid_count_y/2), grid_dim);
         for(u32 y = 0;
@@ -400,6 +400,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         {
             case EntityType_Floor:
             {
+#if 0
                 // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 
@@ -407,6 +408,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                           &game_state->assets, gpu_work_queue,  
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
                           false);
+#endif
             }break;
             case EntityType_AABB:
             case EntityType_Cube:
