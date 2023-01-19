@@ -102,6 +102,9 @@ enum FluidQuantityType
 };
 
 // Fluid simulation using LBM(lattice boltzmann method)
+// LBM originates from the LG(lattice gas) method, while also replacing
+// the boolean value with PDF function which makes the method itself mesoscopic(microsopic + macroscopic)
+// TODO(gh) Use the BGK collision operator to simplify the collision term
 struct FluidCubeLBM
 {
 };

@@ -18,6 +18,8 @@
 #include "hb.h"
 
 #include "hb_ray.cpp"
+#include "hb_collision.cpp"
+#include "hb_rigidbody.cpp"
 #include "hb_simulation.cpp"
 #include "hb_noise.cpp"
 #include "hb_mesh_generation.cpp"

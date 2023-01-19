@@ -15,7 +15,6 @@
 #include <metalkit/metalkit.h>
 #include <metal/metal.h>
 
-// TODO(gh) introspection?
 #undef internal
 #undef assert
 
@@ -140,8 +139,8 @@ app_delegate : NSObject<NSApplicationDelegate>
 {
     [NSApp stop:nil];
 
-    // Post empty event: without it we can't put application to front
-    // for some reason (I get this technique from GLFW source).
+    // NOTE(gh) Technique from GLFW, posting an empty event 
+    // so that we can put the application to front 
     NSAutoreleasePool* pool = [NSAutoreleasePool new];
     NSEvent* event =
         [NSEvent otherEventWithType: NSApplicationDefined
@@ -156,7 +155,6 @@ app_delegate : NSObject<NSApplicationDelegate>
     [NSApp postEvent: event atStart: YES];
     [pool drain];
 }
-
 @end
 
 internal CVReturn 
