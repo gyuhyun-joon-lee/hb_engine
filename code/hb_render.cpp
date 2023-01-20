@@ -75,6 +75,7 @@ init_circle_camera(v3 p, v3 lookat_p, f32 distance_from_axis, f32 fov_in_degree,
 // To pack this into a single matrix, we need to multiply the translation by the camera axis matrix,
 // because otherwise it will be projection first and then translation -> which is completely different from
 // doing the translation and the projection.
+// TODO(gh) Make this to use m3x4 matrix instead of m4x4
 internal m4x4 
 camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_axis)
 {
@@ -90,7 +91,9 @@ camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_ax
     result.rows[0] = V4(camera_x_axis, multiplied_translation.x);
     result.rows[1] = V4(camera_y_axis, multiplied_translation.y);
     result.rows[2] = V4(camera_z_axis, multiplied_translation.z);
-    result.rows[3] = V4(0.0f, 0.0f, 0.0f, 1.0f); // Dont need to touch the w part, view matrix doesn't produce homogeneous coordinates
+    // NOTE(gh) Dont need to touch the w part, view matrix doesn't produce homogeneous coordinates
+    // This is why we could also use 3x4 matrix here, without the 4th row
+    result.rows[3] = V4(0.0f, 0.0f, 0.0f, 1.0f); 
 
     return result;
 }
@@ -129,6 +132,9 @@ camera_transform(CircleCamera *camera)
     Little tip in how we get the persepctive projection matrix
     Think as 2D plane(x and z OR y and z), use triangle similarity to get projected Xp and Yp
     For Z, as x and y don't have any effect on Z, we can say (A * Ze + b) / -Ze = Zp (diving by -Ze because homogeneous coords)
+
+    Homogenous coordinates are _required_ because otherwise after the projection 
+    we would lost the depth(z ranging from near to far) information. 
 
     -n should produce 0 or -1 value(based on what NDC system we use), 
     while -f should produce 1.

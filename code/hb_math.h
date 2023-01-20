@@ -721,6 +721,8 @@ operator -(m3x3 a, m3x3 b)
     return result;
 }
 
+// NOTE(gh) Can also work as inverse matrix, only if the matrix is orthogonal.
+// In fact, the definition of orthogonal matrix is tranpose == inverse
 inline m3x3
 transpose(m3x3 m)
 {
@@ -854,6 +856,44 @@ z_rotate(f32 rad)
 
     result.e[1][0] = sin;
     result.e[1][1] = cos;
+
+    return result;
+}
+
+inline m3x4
+M3x4(f32 e00, f32 e01, f32 e02, f32 e03,
+     f32 e10, f32 e11, f32 e12, f32 e13,
+     f32 e20, f32 e21, f32 e22, f32 e23)
+{
+    m3x4 result = {};
+
+    result.rows[0] = V4(e00, e01, e02, e03);
+    result.rows[1] = V4(e10, e11, e12, e13);
+    result.rows[2] = V4(e20, e21, e22, e23);
+
+    return result;
+}
+
+// NOTE(gh) Creating transform matrix
+inline m3x4
+M3x4(m3x3 &rotation, v3 translation)
+{
+    m3x4 result = {};
+
+    result.rows[0] = V4(rotation.rows[0], translation.x);
+    result.rows[1] = V4(rotation.rows[1], translation.y);
+    result.rows[2] = V4(rotation.rows[2], translation.z);
+
+    return result;
+}
+
+inline v3
+operator *(m3x4 &m, v4 v)
+{
+    v3 result = {};
+    result.x = dot(m.rows[0], v);
+    result.y = dot(m.rows[1], v);
+    result.z = dot(m.rows[2], v);
 
     return result;
 }
@@ -1145,31 +1185,6 @@ get_quat_with_axis_angle(v3 axis, f32 rad)
     return result;
 }
 
-#if 0
-inline quat
-get_quat_with_desired_lookat_v(v3 current, v3 desired)
-{
-    v3 rotation_axis = {};
-    f32 rotation_cos = 0;
-    if(compare_with_epsilon(desired.x, 0) && compare_with_epsilon(desired.y, 0))
-    {
-        if(compare_with_epsilon(v.z, 1))
-        {
-            rotation_axis = V3(1, 0, 0);
-            rotation_cos = -1;
-        }
-    }
-    else
-    {
-        rotation_axis = normalize(cross(V3(0, 0, -1), v));
-        // NOTE(gh) v is already normalized
-        rotation_cos = dot(V3(0, 0, -1), v);
-    }
-
-    f32 rotation_angle = acosf(rotation_cos)/2.0f;
-}
-#endif
-
 inline quat
 operator +(quat a, quat b)
 {
@@ -1260,7 +1275,13 @@ length(quat q)
 inline quat
 normalize(quat q)
 {
-    quat result = q/length(q);
+    quat result = Quat(1, 0, 0, 0);
+    f32 l = length(q);
+
+    if(!compare_with_epsilon(l, 0.0f))
+    {
+        result = q/l;
+    }
 
     return result;
 }
@@ -1324,30 +1345,17 @@ rotation_quat_to_m3x3(quat q)
     return result;
 }
 
-// NOTE(gh) 
-// q before and after the rotation should be pure, as it is the only way
-// they can exist in ijk coordinate.
-// If the rotation axis is not perpendicular to 
-// pure quaternion that we are trying to rotate,
-// multiplying those two quaternions will make the q unpure.
-// so we basically need to multiply it by inverse q, 
-// which makes q pure again. This is also why we are only using half_rad instead of rad
-// TODO(gh) This function has not been tested!
-inline v3
-rotate(v3 p, v3 axis, f32 rad)
+#if 0
+// NOTE(gh) Given the orientation quaternion(which is _not_ pure),  
+// rotate it using the scaled-axis-angle representation.
+inline quat
+rotate(quat orientation, v3 saa) // saa = scaled-axis-angle
 {
-    assert(compare_with_epsilon(length_square(axis), 1.0f));
-
-    f32 half_rad = rad/2.0f;
-
-    quat rotation_q = Quat(cosf(half_rad), sinf(half_rad) * axis);
-    // TODO(gh) Theres should be a way to simplify this!
-    quat result_q = rotation_q * Quat(0, p), inverse(rotation_q);
-
-    v3 result = result_q.v;
+    quat result = orientation + 0.5f*Quat(0, saa)*orientation; 
 
     return result;
 }
+#endif
 
 inline m3x3
 scale_m3x3(f32 x, f32 y, f32 z)

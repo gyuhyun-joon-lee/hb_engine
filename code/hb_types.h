@@ -222,6 +222,26 @@ struct m3x3
     };
 };
 
+// row major
+// e[0][0] e[0][1] e[0][2] e[0][3]
+// e[1][0] e[1][1] e[1][2] e[1][3]
+// e[2][0] e[2][1] e[2][2] e[2][3]
+// NOTE(gh) This matrix is mostly used for transformation which doesn't require homogeneous coords,
+// such as camera transform or rigid body transform
+struct m3x4
+{
+    union
+    {
+        struct 
+        {
+            v4 rows[3];
+        };
+
+        // [row][column]
+        f32 e[3][4];
+    };
+};
+
 // NOTE(joon) row major
 // e[0][0] e[0][1] e[0][2] e[0][3]
 // e[1][0] e[1][1] e[1][2] e[1][3]
@@ -240,5 +260,6 @@ struct m4x4
         f32 e[4][4];
     };
 };
+
 
 #endif

@@ -29,7 +29,7 @@ make_app :
 	mkdir -p $(MACOS_BUILD_PATH)/$(MACOS_APP_NAME)/Contents/MacOS
 
 compile_test_asset_packer : $(MAIN_CODE_PATH)/test_asset_packer.mm
-	$(COMPILER) $(ARCHITECTURE) $(COMPILER_FLAGS) $(COMPILER_IGNORE_WARNINGS) $(MACOS_FRAMEWORK) -o $(MACOS_EXE_PATH)/HB $(MAIN_CODE_PATH)/test_asset_packer.mm
+	#$(COMPILER) $(ARCHITECTURE) $(COMPILER_FLAGS) $(COMPILER_IGNORE_WARNINGS) $(MACOS_FRAMEWORK) -o $(MACOS_EXE_PATH)/HB $(MAIN_CODE_PATH)/test_asset_packer.mm
 
 # target:  dependency1 dependency2 ...
 #       <tab> command
