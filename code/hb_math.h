@@ -1316,14 +1316,6 @@ is_pure_quat(quat q)
     return result;
 }
 
-inline b32
-does_quat_represent_orientation(quat q)
-{
-    b32 result = compare_with_epsilon(q.s, 0.0f) && compare_with_epsilon(length_square(q.v), 1.0f);
-
-    return result;
-}
-
 // NOTE(gh) This matrix is an orthogonal matrix, so inverse == transpose
 inline m3x3
 rotation_quat_to_m3x3(quat q)
