@@ -61,7 +61,7 @@ world_to_local_vector(m3x4 *transform, v3 v)
 }
 
 internal void
-update_derived_attributes(RigidBody *rigid_body)
+update_derived_rigid_body_attributes(RigidBody *rigid_body)
 {
     // NOTE(gh) Quaternion has 4 DOF, but we want 3 DOF, so we normalize the quaternion (4-1=3)
     rigid_body->orientation = normalize(rigid_body->orientation);
@@ -85,8 +85,5 @@ update_derived_attributes(RigidBody *rigid_body)
     transform_matrix->e[2][1] = 2.0f*(orientation->y*orientation->z + orientation->x*orientation->s);
     transform_matrix->e[2][2] = 1 - 2.0f*(orientation->x*orientation->x + orientation->y*orientation->y);
     transform_matrix->e[2][3] = rigid_body->position.z;
-    
 }
-
-// NOTE(gh) Orientation is not for the 
 
