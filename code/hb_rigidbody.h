@@ -9,9 +9,8 @@ struct RigidBody
     /* NOTE(gh) 
        Linear attributes
     */
-    v3 position;
+    v3 position; // Center of mass
     v3 velocity;
-
 
     /* NOTE(gh) 
        angular attributes
@@ -22,12 +21,21 @@ struct RigidBody
     // in quaternion space)
     quat orientation;
     v3 angular_velocity;
+    m3x3 inverse_inertia_tensor;
 
     /*
        NOTE(gh)
        Derived attributes, should be updated per frame
     */
     m3x4 transform_matrix;
+    m3x3 world_inverse_inertia_tensor;
+
+    /*
+        NOTE(gh)
+        Accumulated attributes, should be cleared to zero at the start of the frame
+    */
+    v3 force; // Literally the net force, might include torque inside it
+    v3 torque;
 };
 
 #endif

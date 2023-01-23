@@ -34,18 +34,6 @@ struct Entity
 
     b32 should_cast_shadow;
 
-    // NOTE(gh) bezier curve properties
-    // TODO(gh) us dim for these values?
-    f32 blade_width;
-    f32 stride;
-    f32 height;
-
-    u32 grass_divided_count;
-    f32 tilt; // == p2.z
-    f32 bend; // controls p1
-    v2 tilt_direction; // only x and y values, z == 0
-    u32 hash;
-
     VertexPN *vertices;
     u32 vertex_count;
     // TODO(gh) We don't really need to hold the indices, 
@@ -56,10 +44,6 @@ struct Entity
 
     u32 x_quad_count;
     u32 y_quad_count;
-
-    // TODO(gh) some kind of entity system, 
-    // so that we don't have to store entity_specific things in all of the entities
-    RigidBody rb; // TODO(gh) make this a pointer!
 
     // TODO(gh) CollisionVolumeGroup!
     CollisionVolumeCube cv;

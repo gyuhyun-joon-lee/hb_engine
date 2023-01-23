@@ -812,7 +812,6 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
     }
 #endif
 #endif
-
 }
 
 

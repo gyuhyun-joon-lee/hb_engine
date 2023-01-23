@@ -74,30 +74,4 @@ struct CollisionVolumeGroup
     u32 used;
 };
 
-struct RigidBody
-{
-    f32 inv_mass;
-    //f32 linear_damp;
-    // NOTE(joon) updated each frame using the equation 
-    // o = o + (dt*angular_v*o)/2
-    quat orientation; 
-
-    m3x3 inv_inertia_tensor; // NOTE(joon) in local space
-    //f32 angular_damp;
-
-    v3 p; // NOTE(Also works as a center of mass)
-    v3 dp;
-
-    // NOTE(joon) needs to be a pure quaternion
-    v3 angular_dp;
-
-    /* NOTE(joon) derived parameters per frame */
-    m4x4 transform; // derived from orientation quaternion
-    m3x3 transform_inv_inertia_tensor; // derived from inv_inertia_tensor, convert to local -> multiply by inv it -> convert back to world
-
-    /* NOTE(joon) Computed parameters per frame */
-    v3 force; // world space
-    v3 torque; // world space
-};
-
 #endif

@@ -61,6 +61,20 @@ world_to_local_vector(m3x4 *transform, v3 v)
 }
 
 internal void
+apply_force_at_world_space_point(RigidBody *rigid_body,
+                                v3 force, // linear + angular, world space
+                                v3 world_p)
+{
+}
+
+internal void
+apply_force_at_local_space_point(RigidBody *rigid_body,
+                                v3 force, // linear + angular, world space
+                                v3 local_p)
+{
+}
+
+internal void
 update_derived_rigid_body_attributes(RigidBody *rigid_body)
 {
     // NOTE(gh) Quaternion has 4 DOF, but we want 3 DOF, so we normalize the quaternion (4-1=3)
@@ -73,7 +87,7 @@ update_derived_rigid_body_attributes(RigidBody *rigid_body)
     quat *orientation = &rigid_body->orientation;
     transform_matrix->e[0][0] = 1 - 2.0f*(orientation->y*orientation->y + orientation->z*orientation->z);
     transform_matrix->e[0][1] = 2.0f*(orientation->x*orientation->y - orientation->s*orientation->z);
-    transform_matrix->e[0][2] = 2.0f*(orientation->x*z + orientation->s*orientation->y);
+    transform_matrix->e[0][2] = 2.0f*(orientation->x*orientation->z + orientation->s*orientation->y);
     transform_matrix->e[0][3] = rigid_body->position.x;
 
     transform_matrix->e[1][0] = 2.0f*(orientation->x*orientation->y + orientation->s*orientation->z);
@@ -85,5 +99,96 @@ update_derived_rigid_body_attributes(RigidBody *rigid_body)
     transform_matrix->e[2][1] = 2.0f*(orientation->y*orientation->z + orientation->x*orientation->s);
     transform_matrix->e[2][2] = 1 - 2.0f*(orientation->x*orientation->x + orientation->y*orientation->y);
     transform_matrix->e[2][3] = rigid_body->position.z;
+
+    /*
+       NOTE(gh) Get world space inverse inertia tensor.
+       This is done with these steps(note that the transform matrix we are using here is 3x3 matrix,
+       which means no translation) : 
+       1. Transform to local space by multiplying by transform matrix
+       2. Multiply by inverse inertia tensor(defined in local space)
+       3. Transofrm back to world space by multiplying by inverse(in this case transpose, because only rotation) 
+       transform matrix
+
+       So if we were to get the angular acceleration with world space torque, the steps will be identical to : 
+       1. Transform the world space torque into local space
+       2. Multiply by local sapce inverse inertia tensor to get the angular acceleration(angular acc = iit x torque)
+       3. Transform the angular acc back to world space
+    */
+
+    m3x3 *inverse_inertia_tensor = &rigid_body->inverse_inertia_tensor;
+    f32 iit_x_transform_00 = transform_matrix->e[0][0] * inverse_inertia_tensor->e[0][0] + 
+                              transform_matrix->e[0][1] * inverse_inertia_tensor->e[1][0] + 
+                              transform_matrix->e[0][2] * inverse_inertia_tensor->e[2][0];
+
+    f32 iit_x_transform_01 = transform_matrix->e[0][0] * inverse_inertia_tensor->e[0][1] + 
+                              transform_matrix->e[0][1] * inverse_inertia_tensor->e[1][1] + 
+                              transform_matrix->e[0][2] * inverse_inertia_tensor->e[2][1];
+
+    f32 iit_x_transform_02 = transform_matrix->e[0][0] * inverse_inertia_tensor->e[0][2] + 
+                              transform_matrix->e[0][1] * inverse_inertia_tensor->e[1][2] + 
+                              transform_matrix->e[0][2] * inverse_inertia_tensor->e[2][2];
+
+    f32 iit_x_transform_10 = transform_matrix->e[1][0] * inverse_inertia_tensor->e[0][0] + 
+                              transform_matrix->e[1][1] * inverse_inertia_tensor->e[1][0] + 
+                              transform_matrix->e[1][2] * inverse_inertia_tensor->e[2][0];
+
+    f32 iit_x_transform_11 = transform_matrix->e[1][0] * inverse_inertia_tensor->e[0][1] + 
+                              transform_matrix->e[1][1] * inverse_inertia_tensor->e[1][1] + 
+                              transform_matrix->e[1][2] * inverse_inertia_tensor->e[2][1];
+
+    f32 iit_x_transform_12 = transform_matrix->e[1][0] * inverse_inertia_tensor->e[0][2] + 
+                              transform_matrix->e[1][1] * inverse_inertia_tensor->e[1][2] + 
+                              transform_matrix->e[1][2] * inverse_inertia_tensor->e[2][2];
+
+    f32 iit_x_transform_20 = transform_matrix->e[2][0] * inverse_inertia_tensor->e[0][0] + 
+                              transform_matrix->e[2][1] * inverse_inertia_tensor->e[1][0] + 
+                              transform_matrix->e[2][2] * inverse_inertia_tensor->e[2][0];
+
+    f32 iit_x_transform_21 = transform_matrix->e[2][0] * inverse_inertia_tensor->e[0][1] + 
+                              transform_matrix->e[2][1] * inverse_inertia_tensor->e[1][1] + 
+                              transform_matrix->e[2][2] * inverse_inertia_tensor->e[2][1];
+
+    f32 iit_x_transform_22 = transform_matrix->e[2][0] * inverse_inertia_tensor->e[0][2] + 
+                              transform_matrix->e[2][1] * inverse_inertia_tensor->e[1][2] + 
+                              transform_matrix->e[2][2] * inverse_inertia_tensor->e[2][2];
+    // At this point the matrix is : iit x transform (right to left multiply order)
+
+    m3x3 *world_inverse_inertia_tensor = &rigid_body->world_inverse_inertia_tensor;
+    world_inverse_inertia_tensor->e[0][0] = transform_matrix->e[0][0] * iit_x_transform_00 + 
+                                            transform_matrix->e[1][0] * iit_x_transform_10 + 
+                                            transform_matrix->e[2][0] * iit_x_transform_20;
+
+    world_inverse_inertia_tensor->e[0][1] = transform_matrix->e[0][0] * iit_x_transform_01 + 
+                                            transform_matrix->e[1][0] * iit_x_transform_11 + 
+                                            transform_matrix->e[2][0] * iit_x_transform_21;
+
+    world_inverse_inertia_tensor->e[0][2] = transform_matrix->e[0][0] * iit_x_transform_02 + 
+                                            transform_matrix->e[1][0] * iit_x_transform_12 + 
+                                            transform_matrix->e[2][0] * iit_x_transform_22;
+
+    world_inverse_inertia_tensor->e[1][0] = transform_matrix->e[0][1] * iit_x_transform_00 + 
+                                            transform_matrix->e[1][1] * iit_x_transform_10 + 
+                                            transform_matrix->e[2][1] * iit_x_transform_20;
+
+    world_inverse_inertia_tensor->e[1][1] = transform_matrix->e[0][1] * iit_x_transform_01 + 
+                                            transform_matrix->e[1][1] * iit_x_transform_11 + 
+                                            transform_matrix->e[2][1] * iit_x_transform_21;
+
+    world_inverse_inertia_tensor->e[1][2] = transform_matrix->e[0][1] * iit_x_transform_02 + 
+                                            transform_matrix->e[1][1] * iit_x_transform_12 + 
+                                            transform_matrix->e[2][1] * iit_x_transform_22;
+
+    world_inverse_inertia_tensor->e[2][0] = transform_matrix->e[0][2] * iit_x_transform_00 + 
+                                            transform_matrix->e[1][2] * iit_x_transform_10 + 
+                                            transform_matrix->e[2][2] * iit_x_transform_20;
+
+    world_inverse_inertia_tensor->e[2][1] = transform_matrix->e[0][2] * iit_x_transform_01 + 
+                                            transform_matrix->e[1][2] * iit_x_transform_11 + 
+                                            transform_matrix->e[2][2] * iit_x_transform_21;
+
+    world_inverse_inertia_tensor->e[2][2] = transform_matrix->e[0][2] * iit_x_transform_02 + 
+                                            transform_matrix->e[1][2] * iit_x_transform_12 + 
+                                            transform_matrix->e[2][2] * iit_x_transform_22;
+    // At this point the matrix is : inverse transform x iit x transform
 }
 
