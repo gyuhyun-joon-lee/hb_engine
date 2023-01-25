@@ -65,6 +65,10 @@ apply_force_at_world_space_point(RigidBody *rigid_body,
                                 v3 force, // linear + angular, world space
                                 v3 world_p)
 {
+    rigid_body->force += force;
+    // TODO(gh) If the COM was very close to the point where the force is being applied,
+    // this might cause unwanted torque
+    rigid_body->torque += cross(world_p - rigid_body->position, force);
 }
 
 internal void
@@ -191,4 +195,50 @@ update_derived_rigid_body_attributes(RigidBody *rigid_body)
                                             transform_matrix->e[2][2] * iit_x_transform_22;
     // At this point the matrix is : inverse transform x iit x transform
 }
+
+// TODO(gh) Double check if the math here checks out
+internal void
+integrate_rigid_body(RigidBody *rigid_body, f32 dt)
+{
+    // linear acc = force / mass
+    v3 linear_acceleration = rigid_body->inverse_mass * rigid_body->force;
+
+    // angular acc = inverse inertia tensor * torque
+    v3 angular_acceleration = rigid_body->world_inverse_inertia_tensor * rigid_body->torque;
+
+    // new linear velocity = previous linear velocity + linear acc * dt
+    rigid_body->linear_velocity += dt*linear_acceleration;
+
+    // new angular velocity = preivous angular velocity + angular acc * dt
+    rigid_body->angular_velocity += dt*angular_acceleration;
+
+    // apply damping
+    rigid_body->linear_velocity *= power(rigid_body->linear_damping, dt);
+    rigid_body->angular_velocity *= power(rigid_body->angular_damping, dt);
+
+    // Get new position & orientation out of updated linear & angular velocities
+    // new position = previous position + linear velocity * dt
+    rigid_body->position += dt*rigid_body->linear_velocity;
+
+    // new orientation = previous orientation + (dt/2)*angular velocity(represented in pure quaternion)*preivous orientation
+    // NOTE(gh) Note that this integration is not as simple as linear velocity(like av = av + av*t or something),
+    // as this is a quarternion integration.
+    // For more explanation, see https://fgiesen.wordpress.com/2012/08/24/quaternion-differentiation/
+    rigid_body->orientation += 0.5f*dt*Quat(0, rigid_body->angular_velocity)*rigid_body->orientation;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
