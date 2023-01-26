@@ -2,6 +2,8 @@
  * Written by Gyuhyun Lee
  */
 
+#include "hb_collision.h"
+
 struct ClosestPoints
 {
     v3 p0; 
@@ -56,10 +58,79 @@ collision_test_ray_aabb(AABB *aabb, v3 ray_origin, v3 ray_dir)
         result.hit_t = t_max_of_min;
         // TODO(joon) proper hit normal calculation
         result.hit_normal = V3(0, 0, 1);
-        //result_hit_normal = ;
+        // result_hit_normal = ;
     }
 
     return result;
 }
+
+/*
+   NOTE(gh) Contact data(especially point, normal, and depth) will be based on the first object
+*/
+internal void
+contact_sphere_sphere(ContactGroup *contact_group,
+                      CollisionSphere *sphere0, 
+                      CollisionSphere *sphere1)
+{
+    if(contact_group->contact_data_used < contact_group->contact_data_count)
+    {
+        v3 center_to_center = sphere1->center - sphere0->center;
+        f32 distance_between_centers = length(center_to_center);
+        if(distance_between_centers > 0.0f && 
+            distance_between_centers < (sphere0->r + sphere1->r))
+        {
+            ContactData *data = contact_group->contact_data + 
+                                contact_group->contact_data_used++;
+
+            data->collision_normal = center_to_center / distance_between_centers;
+            // TODO(gh) Game Physics Development uses something weird that doesn't make sense
+            data->contact_point = sphere0->center + sphere0->r * data->collision_normal;
+            data->penetration_depth = sphere0->r + sphere1->r - distance_between_centers;
+            // TODO(gh) Also set friction, collision restitution
+        }
+    }
+}
+
+internal void
+contact_sphere_half_plane(ContactGroup *contact_group,
+                     CollisionSphere *sphere,
+                     CollisionHalfPlane *half_plane)
+{
+    if(contact_group->contact_data_used < contact_group->contact_data_count)
+    {
+        f32 distance_to_plane = dot(sphere->center, half_plane->normal) - half_plane->d;
+
+        if(distance_to_plane < sphere->r)
+        {
+            ContactData *data = contact_group->contact_data + 
+                                contact_group->contact_data_used++;
+
+            data->collision_normal = half_plane->normal;
+            data->penetration_depth = sphere->r - distance_to_plane;
+            data->contact_point = sphere->center - distance_to_plane * half_plane->normal;
+            // TODO(gh) Also set friction, collision restitution
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

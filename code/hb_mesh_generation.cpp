@@ -74,7 +74,8 @@ generate_sphere_mesh(Entity *entity, MemoryArena *arena, f32 r, u32 latitude_div
 // and the render code will offset the entire mesh using model matrix - and the floor ranges from
 // -0.5f*grid_dim to 0.5f*grid_dim
 internal void
-generate_floor_mesh(Entity *entity, MemoryArena *arena, v2 floor_dim, u32 x_quad_count, u32 y_quad_count)
+generate_floor_mesh(Entity *entity, MemoryArena *arena, v2 floor_dim, u32 x_quad_count, u32 y_quad_count,
+                    f32 max_height)
 {
     f32 quad_width = floor_dim.x / (f32)x_quad_count;
     f32 quad_height = floor_dim.y / (f32)y_quad_count;
@@ -104,7 +105,7 @@ generate_floor_mesh(Entity *entity, MemoryArena *arena, v2 floor_dim, u32 x_quad
             f32 xf = (f32)x/((f32)x_vertex_count - 1); // -1 so that xf range from 0 to 1
             u32 frequency = 4;
 
-            f32 pz = 14.0f * perlin_noise01(frequency*xf, frequency*yf, 0, frequency);
+            f32 pz = max_height * perlin_noise01(frequency*xf, frequency*yf, 0, frequency);
 
             entity->vertices[populated_vertex_count].p = V3(px, py, pz);
             entity->vertices[populated_vertex_count].n = V3(0, 0, 0);

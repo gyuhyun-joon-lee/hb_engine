@@ -51,7 +51,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(512));
 
-        // TODO(gh) entity arena?
         game_state->max_entity_count = 8192;
         game_state->entities = push_array(&game_state->transient_arena, Entity, game_state->max_entity_count);
 
@@ -70,6 +69,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // Really far away camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
+#if 0
         v2 grid_dim = V2(80, 80); // TODO(gh) just temporary, need to 'gather' the floors later
         game_state->grass_grid_count_x = 2;
         game_state->grass_grid_count_y = 2;
@@ -103,6 +103,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 init_grass_grid(thread_work_queue, gpu_work_queue, &game_state->transient_arena, floor_entity, grid, grass_per_grid_count_x, grass_per_grid_count_y, min, max);
             }
         }
+#endif
+
+        add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(0.25f, 0.1f, 0.04f), 1, 1, 0);
 
         add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
 
@@ -182,14 +185,15 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         switch(entity->type)
         {
             case EntityType_Floor:
+            {
+            }break;
+
             case EntityType_AABB:
             {
             }break;
 
             case EntityType_Sphere:
             {
-                platform_render_push_buffer->sphere_center = entity->p;
-                platform_render_push_buffer->sphere_r = entity->dim.x;
             }break;
         }
     }
@@ -402,7 +406,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         {
             case EntityType_Floor:
             {
-#if 0
+#if 1
                 // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->p, entity->dim, entity->color, 

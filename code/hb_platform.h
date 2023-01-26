@@ -365,10 +365,6 @@ struct PlatformRenderPushBuffer
 
     v3 clear_color;
 
-    // TODO(gh) Placeholder : Need to think where should we put this info
-    v3 sphere_center;
-    f32 sphere_r;
-
     // Configurations
     b32 enable_shadow;
     b32 enable_grass_rendering;

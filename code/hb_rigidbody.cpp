@@ -79,6 +79,13 @@ apply_force_at_local_space_point(RigidBody *rigid_body,
 }
 
 internal void
+initialize_rigid_body(RigidBody *rigid_body)
+{
+    // TODO(gh) Properly set inverse inertia tensor!!
+    rigid_body->inverse_inertia_tensor = inverse(M3x3());
+}
+
+internal void
 update_derived_rigid_body_attributes(RigidBody *rigid_body)
 {
     // NOTE(gh) Quaternion has 4 DOF, but we want 3 DOF, so we normalize the quaternion (4-1=3)
@@ -225,6 +232,18 @@ integrate_rigid_body(RigidBody *rigid_body, f32 dt)
     // as this is a quarternion integration.
     // For more explanation, see https://fgiesen.wordpress.com/2012/08/24/quaternion-differentiation/
     rigid_body->orientation += 0.5f*dt*Quat(0, rigid_body->angular_velocity)*rigid_body->orientation;
+}
+
+internal void
+update_rigid_body(RigidBody *rigid_body, f32 dt)
+{
+    // Clear accumulated attributes
+    rigid_body->force = V3(0, 0, 0);
+    rigid_body->torque = V3(0, 0, 0);
+
+    update_derived_rigid_body_attributes(rigid_body);
+
+    integrate_rigid_body(rigid_body, dt);
 }
 
 

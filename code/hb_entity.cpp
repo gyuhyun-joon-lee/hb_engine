@@ -119,7 +119,8 @@ add_cube_entity(GameState *game_state, v3 p, v3 dim, v3 color)
 }
 
 internal Entity *
-add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count)
+add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count,
+                 f32 max_height)
 {
     Entity *result = add_entity(game_state, EntityType_Floor, Entity_Flag_Collides);
 
@@ -131,7 +132,7 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v
     result->x_quad_count = x_quad_count;
     result->y_quad_count = y_quad_count;
 
-    generate_floor_mesh(result, arena, dim, x_quad_count, y_quad_count);
+    generate_floor_mesh(result, arena, dim, x_quad_count, y_quad_count, max_height);
 
     return result;
 }
