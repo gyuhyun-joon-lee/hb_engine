@@ -5,12 +5,6 @@
 #include "shader_common.h"
 
 
-struct GBuffers
-{
-    float4 position [[color(0)]];
-    float4 normal [[color(1)]];
-    float4 color [[color(2)]];
-};
 
 // IMPORTANT(gh) vertex always should be PN
 vertex GBufferVertexOutput
@@ -60,7 +54,6 @@ singlepass_cube_vertex(uint vertexID [[vertex_id]],
     return result;
 }
 
-// TODO(gh) indirect command buffer does not allow any texture inside the fragment shader :(
 fragment GBuffers 
 singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
                     texture2d<float> shadowmap [[texture(0)]])
@@ -70,6 +63,7 @@ singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
 
     float shadow_factor = 1.0f;
 #if 0
+    constexpr sampler shadowmap_sampler = sampler(coord::normalized, address::clamp_to_edge, filter::linear);
 #if 1
     // multisampling shadow
     float one_over_shadowmap_texture_width = 1.0f / shadowmap.get_width();

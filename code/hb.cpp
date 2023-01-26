@@ -97,7 +97,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 v3 center = V3(0.5f*(min + max), 0);
 
                 Entity *floor_entity = 
-                    add_floor_entity(game_state, &game_state->transient_arena, center, grid_dim, V3(0.25f, 0.1f, 0.04f), grass_per_grid_count_x, grass_per_grid_count_y);
+                    add_floor_entity(game_state, &game_state->transient_arena, center, grid_dim, V3(0.25f, 0.1f, 0.04f), grass_per_grid_count_x, grass_per_grid_count_y, 16);
 
                 GrassGrid *grid = game_state->grass_grids + y*game_state->grass_grid_count_x + x;
                 init_grass_grid(thread_work_queue, gpu_work_queue, &game_state->transient_arena, floor_entity, grid, grass_per_grid_count_x, grass_per_grid_count_y, min, max);
@@ -106,8 +106,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #endif
 
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(0.25f, 0.1f, 0.04f), 1, 1, 0);
-
-        add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 2), 2.0f, V3(1, 0, 0));
+        add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 10), 2.0f, V3(1, 0, 0));
+        add_sphere_entity(game_state, &game_state->transient_arena, V3(5, 5, 6), 2.0f, V3(0, 1, 0));
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;

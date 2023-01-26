@@ -76,7 +76,7 @@ struct MetalRenderContext
     // NOTE(gh) Those that are marked as 'singlepass' will be sharing 
     id<MTLRenderPipelineState> singlepass_cube_pipeline;
     id<MTLRenderPipelineState> deferred_pipeline;
-    id<MTLRenderPipelineState> instanced_grass_render_pipeline;
+    id<MTLRenderPipelineState> grass_indirect_render_pipeline;
     id<MTLRenderPipelineState> generate_wind_noise_pipeline;
 
     // Forward Pipelines

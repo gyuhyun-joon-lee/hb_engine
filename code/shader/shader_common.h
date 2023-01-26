@@ -119,6 +119,13 @@ struct GBufferVertexOutput
     float3 p_in_light_coordinate;
 };
 
+struct GBuffers
+{
+    float4 position [[color(0)]];
+    float4 normal [[color(1)]];
+    float4 color [[color(2)]];
+};
+
 static float
 lerp(float min, float t, float max)
 {

@@ -678,28 +678,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 {
 @autoreleasepool
 {
-    id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
-
-    // NOTE(gh) render shadow map
-    id<MTLRenderCommandEncoder> shadowmap_render_encoder = [shadow_command_buffer renderCommandEncoderWithDescriptor : render_context->directional_light_shadowmap_renderpass];
-    shadowmap_render_encoder.label = @"Shadowmap Render";
-    metal_set_viewport(shadowmap_render_encoder, 0, 0, 
-                       render_context->directional_light_shadowmap_depth_texture.width, 
-                       render_context->directional_light_shadowmap_depth_texture.height, 
-                       0, 1); // TODO(gh) near and far value when rendering the shadowmap)
-    metal_set_scissor_rect(shadowmap_render_encoder, 0, 0, 
-                           render_context->directional_light_shadowmap_depth_texture.width, 
-                           render_context->directional_light_shadowmap_depth_texture.height);
-    metal_set_triangle_fill_mode(shadowmap_render_encoder, MTLTriangleFillModeFill);
-    metal_set_front_facing_winding(shadowmap_render_encoder, MTLWindingCounterClockwise);
-    // Culling front facing triangles when rendering shadowmap to avoid 
-    // shadow acne(moire pattern in non-shaded sides). This effectively 'biases' the shadowmap value down
-    // TODO(gh) This does not work for thin objects!!!!
-    metal_set_cull_mode(shadowmap_render_encoder, MTLCullModeFront); 
-    metal_set_depth_stencil_state(shadowmap_render_encoder, render_context->depth_state);
-
-    metal_set_render_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
-
+    // TODO(gh) Not a good way to handle lights
     local_persist f32 rad = 2.4f;
     v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 100); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
@@ -711,78 +690,104 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
     v3 directional_light_x_axis = normalize(cross(V3(0, 0, 1), directional_light_z_axis));
     v3 directional_light_y_axis = normalize(cross(directional_light_z_axis, directional_light_x_axis));
     m4x4 light_view = camera_transform(directional_light_p, 
-                                       directional_light_x_axis, 
-                                       directional_light_y_axis, 
-                                       directional_light_z_axis);
-    m4x4 light_proj_view = transpose(light_proj * light_view); // Change to column major
-
-    // NOTE(gh) Render Shadow map
-    for(u32 consumed = 0;
-            consumed < render_push_buffer->used;
-            )
+            directional_light_x_axis, 
+            directional_light_y_axis, 
+            directional_light_z_axis);
+    m4x4 light_proj_view = transpose(light_proj * light_view);
+     
+    if(render_push_buffer->enable_shadow)
     {
-        RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_push_buffer->base + consumed);
+        id<MTLCommandBuffer> shadow_command_buffer = [render_context->command_queue commandBuffer];
 
-        switch(header->type)
+        // NOTE(gh) render shadow map
+        id<MTLRenderCommandEncoder> shadowmap_render_encoder = [shadow_command_buffer renderCommandEncoderWithDescriptor : render_context->directional_light_shadowmap_renderpass];
+        shadowmap_render_encoder.label = @"Shadowmap Render";
+        metal_set_viewport(shadowmap_render_encoder, 0, 0, 
+                           render_context->directional_light_shadowmap_depth_texture.width, 
+                           render_context->directional_light_shadowmap_depth_texture.height, 
+                           0, 1); // TODO(gh) near and far value when rendering the shadowmap)
+        metal_set_scissor_rect(shadowmap_render_encoder, 0, 0, 
+                               render_context->directional_light_shadowmap_depth_texture.width, 
+                               render_context->directional_light_shadowmap_depth_texture.height);
+        metal_set_triangle_fill_mode(shadowmap_render_encoder, MTLTriangleFillModeFill);
+        metal_set_front_facing_winding(shadowmap_render_encoder, MTLWindingCounterClockwise);
+        // Culling front facing triangles when rendering shadowmap to avoid 
+        // shadow acne(moire pattern in non-shaded sides). This effectively 'biases' the shadowmap value down
+        // TODO(gh) This does not work for thin objects!!!!
+        metal_set_cull_mode(shadowmap_render_encoder, MTLCullModeFront); 
+        metal_set_depth_stencil_state(shadowmap_render_encoder, render_context->depth_state);
+
+        metal_set_render_pipeline(shadowmap_render_encoder, render_context->directional_light_shadowmap_pipeline);
+
+        // NOTE(gh) Render Shadow map
+        for(u32 consumed = 0;
+                consumed < render_push_buffer->used;
+                )
         {
-            case RenderEntryType_MeshPN:
+            RenderEntryHeader *header = (RenderEntryHeader *)((u8 *)render_push_buffer->base + consumed);
+
+            switch(header->type)
             {
-                RenderEntryMeshPN *entry = (RenderEntryMeshPN *)((u8 *)render_push_buffer->base + consumed);
-                consumed += sizeof(*entry);
-
-                if(entry->should_cast_shadow)
+                case RenderEntryType_MeshPN:
                 {
-                    m4x4 model = st_m4x4(entry->p, entry->dim);
-                    model = transpose(model); // make the matrix column-major
+                    RenderEntryMeshPN *entry = (RenderEntryMeshPN *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += sizeof(*entry);
 
-                    metal_set_vertex_buffer(shadowmap_render_encoder, (id<MTLBuffer>)entry->vertex_buffer_handle, 0, 0);
-                    metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
-                    metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
+                    if(entry->should_cast_shadow)
+                    {
+                        m4x4 model = st_m4x4(entry->p, entry->dim);
+                        model = transpose(model); // make the matrix column-major
 
-                    // NOTE(gh) Mitigates the moire pattern by biasing, 
-                    // making the shadow map to place under the fragments that are being shaded.
-                    // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
+                        metal_set_vertex_buffer(shadowmap_render_encoder, (id<MTLBuffer>)entry->vertex_buffer_handle, 0, 0);
+                        metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
+                        metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
-                    metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
-                                      (id<MTLBuffer>)entry->index_buffer_handle, 0, entry->index_count);
-                }
-            }break;
+                        // NOTE(gh) Mitigates the moire pattern by biasing, 
+                        // making the shadow map to place under the fragments that are being shaded.
+                        // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
+
+                        metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
+                                          (id<MTLBuffer>)entry->index_buffer_handle, 0, entry->index_count);
+                    }
+                }break;
 
 #if 0
-            case RenderEntryType_Cube:
-            {
-                RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
-                consumed += sizeof(*entry);
-
-                if(entry->should_cast_shadow)
+                case RenderEntryType_Cube:
                 {
-                    m4x4 model = st_m4x4(entry->p, entry->dim);
-                    model = transpose(model); // make the matrix column-major
+                    RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
+                    consumed += sizeof(*entry);
 
-                    metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
-                    metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
-                    metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
+                    if(entry->should_cast_shadow)
+                    {
+                        m4x4 model = st_m4x4(entry->p, entry->dim);
+                        model = transpose(model); // make the matrix column-major
 
-                    // NOTE(gh) Mitigates the moire pattern by biasing, 
-                    // making the shadow map to place under the fragments that are being shaded.
-                    // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
+                        metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
+                        metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
+                        metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
-                    metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
-                                      render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
-                }
-            }break;
+                        // NOTE(gh) Mitigates the moire pattern by biasing, 
+                        // making the shadow map to place under the fragments that are being shaded.
+                        // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
+
+                        metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
+                                          render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
+                    }
+                }break;
 #endif 
-            default: 
-            {
-                consumed += header->size;
-            };
+                default: 
+                {
+                    consumed += header->size;
+                };
+            }
         }
-    }
 
-    metal_end_encoding(shadowmap_render_encoder);
-    // We can start working on things that don't require drawable_texture.
-    // Metal ensures that the previous draw is ready before using it (encoder based)
-    metal_commit_command_buffer(shadow_command_buffer);
+        metal_end_encoding(shadowmap_render_encoder);
+        // We can start working on things that don't require drawable_texture.
+        // Metal ensures that the previous draw is ready before using it (encoder based)
+        metal_commit_command_buffer(shadow_command_buffer);
+
+    }
 
     id<MTLCommandBuffer> command_buffer = [render_context->command_queue commandBuffer];
 
@@ -1016,7 +1021,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                     metal_set_front_facing_winding(g_buffer_render_encoder, MTLWindingCounterClockwise);
                     metal_set_cull_mode(g_buffer_render_encoder, MTLCullModeNone); 
                     metal_set_depth_stencil_state(g_buffer_render_encoder, render_context->depth_state);
-                    metal_set_render_pipeline(g_buffer_render_encoder, render_context->instanced_grass_render_pipeline);
+                    metal_set_render_pipeline(g_buffer_render_encoder, render_context->grass_indirect_render_pipeline);
                     [g_buffer_render_encoder 
                         executeCommandsInBuffer:render_context->icb[render_context->next_grass_double_buffer_index] 
                             withRange:NSMakeRange(0, 1)
@@ -1439,7 +1444,7 @@ int main(void)
     // TODO(gh) : Put the metallib file inside the app
     char metallib_path[256] = {};
     unsafe_string_append(metallib_path, base_path);
-    unsafe_string_append(metallib_path, "code/shader/shader.metallib");
+    unsafe_string_append(metallib_path, "code/shader/compiled_shaders/shader.metallib");
 
     // TODO(gh) : maybe just use newDefaultLibrary?
     id<MTLLibrary> shader_library = [device newLibraryWithFile:[NSString stringWithUTF8String:metallib_path] 
@@ -1534,26 +1539,6 @@ int main(void)
                             forward_pipeline_color_attachment_write_masks, array_count(forward_pipeline_color_attachment_write_masks),
                             view.depthStencilPixelFormat, forward_blending_enabled);
 
-    // TODO(gh) These are just temporary numbers, there should be more robust way to get these information
-    u32 max_object_thread_count_per_object_threadgroup = 
-        object_thread_per_threadgroup_count_x * object_thread_per_threadgroup_count_y; // Each object thread is one grass blade
-    u32 max_mesh_threadgroup_count_per_mesh_grid = 
-        max_object_thread_count_per_object_threadgroup; // Each mesh thread group is one grass blade
-    u32 max_mesh_thread_count_per_mesh_threadgroup = grass_high_lod_index_count;  // TODO(gh) Fix this as multiple of simd width? 
-    metal_render_context.grass_mesh_render_pipeline = 
-        metal_make_mesh_render_pipeline(device, "Grass Mesh Render Pipeline",
-                                        "grass_object_function", 
-                                        "single_grass_mesh_function",
-                                        "singlepass_cube_frag",
-                                        shader_library,
-                                        MTLPrimitiveTopologyClassTriangle,
-                                        singlepass_color_attachment_pixel_formats, array_count(singlepass_color_attachment_pixel_formats),
-                                        singlepass_color_attachment_write_masks, array_count(singlepass_color_attachment_write_masks),
-                                        view.depthStencilPixelFormat,
-                                        max_object_thread_count_per_object_threadgroup,
-                                        max_mesh_threadgroup_count_per_mesh_grid,
-                                        max_mesh_thread_count_per_mesh_threadgroup); 
-
     metal_render_context.initialize_grass_counts_pipeline = 
         metal_make_compute_pipeline(device, shader_library, "initialize_grass_counts");
 
@@ -1566,9 +1551,9 @@ int main(void)
     metal_render_context.encode_instanced_grass_render_commands_pipeline = 
         metal_make_compute_pipeline(device, shader_library, "encode_instanced_grass_render_commands");
 
-    metal_render_context.instanced_grass_render_pipeline = 
-        metal_make_render_pipeline(device, "Instanced Grass Render Pipeline", 
-                            "instanced_grass_render_vertex", "singlepass_cube_frag", 
+    metal_render_context.grass_indirect_render_pipeline = 
+        metal_make_render_pipeline(device, "Grass Indirect Render Pipeline", 
+                            "grass_indirect_render_vertex", "grass_indirect_render_fragment", 
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
                             singlepass_color_attachment_pixel_formats, array_count(singlepass_color_attachment_pixel_formats),
@@ -1630,7 +1615,6 @@ int main(void)
     icbDescriptor.maxFragmentBufferBindCount = 0;
     icbDescriptor.inheritPipelineState = true;
 
-#if 1
     // Create indirect command buffer using private storage mode; since only the GPU will
     // write to and read from the indirect command buffer, the CPU never needs to access the
     // memory
@@ -1655,7 +1639,6 @@ int main(void)
             atIndex:0];
 
     }
-    #endif
 
     id<MTLCommandQueue> command_queue = [device newCommandQueue];
 
