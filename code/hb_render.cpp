@@ -357,7 +357,7 @@ init_grass_grid(ThreadWorkQueue *general_work_queue, ThreadWorkQueue *gpu_work_q
             data->p1 = p1;
             data->p2 = p2;
             data->simd_vertex_count = simd_vertex_count;
-            data->mesh_offset_p = floor->p;
+            data->mesh_offset_p = floor->position;
             data->floor_z_buffer = grass_grid->floor_z_buffer.memory;
 
             general_work_queue->add_thread_work_queue_item(general_work_queue, thread_optimized_raycast_straight_down_z_to_non_overlapping_mesh, 0, data);

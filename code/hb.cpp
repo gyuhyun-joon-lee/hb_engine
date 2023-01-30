@@ -9,7 +9,8 @@
 #include "hb_font.h"
 #include "hb_shared_with_shader.h"
 #include "hb_render.h"
-#include "hb_simulation.h"
+#include "hb_collision.h"
+#include "hb_rigidbody.h"
 #include "hb_entity.h"
 #include "hb_fluid.h"
 #include "hb_asset.h"
@@ -20,7 +21,6 @@
 #include "hb_ray.cpp"
 #include "hb_collision.cpp"
 #include "hb_rigidbody.cpp"
-#include "hb_simulation.cpp"
 #include "hb_noise.cpp"
 #include "hb_mesh_generation.cpp"
 #include "hb_entity.cpp"
@@ -106,8 +106,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #endif
 
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(0.25f, 0.1f, 0.04f), 1, 1, 0);
-        add_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 10), 2.0f, V3(1, 0, 0));
-        add_sphere_entity(game_state, &game_state->transient_arena, V3(5, 5, 6), 2.0f, V3(0, 1, 0));
+        add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 10), 2.0f, V3(1, 0, 0), 10);
+        add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(5, 5, 6), 2.0f, V3(0, 1, 0), 5);
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
@@ -194,123 +194,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case EntityType_Sphere:
             {
+                RigidBody *rigid_body = entity->rigid_body;
+                apply_force_at_center_of_mass(rigid_body, (9.8f/rigid_body->inverse_mass) * V3(0, 0, -1));
+                move_rigid_body(game_state, &game_state->transient_arena, rigid_body, platform_input->dt_per_frame);
             }break;
         }
     }
-
-#if 0
-    // NOTE(gh) Fluid simulation
-    // TODO(gh) Do wee need to add source to the density, too?
-    FluidCube *fluid_cube = &game_state->fluid_cube;
-    
-    zero_memory(fluid_cube->v_x_source, fluid_cube->stride);
-    zero_memory(fluid_cube->v_y_source, fluid_cube->stride);
-    zero_memory(fluid_cube->v_z_source, fluid_cube->stride);
-    //if(((u32)platform_input->time_elasped_from_start) % 4 == 0)
-    u32 center_x = fluid_cube->cell_count.x/2;
-    u32 center_y = fluid_cube->cell_count.y/2;
-
-    for(i32 z = 1;
-            z < fluid_cube->cell_count.z - 1;
-            ++z)
-    {
-        for(i32 y = 1;
-                y < 3;
-                ++y)
-       {
-            for(i32 x = 1;
-                    x < fluid_cube->cell_count.x - 1;
-                    ++x)
-            {
-                u32 ID = get_index(fluid_cube->cell_count, x, y, z);
-
-                fluid_cube->v_x_source[ID] = 0;
-                fluid_cube->v_y_source[ID] = 30;
-                fluid_cube->v_z_source[ID] = 30;
-            }
-        }
-    }
-
-    // NOTE(gh) At first, source holds the source force, and dest holds the previous value
-    // adding force will overwrite the new value to dest 
-
-    // velocity
-    add_source(fluid_cube->v_x_dest, fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, platform_input->dt_per_frame);
-    add_source(fluid_cube->v_y_dest, fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, platform_input->dt_per_frame);
-    add_source(fluid_cube->v_z_dest, fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, platform_input->dt_per_frame);
-    swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
-    swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
-    swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
-
-    u32 diffuse_iter_count = 1;
-    for(u32 diffuse_iter = 0;
-            diffuse_iter < diffuse_iter_count;
-            ++diffuse_iter)
-    {
-        diffuse(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_NegateX);
-        diffuse(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_NegateY);
-        diffuse(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_NegateZ);
-        swap(fluid_cube->v_x_dest, fluid_cube->v_x_source);
-        swap(fluid_cube->v_y_dest, fluid_cube->v_y_source);
-        swap(fluid_cube->v_z_dest, fluid_cube->v_z_source);
-    }
-
-    // advect only works in zero-divergence field
-    project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame);
-
-#if 1
-    reverse_advect(fluid_cube->v_x_dest, fluid_cube->v_x_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateX);
-    reverse_advect(fluid_cube->v_y_dest, fluid_cube->v_y_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateY);
-    reverse_advect(fluid_cube->v_z_dest, fluid_cube->v_z_source, fluid_cube->v_x_source, fluid_cube->v_y_source, fluid_cube->v_z_source, 
-            fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_NegateZ);
-#endif
-
-    // using density source as a temporary divergence buffer, which means modifying density source 
-    // should come after this!
-    project(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->pressures, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame);
-    // validate_divergence(fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, fluid_cube->cell_count, fluid_cube->cell_dim);
-
-    zero_memory(fluid_cube->density_source, fluid_cube->stride);
-    local_persist b32 added_density = false;
-    if(!added_density && platform_input->time_elasped_from_start > 1)
-    {
-        u32 ID = get_index(fluid_cube->cell_count, fluid_cube->cell_count.x/2, 1, fluid_cube->cell_count.z/2);
-        fluid_cube->density_source[ID] = 10000;
-        added_density = true;
-    }
-    
-#if 0
-    printf("%.6f, %.6f, %.6f\n", fluid_cube->v_x_dest[get_index(fluid_cube->cell_count, 1, 2, 1)],
-                                 fluid_cube->v_y_dest[get_index(fluid_cube->cell_count, 1, 2, 1)],
-                                 fluid_cube->v_z_dest[get_index(fluid_cube->cell_count, 1, 2, 1)]);
-#endif
-
-    // density
-    add_source(fluid_cube->density_dest, fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, platform_input->dt_per_frame);
-
-    swap(fluid_cube->density_dest, fluid_cube->density_source);
-
-    for(u32 diffuse_iter = 0;
-            diffuse_iter < diffuse_iter_count;
-            ++diffuse_iter)
-    {
-        diffuse(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->cell_count, fluid_cube->cell_dim, 
-                fluid_cube->viscosity, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
-        swap(fluid_cube->density_dest, fluid_cube->density_source);
-    }
-
-    reverse_advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
-                    fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
-#if 0
-    forward_advect(fluid_cube->density_dest, fluid_cube->density_source, fluid_cube->temp_buffer, fluid_cube->v_x_dest, fluid_cube->v_y_dest, fluid_cube->v_z_dest, 
-                    fluid_cube->cell_count, fluid_cube->cell_dim, platform_input->dt_per_frame, ElementTypeForBoundary_Continuous);
-#endif
-#endif
 
     FluidCubeMAC *fluid_cube = &game_state->fluid_cube_mac;
     update_fluid_cube_mac(fluid_cube, &game_state->transient_arena, thread_work_queue, platform_input->dt_per_frame);
@@ -388,7 +277,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     init_render_push_buffer(platform_render_push_buffer, render_camera, game_camera,
             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
             V3(0, 0, 0), true);
-    platform_render_push_buffer->enable_shadow = false;
+    platform_render_push_buffer->enable_shadow = true;
     platform_render_push_buffer->enable_grass_rendering = true;
 
     if(debug_platform_render_push_buffer)
@@ -409,7 +298,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #if 1
                 // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
-                          entity->p, entity->dim, entity->color, 
+                          entity->position, entity->dim, entity->color, 
                           AssetTag_FloorMesh,
                           &game_state->assets, gpu_work_queue,  
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
@@ -420,9 +309,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             case EntityType_Cube:
             case EntityType_Sphere:
             {
+                v3 center_of_mass = get_world_space_center_of_mass(entity->rigid_body);
                 // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
-                          entity->p, entity->dim, entity->color, 
+                          center_of_mass, entity->dim, entity->color, 
                           AssetTag_SphereMesh,
                           &game_state->assets, gpu_work_queue,  
                           entity->vertices, entity->vertex_count, entity->indices, entity->index_count,

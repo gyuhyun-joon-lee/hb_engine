@@ -28,7 +28,7 @@ struct Entity
     EntityType type;
     u32 flags;
 
-    v3 p; // TODO(gh) such objects like rigid body does not make use of this!!!
+    v3 position; 
     v3 dim;
     v3 color;
 
@@ -45,10 +45,7 @@ struct Entity
     u32 x_quad_count;
     u32 y_quad_count;
 
-    // TODO(gh) CollisionVolumeGroup!
-    CollisionVolumeCube cv;
-
-    AABB aabb; 
+    RigidBody *rigid_body;
 };
 
 #endif

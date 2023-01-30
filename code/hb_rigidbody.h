@@ -1,14 +1,21 @@
 #ifndef HB_RIGIDBODY_H
 #define HB_RIGIDBODY_H
 
+struct Entity;
+
 struct RigidBody
 {
+    // TODO(gh) Not thrilled about this backward pointer
+    Entity *entity;
+
+    void *collision_volume;
+
     f32 inverse_mass;
 
     /* NOTE(gh) 
        Linear attributes
     */
-    v3 position; // Center of mass, world space
+    v3 center_of_mass_offset; // offset of the center of mass from the entity position
     v3 linear_velocity;
     f32 linear_damping;
 
@@ -19,7 +26,7 @@ struct RigidBody
     // This is more like how to 'rotate' any point on object
     // which is why this is not a pure quaternion(which represents vector
     // in quaternion space)
-    quat orientation;
+    quat orientation; // [cos(t/2), x*sin(t/2), y*sin(t/2), z*sin(t/2)] where x, y, z is the normalized axis
     v3 angular_velocity;
     // The original inertia tensor Ia = sum(mi * d^2)
     // where mi is the mass of the particle i and

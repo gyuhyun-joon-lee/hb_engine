@@ -61,10 +61,11 @@ singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
 {
     GBuffers result = {};
 
-    float shadow_factor = 1.0f;
-#if 0
-    constexpr sampler shadowmap_sampler = sampler(coord::normalized, address::clamp_to_edge, filter::linear);
+    // NOTE(gh) 0 means complete black, 1 means no shadow
+    float shadow_factor = 0.0f;
 #if 1
+    constexpr sampler shadowmap_sampler = sampler(coord::normalized, address::clamp_to_edge, filter::linear);
+
     // multisampling shadow
     float one_over_shadowmap_texture_width = 1.0f / shadowmap.get_width();
     float one_over_shadowmap_texture_height = 1.0f / shadowmap.get_height();
@@ -83,15 +84,6 @@ singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
     }
 
     shadow_factor /= 9.0f; // Because we sampled from 9 different texels
-#else 
-    float shadow_factor = 1.0f;
-    // if(vertex_output.p_in_light_coordinate.x <= 1.0f && vertex_output.p_in_light_coordinate.y <= 1.0f)
-    {
-        // NOTE(gh) If the shadowmap value is smaller(light was closer to another object), this point should be in shadow.
-        shadow_factor = 
-            (shadowmap.sample(shadowmap_sampler, vertex_output.p_in_light_coordinate.xy < vertex_output.p_in_light_coordinate.z) ? 0 : 1;
-    }
-#endif
 #endif
 
     result.position = float4(vertex_output.p, 0.0f);
@@ -161,7 +153,7 @@ singlepass_deferred_lighting_frag(DeferredLightingVertexOutput vertex_output [[s
     {
         shadow_factor = N.w; // shadow factor is secretly baked with the normal texture
     }
-    float diffuse = shadow_factor * max(dot(N.xyz, L), 0.5f);
+    float diffuse = shadow_factor * max(dot(N.xyz, L), 0.2f);
 
     float4 result = float4(color.xyz * (ambient + diffuse), color.w);
 

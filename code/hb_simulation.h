@@ -44,34 +44,4 @@ struct PiecewiseMassParticleConnection
     f32 rest_length;
 };
 
-enum CollisionVolumeType
-{
-    CollisionVolumeType_Null,
-    CollisionVolumeType_Cube,
-    CollisionVolumeType_Sphere,
-};
-
-struct CollisionVolumeCube
-{
-    CollisionVolumeType type;
-
-    v3 offset;
-    v3 half_dim;
-};
-
-struct CollisionVolumeSphere
-{
-    CollisionVolumeType type;
-
-    v3 offset;
-    f32 r;
-};
-
-struct CollisionVolumeGroup
-{
-    u8 *collision_volume_buffer;
-    u32 size;
-    u32 used;
-};
-
 #endif
