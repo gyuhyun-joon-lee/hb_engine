@@ -45,7 +45,7 @@ struct Entity
     u32 x_quad_count;
     u32 y_quad_count;
 
-    RigidBody *rigid_body;
+    PBDParticleGroup particle_group;
 };
 
 #endif

@@ -1,30 +1,31 @@
 #ifndef HB_COLLISION_H
 #define HB_COLLISION_H
 
+struct RigidBody;
+
 // TODO(gh) Would it be beneficial(or is it even possible) for us if we define
 // contact point : deepest penetration point
 // collision normal : direction of where the object should go to remove interpenetration at all
 // penetration depth : how much we should go along the collision normal to remove interpenetration at all
 struct ContactData
 {
-    // TODO(gh) I need to figure out which space are these in
-    // Different collision detection methods might produce different contact points,
-    // but in most cases we can use them as-is
-    v3 point;  
-    v3 normal; // Should be normalized
-    f32 penetration_depth;
+    v3 point; // Any point in contact 'region', so no assumption should be made about the exact location
+    v3 normal; // World space, should be normalized
+    f32 depth; // positive means no contact, negative means inter-penetration
 
     f32 collision_restitution; // How much bounce is in the collision
     f32 friction;
+
+    RigidBody *host; // contact normal indicates the 'bounce direction' of this object
+    RigidBody *test; // should use -1 * contact normal
 };
 
-// NOTE(gh) Similar to the rendergroup, this will be 'cleared' 
-// at the start of the frame
 struct ContactGroup
 {
     ContactData *data;
     u32 count;
     u32 max_count;
+
 };
 
 enum CollisionVolumeType

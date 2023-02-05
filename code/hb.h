@@ -33,6 +33,8 @@ struct GameState
 
     GameAssets assets;
 
+    PBDParticlePool particle_pool;
+
     // TODO(gh) More structured light information
 
     // TODO(gh) some sort of asset system

@@ -109,11 +109,6 @@ add_rigid_body_sphere_entity(GameState *game_state, MemoryArena *arena, v3 cente
     result->color = color;
     result->should_cast_shadow = true;
 
-    m3x3 inverse_inertia_tensor = get_inverse_inertia_tensor_dense_sphere(radius, mass);
-
-    result->rigid_body = push_struct(arena, RigidBody);
-    initialize_rigid_body(result, result->rigid_body, 1.0f/mass, &inverse_inertia_tensor);
-
     generate_sphere_mesh(result, arena, 1.0f, 256, 128);
 
     return result;

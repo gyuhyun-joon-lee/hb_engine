@@ -362,63 +362,72 @@ integrate_rigid_body(RigidBody *rigid_body, f32 dt)
 */
 
 /*
+    Not used due to missing information about how to use and build contact graph(directional acyclic graph),
+    but seems like the algorithm itself is pretty solid, so might be worth implementing later down the road.
     NOTE(gh) How we are going to update velocity & position (both linear and angular) 
-    Original algorithm : https://graphics.stanford.edu/papers/rigid_bodies-sig03/
+    Original algorithm : Nonconvex Rigid Bodies with Stacking(https://graphics.stanford.edu/papers/rigid_bodies-sig03/)
 
     To summarize, we are going to update velocity & position with the collisions & contacts in these steps
 
     1. Collision detection in non-chronological order.
-       The temporary position will be x + dt*(v + dt*a), which means we will be using the updated velocity(v + dt*a)
+
+       for(i.e five times)
+       {
+       The predicted position will be x + dt*(v + dt*a), which means we will be using the updated velocity(v + dt*a)
        instead of the current velocity(v) to check for interference.
 
        If there is collision, we will apply the impulse to the current velocity(v) 
-       instead of the updated velocity that we used. 
+       instead of the updated velocity that we used. As this might introduce another collision, 
+       we iterate the same process multiple times(i.e five times).
        If not, we will advance the velocity, which means the current velocity = updated velocity(v + dt*a)
+
+       <Need to double check if this is true>
+       In any case, the algorithm does not back up whenever the interpenetration is detected.
+       Instead, it assumes that the new velocity & new position will move the object to the place where
+       the interpenetration is no longer a thing.
+
+       For complex non-convex, the algorithm uses point-sampling method which was introduced in
+       Collision Detection and Response for Computer Animation(https://dl.acm.org/doi/10.1145/54852.378528).
+       In our case, since we only have some simple convex shapes, 
        
     2. Contact resolution using the velocity that the collision dectection has produced.
        Note that this means the collision detection & contact resolution shoud end up using the same velocity
        _if there was no collision_.
 
     3. Advance the positions.
-
-    The collisions are _not_ resolved in chronological order.
-    For example, even if A and B collided first then B and C collided in one time step, 
-    the order that we process the collisions might be different.
 */
-internal void
-move_rigid_body(GameState *game_state, MemoryArena *arena, 
-                RigidBody *rigid_body, f32 dt)
-{
-    update_derived_rigid_body_attributes(rigid_body);
 
-    integrate_rigid_body(rigid_body, dt);
+/*
+    NOTE(gh) Position based rigid body simulation, used for hitman : codename 47
 
-    ContactGroup contact_group = {};
-    start_contact_group(&contact_group, arena, kilobytes(64));
+    **Source**
+    Advanced Character Physics
+    https://www.cs.cmu.edu/afs/cs/academic/class/15462-s13/www/lec_slides/Jakobsen.pdf
 
-    // TODO(gh) Problem with handling the collision later is that we can't get valid information
-    // to figure out whether the two objects in resting contact.
-    Entity *entity = rigid_body->entity;
-    for(u32 test_entity_index = 0;
-            test_entity_index < game_state->entity_count;
-            ++test_entity_index)
+    Instead of storing position and vector, store the current position(x_current) & previous position(x_previous).
+    Then, the integration(which is called the Verlet integration) would be in these two steps
+    1. new current position = 2*current position - old position + a*dt*dt
+       Think it as current position + (current position - old position) + a*dt*dt,
+       x(t + dt) = (1 + coefficient)*x - coefficient*x(t - dt) + inverse_mass*F*dt*dt
+       x(t - dt) = x(t)
+       which is very similar to the equation p = p_previous + v*dt + a*dt*dt, which is a very standard euler intergration
+       for getting the current position, except the fact that now the velocity is approximated
+    2. old position = previous current position
+
+    struct ParticleSystem
     {
-        Entity *test_entity = game_state->entities + test_entity_index;
+        v3 current_position[particle_count];
+        v3 previous_position[particle_count];
+        v3 force[particle_count];
+    };
 
-        // NOTE(gh) For now, we are only allowing the rigid bodies to collide each other
-        if(entity != test_entity && 
-           test_entity->rigid_body)
-        {
-            generate_contact_if_applicable(&contact_group, rigid_body, test_entity->rigid_body);
-        }
-    }
+    Whenever the system detects interpenetration, particle is simply projected out from the penetration volume, 
+    by moving along the contact normal.
+*/
 
-    // Clear accumulated attributes
-    rigid_body->force = V3(0, 0, 0);
-    rigid_body->torque = V3(0, 0, 0);
-}
-
-
+/*
+   NOTE(gh) Just taking notes from the paper the position based rigid body dynamics
+*/
 
 
 

@@ -12,6 +12,7 @@ start_contact_group(ContactGroup *contact_group, MemoryArena *arena, u32 max_cou
     contact_group->max_count = max_count;
 }
 
+
 internal void
 generate_contact_if_applicable(ContactGroup *contact_group,
                                 RigidBody *host, RigidBody *test)
