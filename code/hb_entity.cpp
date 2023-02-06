@@ -157,7 +157,7 @@ add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 colo
                                         result->particle_group.start_index + 
                                         x + y_index + z_index;
 
-                particle->position = left_bottom_particle_center + particle_radius*V3(x, y, z);
+                particle->position = left_bottom_particle_center + particle_diameter*V3(x, y, z);
                 particle->velocity = V3(0, 0, 0);
                 particle->radius = particle_radius;
                 particle->inv_mass = inv_particle_mass;

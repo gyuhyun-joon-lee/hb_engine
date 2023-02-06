@@ -107,7 +107,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         v3 temp2 = V3(0, 0, 0);
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
         add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 15), V3(2, 2, 2), V3(1, 0, 0), 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
-        add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 10), V3(2, 2, 2), V3(1, 0, 0), 0, EntityFlag_Collides);
+        add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 10), V3(4, 4, 4), V3(1, 1, 0), 0, EntityFlag_Collides);
         // add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 10), 2.0f, V3(1, 0, 0), 10);
         // add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(5, 5, 6), 2.0f, V3(0, 1, 0), 5);
 
