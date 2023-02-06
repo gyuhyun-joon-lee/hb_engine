@@ -104,7 +104,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #endif
 
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
-        add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 15), V3(2, 2, 2), V3(1, 0, 0), 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+        add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 50), V3(2, 2, 2), V3(1, 0, 0), 1/1.0f, EntityFlag_Movable|EntityFlag_Collides);
         add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 10), V3(4, 4, 4), V3(1, 1, 0), 0, EntityFlag_Collides);
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
@@ -217,22 +217,22 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticle *particle = particle_pool->particles + particle_index;
 
             // TODO(gh) only using the gravity as external force
-            if(!compare_with_epsilon(particle->inv_mass, 0.0f))
+            if(particle->inv_mass != 0.0f)
             {
-                particle->velocity.z -= platform_input->dt_per_frame * 9.8f;
+                particle->v.z -= platform_input->dt_per_frame * 9.8f;
             }
-            particle->proposed_position = particle->position + platform_input->dt_per_frame*particle->velocity;
+            particle->proposed_p = particle->p + platform_input->dt_per_frame*particle->v;
 
             // NOTE(gh) Also clear the delta position info, which will come
             // from solving the constraints.
-            particle->d_position_sum = V3(0, 0, 0);
+            particle->d_p_sum = V3(0, 0, 0);
             particle->constraint_hit_count = 0;
         }
     }
 
-    u32 max_constraint_count = 1024;
-    CollisionConstraint *constraints = push_array(&pbd_memory, CollisionConstraint, max_constraint_count);
-    u32 constraint_count = 0;
+    u32 max_collision_constraint_count = 1024;
+    CollisionConstraint *collision_constraints = push_array(&pbd_memory, CollisionConstraint, max_collision_constraint_count);
+    u32 collision_constraint_count = 0;
 
     for(u32 particle_group_index = 0;
             particle_group_index < gathered_particle_groups->count;
@@ -261,14 +261,47 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 {
                     PBDParticle *test_particle = particle_pool->particles + test_particle_index;
 
-                    f32 distance_square = square(particle->radius + test_particle->radius);
-                    if(length_square(test_particle->proposed_position - particle->proposed_position) < distance_square)
+                    f32 distance_square = square(particle->r + test_particle->r);
+                    if(length_square(test_particle->proposed_p - particle->proposed_p) < distance_square)
                     {
-                        CollisionConstraint *constraint = constraints + constraint_count++;
+                        CollisionConstraint *constraint = collision_constraints + collision_constraint_count++;
+                        assert(collision_constraint_count <= max_collision_constraint_count);
                         constraint->index0 = particle_index;
                         constraint->index1 = test_particle_index;
                     }
                 }
+            }
+        }
+    }
+
+    u32 max_environment_constraint_count = 1024;
+    EnvironmentConstraint *environment_constraints = push_array(&pbd_memory, EnvironmentConstraint, max_environment_constraint_count);
+    u32 environment_constraint_count = 0;
+
+    // TODO(gh) environment is currently hard-coded!!!
+    v3 floor_normal = V3(0, 0, 1);
+    f32 floor_d = 0.0f;
+    // NOTE(gh) Generate environment collision constraint
+    for(u32 particle_group_index = 0;
+            particle_group_index < gathered_particle_groups->count;
+            ++particle_group_index)
+    {
+        PBDParticleGroup *group = gathered_particle_groups->groups + particle_group_index;
+
+        for(u32 particle_index = group->start_index;
+                particle_index < group->one_past_end_index;
+                ++particle_index)
+        {
+            PBDParticle *particle = particle_pool->particles + particle_index;
+
+            if(dot(floor_normal, particle->proposed_p) - floor_d - particle->r < 0)
+            {
+                EnvironmentConstraint *constraint = environment_constraints + environment_constraint_count++;
+                assert(environment_constraint_count <= max_environment_constraint_count);
+
+                constraint->index = particle_index;
+                constraint->n = floor_normal;
+                constraint->d = floor_d;
             }
         }
     }
@@ -286,17 +319,17 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             ++iter)
     {
         for(u32 constraint_index = 0;
-                constraint_index < constraint_count;
+                constraint_index < collision_constraint_count;
                 ++constraint_index)
         {
-            CollisionConstraint *constraint = constraints + constraint_index;
+            CollisionConstraint *constraint = collision_constraints + constraint_index;
             
             PBDParticle *particle0 = particle_pool->particles + constraint->index0;
             PBDParticle *particle1 = particle_pool->particles + constraint->index1;
 
-            v3 delta = particle0->position - particle1->position;
+            v3 delta = particle0->p - particle1->p;
             f32 distance_between = length(delta);
-            f32 constraint_value = distance_between - (particle0->radius + particle1->radius);
+            f32 constraint_value = distance_between - (particle0->r + particle1->r);
 
             if(constraint_value < 0) // Inequality constraint
             {
@@ -304,11 +337,28 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 // TODO(gh) If the inv_mass is 0, avoid summing the d_position at all
                 // to avoid floating point precision issue?
-                particle0->d_position_sum += particle0->inv_mass * d;
+                particle0->d_p_sum += particle0->inv_mass * d;
                 particle0->constraint_hit_count++;
 
-                particle1->d_position_sum += particle1->inv_mass * -d;
+                particle1->d_p_sum += particle1->inv_mass * -d;
                 particle1->constraint_hit_count++;
+            }
+        }
+
+        for(u32 constraint_index = 0;
+                constraint_index < environment_constraint_count;
+                ++constraint_index)
+        {
+            EnvironmentConstraint *constraint = environment_constraints + constraint_index;
+            PBDParticle *particle = particle_pool->particles + constraint->index;
+
+            f32 constraint_value = dot(constraint->n, particle->p) - constraint->d - particle->r;
+            if(constraint_value < 0)
+            {
+                v3 d = (-constraint_value*particle->inv_mass / length_square(constraint->n)) * constraint->n;
+
+                particle->d_p_sum += d;
+                particle->constraint_hit_count++;
             }
         }
 
@@ -327,13 +377,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 if(particle->constraint_hit_count > 0)
                 {
-                    v3 d_position = (over_relaxation_weight/particle->constraint_hit_count) * particle->d_position_sum;
+                    v3 d_p = (over_relaxation_weight/particle->constraint_hit_count) * particle->d_p_sum;
 
-                    particle->position += d_position;
-                    particle->proposed_position += d_position;
+                    particle->p += d_p;
+                    particle->proposed_p += d_p;
 
                     // Re-clear 
-                    particle->d_position_sum = V3(0, 0, 0);
+                    particle->d_p_sum = V3(0, 0, 0);
                     particle->constraint_hit_count = 0;
                 }
             }
@@ -346,19 +396,19 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             iter < 5;
             ++iter)
     {
-        // NOTE(gh) Solve collision constraints
+        // NOTE(gh) Project collision constraints
         for(u32 constraint_index = 0;
-                constraint_index < constraint_count;
+                constraint_index < collision_constraint_count;
                 ++constraint_index)
         {
-            CollisionConstraint *constraint = constraints + constraint_index;
+            CollisionConstraint *constraint = collision_constraints + constraint_index;
             
             PBDParticle *particle0 = particle_pool->particles + constraint->index0;
             PBDParticle *particle1 = particle_pool->particles + constraint->index1;
 
-            v3 delta = particle0->proposed_position - particle1->proposed_position;
+            v3 delta = particle0->proposed_p - particle1->proposed_p;
             f32 distance_between = length(delta);
-            f32 constraint_value = distance_between - (particle0->radius + particle1->radius);
+            f32 constraint_value = distance_between - (particle0->r + particle1->r);
 
             if(constraint_value < 0)
             {
@@ -366,11 +416,29 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 // TODO(gh) If the inv_mass is 0, avoid summing the d_position at all
                 // to avoid floating point precision issue?
-                particle0->d_position_sum += particle0->inv_mass * d;
+                particle0->d_p_sum += particle0->inv_mass * d;
                 particle0->constraint_hit_count++;
 
-                particle1->d_position_sum += particle1->inv_mass * -d;
+                particle1->d_p_sum += particle1->inv_mass * -d;
                 particle1->constraint_hit_count++;
+            }
+        }
+
+        // NOTE(gh) Project environment constraints
+        for(u32 constraint_index = 0;
+                constraint_index < environment_constraint_count;
+                ++constraint_index)
+        {
+            EnvironmentConstraint *constraint = environment_constraints + constraint_index;
+            PBDParticle *particle = particle_pool->particles + constraint->index;
+
+            f32 constraint_value = dot(constraint->n, particle->proposed_p) - constraint->d - particle->r;
+            if(constraint_value < 0)
+            {
+                v3 d = (-constraint_value*particle->inv_mass) * constraint->n;
+
+                particle->d_p_sum += d;
+                particle->constraint_hit_count++;
             }
         }
 
@@ -389,12 +457,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 if(particle->constraint_hit_count > 0)
                 {
-                    v3 d_position = (over_relaxation_weight/particle->constraint_hit_count) * particle->d_position_sum;
+                    v3 d_position = (over_relaxation_weight/particle->constraint_hit_count) * particle->d_p_sum;
 
-                    particle->proposed_position += d_position;
+                    particle->proposed_p += d_position;
 
                     // Re-clear 
-                    particle->d_position_sum = V3(0, 0, 0);
+                    particle->d_p_sum = V3(0, 0, 0);
                     particle->constraint_hit_count = 0;
                 }
             }
@@ -414,14 +482,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         {
             PBDParticle *particle = particle_pool->particles + particle_index;
 
-            v3 d_position = (particle->proposed_position - particle->position);
-            particle->velocity = d_position / platform_input->dt_per_frame;
+            v3 d_p = (particle->proposed_p - particle->p);
+            particle->v = d_p / platform_input->dt_per_frame;
 
             // NOTE(gh) particle sleeping to prevent micro stutter
             f32 epsilon = 0.00001f;
-            if(length(d_position) > epsilon)
+            if(length(d_p) > epsilon)
             {
-                particle->position = particle->proposed_position;
+                particle->p = particle->proposed_p;
             }
         }
     }
@@ -539,10 +607,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         ++particle_index)
                 {
                     PBDParticle *particle = game_state->particle_pool.particles + particle_index;
-                    v3 particle_dim = particle->radius * V3(1, 1, 1);
+                    v3 particle_dim = particle->r * V3(1, 1, 1);
 
                     push_mesh_pn(platform_render_push_buffer, 
-                                  particle->position, particle_dim, entity->color, 
+                                  particle->p, particle_dim, entity->color, 
                                   AssetTag_SphereMesh, &game_state->assets, 
                                   true);
                 }

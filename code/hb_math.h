@@ -12,7 +12,7 @@
 // TODO(gh) This function is not actually 'safe'...
 // need better name here
 inline b32
-compare_with_epsilon(f32 a, f32 b, f32 epsilon = 0.00005f)
+compare_with_epsilon(f32 a, f32 b, f32 epsilon = 0.000001f)
 {
     b32 result = true;
 

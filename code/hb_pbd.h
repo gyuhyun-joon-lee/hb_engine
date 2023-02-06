@@ -8,12 +8,12 @@
 
 struct PBDParticle
 {
-    v3 position;
-    v3 velocity;
+    v3 p;
+    v3 v;
 
     //  TODO(gh) For now, all particles have identical size(radius) to avoid clipping,
     // but there might be workaround for this!
-    f32 radius;
+    f32 r;
 
     f32 inv_mass;
 
@@ -25,8 +25,8 @@ struct PBDParticle
         NOTE(gh) Temporary varaibles, should be cleared to 0 each frame
     */
     // TODO(gh) Might not be necessary(i.e don't store velocity, and get it implicitly each frame?)
-    v3 proposed_position; 
-    v3 d_position_sum;
+    v3 proposed_p; 
+    v3 d_p_sum;
     u32 constraint_hit_count;
 };
 
@@ -44,7 +44,7 @@ struct PBDParticlePool
 {
     // TODO(gh) Probably not a good idea...
     PBDParticle particles[4096];
-    u32 particle_count;
+    u32 count;
 };
 
 // TODO(gh) Can only gather certain amount of particle groups
@@ -57,7 +57,7 @@ struct GatheredPBDParticleGroups
 struct FixedPositionConstraint
 {
     u32 index;
-    v3 fixed_position; // world space
+    v3 fixed_p; // world space
 };
 
 /*
@@ -73,16 +73,15 @@ struct CollisionConstraint
 
 /*
     NOTE(gh) Environment collision constraint between one particle and the environment
-    C(x) = dot(plane_normal, x) − (plane_d - radius) ≥ 0
+    C(x) = dot(plane_normal, particle_position) − plane_d - radius ≥ 0
 */
-struct EnvironmentCollisionConstraint
+struct EnvironmentConstraint
 {
-    u32 particle_index;
+    u32 index;
 
-    v3 plane_normal;
-    f32 plane_d;
-
-    f32 radius;
+    // environment info
+    v3 n;
+    f32 d;
 };
 
 /*
