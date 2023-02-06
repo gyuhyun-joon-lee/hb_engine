@@ -3,15 +3,29 @@
  */
 // This where we custum generate the meshes
 
-// latitude = horizontal, longitude = vertical
-internal void
-generate_sphere_mesh(Entity *entity, MemoryArena *arena, f32 r, u32 latitude_div_count, u32 longitude_div_count)
+struct GeneratedMesh
 {
-    entity->vertex_count = (longitude_div_count+1)*latitude_div_count;
-    entity->vertices = push_array(arena, VertexPN, entity->vertex_count);
+    VertexPN *vertices;
+    u32 vertex_count;
 
-    entity->index_count = 2*3*longitude_div_count*latitude_div_count;
-    entity->indices = push_array(arena, u32, entity->index_count);
+    u32 *indices;
+    u32 index_count;
+};
+
+// latitude = horizontal, longitude = vertical
+internal GeneratedMesh
+generate_sphere_mesh(TempMemory *temp_memory, f32 r, u32 latitude_div_count, u32 longitude_div_count)
+{
+    GeneratedMesh result = {};
+
+    result.vertex_count = (longitude_div_count+1)*latitude_div_count;
+    result.index_count = 2*3*longitude_div_count*latitude_div_count;
+
+    u32 total_vertex_buffer_size = sizeof(VertexPN)*result.vertex_count;
+    u32 total_index_buffer_size = sizeof(u32)*result.index_count;
+
+    result.vertices = (VertexPN *)push_size(temp_memory, total_vertex_buffer_size);
+    result.indices = (u32 *)push_size(temp_memory, total_index_buffer_size);
 
     f32 latitude_advance_rad = (2.0f*pi_32) / latitude_div_count;
     f32 longitude_advance_rad = pi_32 / longitude_div_count;
@@ -29,7 +43,7 @@ generate_sphere_mesh(Entity *entity, MemoryArena *arena, f32 r, u32 latitude_div
                 x < latitude_div_count;
                 ++x)
         {
-            VertexPN *vertex = entity->vertices + populated_vertex_count;
+            VertexPN *vertex = result.vertices + populated_vertex_count;
             vertex->p = V3(r*cosf(latitude)*cosf(longitude), 
                             r*sinf(latitude)*cosf(longitude), 
                             z);
@@ -50,13 +64,13 @@ generate_sphere_mesh(Entity *entity, MemoryArena *arena, f32 r, u32 latitude_div
                 u32 i2 = i0+latitude_div_count;
                 u32 i3 = latitude_div_count*(y+1) + (i2+1)%latitude_div_count; // loop
 
-                entity->indices[populated_index_count++] = i0;
-                entity->indices[populated_index_count++] = i1;
-                entity->indices[populated_index_count++] = i2;
+                result.indices[populated_index_count++] = i0;
+                result.indices[populated_index_count++] = i1;
+                result.indices[populated_index_count++] = i2;
 
-                entity->indices[populated_index_count++] = i1;
-                entity->indices[populated_index_count++] = i3;
-                entity->indices[populated_index_count++] = i2;
+                result.indices[populated_index_count++] = i1;
+                result.indices[populated_index_count++] = i3;
+                result.indices[populated_index_count++] = i2;
             }
 
             populated_vertex_count++;
@@ -66,17 +80,23 @@ generate_sphere_mesh(Entity *entity, MemoryArena *arena, f32 r, u32 latitude_div
         longitude += longitude_advance_rad;
     }
 
-    assert(populated_vertex_count == entity->vertex_count);
-    assert(populated_index_count == entity->index_count);
+    assert(populated_vertex_count == result.vertex_count);
+    assert(populated_index_count == result.index_count);
+
+    return result;
 }
  
 // NOTE(gh) The center of this is always (0, 0, 0),
 // and the render code will offset the entire mesh using model matrix - and the floor ranges from
 // -0.5f*grid_dim to 0.5f*grid_dim
-internal void
-generate_floor_mesh(Entity *entity, MemoryArena *arena, v2 floor_dim, u32 x_quad_count, u32 y_quad_count,
+internal GeneratedMesh
+generate_floor_mesh(TempMemory *temp_memory, u32 x_quad_count, u32 y_quad_count,
                     f32 max_height)
 {
+    GeneratedMesh result = {};
+
+    v2 floor_dim = V2(1, 1);
+
     f32 quad_width = floor_dim.x / (f32)x_quad_count;
     f32 quad_height = floor_dim.y / (f32)y_quad_count;
 
@@ -86,8 +106,8 @@ generate_floor_mesh(Entity *entity, MemoryArena *arena, v2 floor_dim, u32 x_quad
     u32 y_vertex_count = y_quad_count + 1;
     u32 total_vertex_count = x_vertex_count * y_vertex_count;
 
-    entity->vertex_count = total_vertex_count;
-    entity->vertices = push_array(arena, VertexPN, entity->vertex_count);
+    result.vertex_count = total_vertex_count;
+    result.vertices = push_array(temp_memory, VertexPN, result.vertex_count);
 
     u32 populated_vertex_count = 0;
     for(u32 y = 0;
@@ -107,17 +127,17 @@ generate_floor_mesh(Entity *entity, MemoryArena *arena, v2 floor_dim, u32 x_quad
 
             f32 pz = max_height * perlin_noise01(frequency*xf, frequency*yf, 0, frequency);
 
-            entity->vertices[populated_vertex_count].p = V3(px, py, pz);
-            entity->vertices[populated_vertex_count].n = V3(0, 0, 0);
+            result.vertices[populated_vertex_count].p = V3(px, py, pz);
+            result.vertices[populated_vertex_count].n = V3(0, 0, 0);
 
             populated_vertex_count++;
         }
     }
-    assert(populated_vertex_count == entity->vertex_count);
+    assert(populated_vertex_count == result.vertex_count);
 
     // three indices per triangle * 2 triangles per quad * total quad count
-    entity->index_count = 3 * 2 * (x_quad_count * y_quad_count);
-    entity->indices = push_array(arena, u32, entity->index_count);
+    result.index_count = 3 * 2 * (x_quad_count * y_quad_count);
+    result.indices = push_array(temp_memory, u32, result.index_count);
 
     u32 populated_index_count = 0;
     for(u32 y = 0;
@@ -141,36 +161,38 @@ generate_floor_mesh(Entity *entity, MemoryArena *arena, v2 floor_dim, u32 x_quad
             u32 i2 = i0 + x_quad_count + 1;
             u32 i3 = i2 + 1;
 
-            entity->indices[populated_index_count++] = i0;
-            entity->indices[populated_index_count++] = i1;
-            entity->indices[populated_index_count++] = i2;
+            result.indices[populated_index_count++] = i0;
+            result.indices[populated_index_count++] = i1;
+            result.indices[populated_index_count++] = i2;
 
-            entity->indices[populated_index_count++] = i1;
-            entity->indices[populated_index_count++] = i3;
-            entity->indices[populated_index_count++] = i2;
+            result.indices[populated_index_count++] = i1;
+            result.indices[populated_index_count++] = i3;
+            result.indices[populated_index_count++] = i2;
 
             // TODO(gh) properly calculate normals(normal histogram?)
-            v3 p0 = entity->vertices[i0].p;
-            v3 p1 = entity->vertices[i1].p;
-            v3 p2 = entity->vertices[i2].p;
-            v3 p3 = entity->vertices[i3].p;
+            v3 p0 = result.vertices[i0].p;
+            v3 p1 = result.vertices[i1].p;
+            v3 p2 = result.vertices[i2].p;
+            v3 p3 = result.vertices[i3].p;
 
             v3 first_normal = normalize(cross(p1-p0, p2-p0));
             v3 second_normal = normalize(cross(p2-p3, p1-p3));
 
-            entity->vertices[i0].n += first_normal;
-            entity->vertices[i1].n += first_normal + second_normal;
-            entity->vertices[i2].n += first_normal + second_normal;
+            result.vertices[i0].n += first_normal;
+            result.vertices[i1].n += first_normal + second_normal;
+            result.vertices[i2].n += first_normal + second_normal;
 
-            entity->vertices[i3].n = second_normal;
+            result.vertices[i3].n = second_normal;
         }
     }
-    assert(entity->index_count == populated_index_count);
+    assert(result.index_count == populated_index_count);
 
     for(u32 vertex_index = 0;
-            vertex_index < entity->vertex_count;
+            vertex_index < result.vertex_count;
             ++vertex_index)
     {
-        entity->vertices[vertex_index].n = normalize(entity->vertices[vertex_index].n);
+        result.vertices[vertex_index].n = normalize(result.vertices[vertex_index].n);
     }
+
+    return result;
 }

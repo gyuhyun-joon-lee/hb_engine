@@ -9,8 +9,6 @@
 #include "hb_font.h"
 #include "hb_shared_with_shader.h"
 #include "hb_render.h"
-#include "hb_collision.h"
-#include "hb_rigidbody.h"
 #include "hb_pbd.h"
 #include "hb_entity.h"
 #include "hb_fluid.h"
@@ -20,10 +18,9 @@
 #include "hb.h"
 
 #include "hb_ray.cpp"
-#include "hb_collision.cpp"
-#include "hb_rigidbody.cpp"
 #include "hb_noise.cpp"
 #include "hb_mesh_generation.cpp"
+#include "hb_pbd.cpp"
 #include "hb_entity.cpp"
 #include "hb_asset.cpp"
 #include "hb_render.cpp"
@@ -106,9 +103,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
 #endif
 
-        add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(0.25f, 0.1f, 0.04f), 1, 1, 0);
-        add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 10), 2.0f, V3(1, 0, 0), 10);
-        add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(5, 5, 6), 2.0f, V3(0, 1, 0), 5);
+        v2 temp = V2(0, 0);
+        v3 temp2 = V3(0, 0, 0);
+        add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
+        add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 15), V3(2, 2, 2), V3(1, 0, 0), 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+        add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 10), V3(2, 2, 2), V3(1, 0, 0), 0, EntityFlag_Collides);
+        // add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 10), 2.0f, V3(1, 0, 0), 10);
+        // add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(5, 5, 6), 2.0f, V3(0, 1, 0), 5);
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
@@ -122,7 +123,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                     fluid_cell_left_bottom_p, V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 
                                     fluid_cell_dim);
 
-        load_game_assets(&game_state->assets, platform_api, gpu_work_queue);
+        load_game_assets(&game_state->assets, &game_state->transient_arena, platform_api, gpu_work_queue);
 
         game_state->is_initialized = true;
     }
@@ -197,7 +198,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             {
             }break;
 
-            case EntityType_Sphere:
+            case EntityType_Cube:
             {
                 gathered_particle_groups->groups[gathered_particle_groups->count++] = 
                     entity->particle_group;
@@ -221,8 +222,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticle *particle = particle_pool->particles + particle_index;
 
             // TODO(gh) only using the gravity as external force
-            particle->velocity.z += platform_input->dt_per_frame * 9.8f;
+            if(particle->inv_mass != 0.0f)
+            {
+                particle->velocity.z -= platform_input->dt_per_frame * 9.8f;
+            }
             particle->proposed_position = particle->position + platform_input->dt_per_frame*particle->velocity;
+
+            // NOTE(gh) Also clear the delta position info, which will come
+            // from solving the constraints.
+            particle->d_position_sum = V3(0, 0, 0);
+            particle->constraint_hit_count = 0;
         }
     }
 
@@ -269,31 +278,18 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
+    // NOTE(gh) 1<=w<=2 works just fine
+    f32 over_relaxation_weight = 1.2f;
+
     // NOTE(gh) pre-stabilization, note that in this we should be using 
     // the _current position_ instead of the proposed position when
     // solving the collision constraints
     // TODO(gh) Not sure how much iteration is needed
+    // TODO(gh) Check if d_position_sum and constraint_hit_count for all the particles are initialized properly.
     for(u32 iter = 0;
             iter < 5;
             ++iter)
     {
-        // Initialize
-        for(u32 particle_group_index = 0;
-                particle_group_index < gathered_particle_groups->count;
-                ++particle_group_index)
-        {
-            PBDParticleGroup *group = gathered_particle_groups->groups + particle_group_index;
-
-            for(u32 particle_index = group->start_index;
-                    particle_index < group->one_past_end_index;
-                    ++particle_index)
-            {
-                PBDParticle *particle = particle_pool->particles + particle_index;
-                particle->d_position_sum = V3(0, 0, 0);
-                particle->constraint_hit_count = 0;
-            }
-        }
-
         for(u32 constraint_index = 0;
                 constraint_index < constraint_count;
                 ++constraint_index)
@@ -306,11 +302,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             v3 delta = particle0->position - particle1->position;
             f32 distance = length(delta);
             f32 lagrange_multiplier = (distance - (particle0->radius+particle1->radius)) / 2.0f;
+            f32 c = -lagrange_multiplier / distance;
 
-            particle0->d_position_sum += (-lagrange_multiplier * particle0->inv_mass / distance) * delta;
+            // TODO(gh) If the inv_mass is 0, avoid summing the d_position at all
+            // to avoid floating point precision issue?
+            particle0->d_position_sum += (c*particle0->inv_mass) * delta;
             particle0->constraint_hit_count++;
 
-            particle1->d_position_sum += (-lagrange_multiplier * particle1->inv_mass / distance) * (-delta);
+            particle1->d_position_sum += (c*particle1->inv_mass) * (-delta);
             particle1->constraint_hit_count++;
         }
 
@@ -326,38 +325,28 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     ++particle_index)
             {
                 PBDParticle *particle = particle_pool->particles + particle_index;
-                // NOTE(gh) 1<=w<=2 works just fine
-                f32 over_relaxation_weight = 1.2f;
-                v3 d_position = (over_relaxation_weight/particle->constraint_hit_count) * particle->d_position_sum;
 
-                particle->position += d_position;
-                particle->proposed_position += d_position;
+                if(particle->constraint_hit_count > 0)
+                {
+                    v3 d_position = (over_relaxation_weight/particle->constraint_hit_count) * particle->d_position_sum;
+
+                    particle->position += d_position;
+                    particle->proposed_position += d_position;
+
+                    // Re-clear 
+                    particle->d_position_sum = V3(0, 0, 0);
+                    particle->constraint_hit_count = 0;
+                }
             }
         }
     }
 
     // NOTE(gh) solve all the constraints
+    // TODO(gh) Check if d_position_sum and constraint_hit_count for all the particles are initialized properly.
     for(u32 iter = 0;
             iter < 5;
             ++iter)
     {
-        // Initialize
-        for(u32 particle_group_index = 0;
-                particle_group_index < gathered_particle_groups->count;
-                ++particle_group_index)
-        {
-            PBDParticleGroup *group = gathered_particle_groups->groups + particle_group_index;
-
-            for(u32 particle_index = group->start_index;
-                    particle_index < group->one_past_end_index;
-                    ++particle_index)
-            {
-                PBDParticle *particle = particle_pool->particles + particle_index;
-                particle->d_position_sum = V3(0, 0, 0);
-                particle->constraint_hit_count = 0;
-            }
-        }
-
         // NOTE(gh) Solve collision constraints
         for(u32 constraint_index = 0;
                 constraint_index < constraint_count;
@@ -392,10 +381,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             {
                 PBDParticle *particle = particle_pool->particles + particle_index;
 
-                f32 over_relaxation_weight = 1.2f;
-                v3 d_position = (over_relaxation_weight/particle->constraint_hit_count) * particle->d_position_sum;
+                if(particle->constraint_hit_count > 0)
+                {
+                    v3 d_position = (over_relaxation_weight/particle->constraint_hit_count) * particle->d_position_sum;
 
-                particle->proposed_position += d_position;
+                    particle->proposed_position += d_position;
+
+                    // Re-clear 
+                    particle->d_position_sum = V3(0, 0, 0);
+                    particle->constraint_hit_count = 0;
+                }
             }
         }
     }
@@ -418,7 +413,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             // NOTE(gh) particle sleeping to prevent micro stutter
             f32 epsilon = 0.00001f;
-            if(length_square(d_position) > epsilon)
+            if(length(d_position) > epsilon)
             {
                 particle->position = particle->proposed_position;
             }
@@ -524,15 +519,29 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #if 1
                 // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
-                          entity->position, entity->dim, entity->color, 
+                          entity->generic_entity_info.position, entity->generic_entity_info.dim, entity->color, 
                           AssetTag_FloorMesh,
-                          &game_state->assets, gpu_work_queue,  
-                          entity->vertices, entity->vertex_count, entity->indices, entity->index_count,
+                          &game_state->assets,  
                           false);
 #endif
             }break;
-            case EntityType_AABB:
+
             case EntityType_Cube:
+            {
+                for(u32 particle_index = entity->particle_group.start_index;
+                        particle_index < entity->particle_group.one_past_end_index;
+                        ++particle_index)
+                {
+                    PBDParticle *particle = game_state->particle_pool.particles + particle_index;
+                    v3 particle_dim = particle->radius * V3(1, 1, 1);
+
+                    push_mesh_pn(platform_render_push_buffer, 
+                                  particle->position, particle_dim, entity->color, 
+                                  AssetTag_SphereMesh, &game_state->assets, 
+                                  true);
+                }
+            }break;
+
             case EntityType_Sphere:
             {
 #if 0

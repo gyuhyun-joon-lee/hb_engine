@@ -273,6 +273,7 @@ THREAD_WORK_CALLBACK(thread_optimized_raycast_straight_down_z_to_non_overlapping
     }
 }
 
+#if 0
 // TODO(gh) Later we would want to minimize passing the platform buffer here
 // TODO(gh) pass center & dim, instead of min & max?
 internal void
@@ -357,7 +358,7 @@ init_grass_grid(ThreadWorkQueue *general_work_queue, ThreadWorkQueue *gpu_work_q
             data->p1 = p1;
             data->p2 = p2;
             data->simd_vertex_count = simd_vertex_count;
-            data->mesh_offset_p = floor->position;
+            data->mesh_offset_p = floor->generic_entity_info.position;
             data->floor_z_buffer = grass_grid->floor_z_buffer.memory;
 
             general_work_queue->add_thread_work_queue_item(general_work_queue, thread_optimized_raycast_straight_down_z_to_non_overlapping_mesh, 0, data);
@@ -369,6 +370,7 @@ init_grass_grid(ThreadWorkQueue *general_work_queue, ThreadWorkQueue *gpu_work_q
 
     grass_grid->grass_instance_data_buffer = get_gpu_visible_buffer(gpu_work_queue, sizeof(GrassInstanceData)*total_grass_count);
 }
+#endif
 
 internal void
 init_render_push_buffer(PlatformRenderPushBuffer *render_push_buffer, Camera *render_camera, Camera *game_camera,  
@@ -471,12 +473,8 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
 
 internal void
 push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
-            AssetTag tag, 
-            GameAssets *asset, ThreadWorkQueue *gpu_work_queue, 
-              VertexPN *vertices, u32 vertex_count, u32 *indices, u32 index_count, 
-              b32 should_cast_shadow)
+            AssetTag tag, GameAssets *asset, b32 should_cast_shadow)
 {
-    TIMED_BLOCK();
     RenderEntryMeshPN *entry = push_render_element(render_push_buffer, RenderEntryMeshPN);
 
     entry->header.type = RenderEntryType_MeshPN;
@@ -484,8 +482,7 @@ push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 colo
 
     // TODO(gh) entity should not have vertices directly, the asset system should be able to 
     // get the vertex and index information using tag and match vector
-    MeshAsset *mesh_asset = get_mesh_asset(asset, gpu_work_queue, tag, 
-                                            vertices, vertex_count, indices, index_count);
+    MeshAsset *mesh_asset = get_mesh_asset(asset, tag);
     entry->vertex_buffer_handle = mesh_asset->vertex_buffer.handle;
     entry->vertex_count = mesh_asset->vertex_count;
     entry->index_buffer_handle = mesh_asset->index_buffer.handle;

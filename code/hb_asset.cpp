@@ -64,37 +64,46 @@ get_gpu_visible_buffer(ThreadWorkQueue *gpu_work_queue, u64 size)
     return result;
 }
 
-internal Asset *
-get_tag_based_asset(GameAssets *assets, ThreadWorkQueue *gpu_work_queue,
-                    AssetTag tag)
-{
-    Asset *result = 0;
-
-    // TODO(gh) Using a simple for loop here, but can be speed up using
-    // different search scheme
-    for(u32 asset_index = 0;
-            asset_index < assets->asset_count;
-            ++asset_index)
-    {
-        Asset *asset = assets->assets + asset_index;
-        if(asset->tag == tag)
-        {
-            result = asset;
-            break;
-        }
-    }
-
-    assert(result);
-
-    return result;
-}
-
 // TODO(gh) Only loads VertexPN vertices
-internal MeshAsset *
-get_mesh_asset(GameAssets *asset, ThreadWorkQueue *gpu_work_queue, 
+internal void
+load_mesh_asset(GameAssets *assets, ThreadWorkQueue *gpu_work_queue, 
                 AssetTag tag,
                 VertexPN *vertices, u32 vertex_count, 
                 u32 *indices, u32 index_count)
+{
+    // NOTE(gh) Couldn't find the asset that was already loaded,
+    // so need to load a new asset
+
+    MeshAsset *asset = assets->mesh_assets + assets->populated_mesh_asset++;
+    assert(assets->populated_mesh_asset <= array_count(assets->mesh_assets));
+
+    // NOTE(gh) Load the vertex buffer
+    {
+        u64 vertex_buffer_size = sizeof(vertices[0])*vertex_count;
+        asset->vertex_buffer = get_gpu_visible_buffer(gpu_work_queue, vertex_buffer_size);
+
+        memcpy(asset->vertex_buffer.memory, vertices, vertex_buffer_size);
+        flush_gpu_visible_buffer(&asset->vertex_buffer);
+
+        asset->vertex_count = vertex_count;
+    }
+     
+    // NOTE(gh) Load the index buffer
+    {
+        u64 index_buffer_size = sizeof(indices[0])*index_count;
+        asset->index_buffer = get_gpu_visible_buffer(gpu_work_queue, index_buffer_size);
+
+        memcpy(asset->index_buffer.memory, indices, index_buffer_size);
+        flush_gpu_visible_buffer(&asset->index_buffer);
+
+        asset->index_count = index_count;
+    }
+
+    asset->tag = tag;
+}
+
+internal MeshAsset *
+get_mesh_asset(GameAssets *asset, AssetTag tag)
 {
     MeshAsset *result = 0;
 
@@ -109,38 +118,7 @@ get_mesh_asset(GameAssets *asset, ThreadWorkQueue *gpu_work_queue,
             break;
         }
     }
-
-    if(!result)
-    {
-        // NOTE(gh) Couldn't find the asset that was already loaded,
-        // so need to load a new asset
-
-        result = asset->mesh_assets + asset->populated_mesh_asset++;
-
-        // NOTE(gh) Load the vertex buffer
-        {
-            u64 vertex_buffer_size = sizeof(vertices[0])*vertex_count;
-            result->vertex_buffer = get_gpu_visible_buffer(gpu_work_queue, vertex_buffer_size);
-
-            memcpy(result->vertex_buffer.memory, vertices, vertex_buffer_size);
-            flush_gpu_visible_buffer(&result->vertex_buffer);
-
-            result->vertex_count = vertex_count;
-        }
-         
-        // NOTE(gh) Load the index buffer
-        {
-            u64 index_buffer_size = sizeof(indices[0])*index_count;
-            result->index_buffer = get_gpu_visible_buffer(gpu_work_queue, index_buffer_size);
-
-            memcpy(result->index_buffer.memory, indices, index_buffer_size);
-            flush_gpu_visible_buffer(&result->index_buffer);
-
-            result->index_count = index_count;
-        }
-
-        result->tag = tag;
-    }
+    assert(result);
 
     return result;
 }
@@ -238,15 +216,12 @@ add_glyph_asset(LoadFontInfo *load_font_info, ThreadWorkQueue *gpu_work_queue, u
 }
 
 // TODO(gh) 'stream' assets?
-// TODO(gh) This is pretty much it when we need the mtldevice for resource allocations,
-// but can we abstract this even further?
 internal void
-load_game_assets(GameAssets *assets, PlatformAPI *platform_api, ThreadWorkQueue *gpu_work_queue)
+load_game_assets(GameAssets *assets, MemoryArena *arena, PlatformAPI *platform_api, ThreadWorkQueue *gpu_work_queue)
 {
-#if 0
-    load_font("/Users/mekalopo/Library/Fonts/LiberationMono-Regular.ttf",
-                platform_api, device, &assets->font_asset, ' ', '~');
-#endif
+    /*
+        NOTE(gh) Load font assets
+    */
     u32 max_glyph_count = 2048;
     LoadFontInfo load_font_info = {};
 
@@ -268,6 +243,21 @@ load_game_assets(GameAssets *assets, PlatformAPI *platform_api, ThreadWorkQueue 
         add_glyph_asset(&load_font_info, gpu_work_queue, 0x30b8);
     }
     end_load_font(&load_font_info);
+
+    /*
+        NOTE(gh) Load mesh assets
+    */
+    TempMemory asset_memory = start_temp_memory(arena, megabytes(128));
+    GeneratedMesh sphere_mesh = generate_sphere_mesh(&asset_memory, 1.0f, 256, 128);
+    load_mesh_asset(assets, gpu_work_queue, AssetTag_SphereMesh, 
+                    sphere_mesh.vertices, sphere_mesh.vertex_count, 
+                    sphere_mesh.indices, sphere_mesh.index_count);
+
+    GeneratedMesh floor_mesh = generate_floor_mesh(&asset_memory, 1, 1, 0);
+    load_mesh_asset(assets, gpu_work_queue, AssetTag_FloorMesh, 
+                    floor_mesh.vertices, floor_mesh.vertex_count, 
+                    floor_mesh.indices, floor_mesh.index_count);
+    end_temp_memory(&asset_memory);
 }
 
 internal f32

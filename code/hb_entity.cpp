@@ -4,6 +4,18 @@
 
 #include "hb_entity.h"
 
+internal b32
+is_entity_flag_set(u32 flags, EntityFlag flag)
+{
+    b32 result = false;
+    if(flags & flag)
+    {
+        result = true;
+    }
+    
+    return result;
+}
+
 internal Entity *
 add_entity(GameState *game_state, EntityType type, u32 flags)
 {
@@ -84,32 +96,80 @@ internal Entity *
 add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count,
                  f32 max_height)
 {
-    Entity *result = add_entity(game_state, EntityType_Floor, Entity_Flag_Collides);
+    Entity *result = add_entity(game_state, EntityType_Floor, EntityFlag_Collides);
 
     // This is render p and dim, not the acutal dim
-    result->position = center; 
-    result->dim = V3(1, 1, 1);
+    result->generic_entity_info.position = center; 
+    result->generic_entity_info.dim = V3(dim, 1);
 
     result->color = color;
-    result->x_quad_count = x_quad_count;
-    result->y_quad_count = y_quad_count;
-
-    generate_floor_mesh(result, arena, dim, x_quad_count, y_quad_count, max_height);
 
     return result;
 }
 
 internal Entity *
-add_rigid_body_sphere_entity(GameState *game_state, MemoryArena *arena, v3 center, f32 radius, v3 color, f32 mass)
+add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 color, f32 inv_mass, u32 flags)
 {
-    Entity *result = add_entity(game_state, EntityType_Sphere, Entity_Flag_Collides);
+    Entity *result = add_entity(game_state, EntityType_Cube, flags);
 
-    result->position = center;
-    result->dim = radius*V3(1, 1, 1);
     result->color = color;
     result->should_cast_shadow = true;
 
-    generate_sphere_mesh(result, arena, 1.0f, 256, 128);
+    // TODO(gh) Granularity of the particles?
+    f32 particle_radius = 1.0f;
+    f32 particle_diameter = 2.0f*particle_radius;
+    u32 particle_x_count = ceil_f32_to_u32(dim.x / particle_diameter);
+    u32 particle_y_count = ceil_f32_to_u32(dim.y / particle_diameter);
+    u32 particle_z_count = ceil_f32_to_u32(dim.z / particle_diameter);
+
+    u32 total_particle_count = particle_x_count *
+                               particle_y_count *
+                               particle_z_count;
+
+    f32 inv_particle_mass = total_particle_count*inv_mass;
+
+    result->particle_group = initialize_pbd_particle_group(&game_state->particle_pool, total_particle_count);
+
+    // TODO(gh) This is only for the cube, but we want a generic voxelizing routine
+    // for every mesh
+
+    // NOTE(gh) This complicated equation comes from the fact that the 'center' should be different 
+    // based on whether the particle count was even or odd.
+    v3 left_bottom_particle_center = 
+        center - particle_diameter * V3((particle_x_count-1)/2.0f,
+                                      (particle_y_count-1)/2.0f,
+                                      (particle_z_count-1)/2.0f);
+    u32 z_index = 0;
+    for(u32 z = 0;
+            z < particle_z_count;
+            ++z)
+    {
+        u32 y_index = 0;
+        for(u32 y = 0;
+                y < particle_y_count;
+                ++y)
+        {
+            for(u32 x = 0;
+                    x < particle_x_count;
+                    ++x)
+            {
+                PBDParticle *particle = game_state->particle_pool.particles + 
+                                        result->particle_group.start_index + 
+                                        x + y_index + z_index;
+
+                particle->position = left_bottom_particle_center + particle_radius*V3(x, y, z);
+                particle->velocity = V3(0, 0, 0);
+                particle->radius = particle_radius;
+                particle->inv_mass = inv_particle_mass;
+                // TODO(gh) Not using the phase value for now
+                particle->phase = 0;
+            }
+
+            y_index += particle_x_count;
+        }
+
+        z_index += particle_x_count*particle_y_count;
+    }
 
     return result;
 }

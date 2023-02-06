@@ -17,9 +17,17 @@ enum EntityType
 
 enum EntityFlag
 {
-    Entity_Flag_Null = 0,
-    Entity_Flag_Movable = 2,
-    Entity_Flag_Collides = 4,
+    EntityFlag_Null = 0,
+    EntityFlag_Movable = 2,
+    EntityFlag_Collides = 4,
+};
+
+// TODO(gh) For some entities such as rigid body or pbd based entities
+// this structure _useless_
+struct GenericEntityInfo
+{
+    v3 position;
+    v3 dim;
 };
 
 struct Entity
@@ -28,23 +36,13 @@ struct Entity
     EntityType type;
     u32 flags;
 
-    v3 position; 
-    v3 dim;
+    GenericEntityInfo generic_entity_info;
+
     v3 color;
 
     b32 should_cast_shadow;
 
-    VertexPN *vertices;
-    u32 vertex_count;
-    // TODO(gh) We don't really need to hold the indices, 
-    // as long as we have the cpu-visible index buffer and the offset.
-    // For the ray cast, we can use the same buffer.
-    u32 *indices; 
-    u32 index_count;
-
-    u32 x_quad_count;
-    u32 y_quad_count;
-
+    // TODO(gh) Don't need this for all of the entities, too... 
     PBDParticleGroup particle_group;
 };
 

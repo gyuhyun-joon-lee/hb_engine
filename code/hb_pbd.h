@@ -15,10 +15,11 @@ struct PBDParticle
     // but there might be workaround for this!
     f32 radius;
 
-    float inv_mass;
+    f32 inv_mass;
+
     // NOTE(gh) Used for grouping particles. i.e particles in the same object would have the same phase, 
     // preventing them from colliding each other
-    int phase; 
+    i32 phase; 
 
     /*
         NOTE(gh) Temporary varaibles, should be cleared to 0 each frame
@@ -34,13 +35,14 @@ struct PBDParticle
 // (from start_index to one_past_end_index-1)
 struct PBDParticleGroup
 {
-    // Entity *entity;
+    // TODO(gh) Used for entity flag, but can we remove this?
     u32 start_index;
     u32 one_past_end_index;
 };
 
 struct PBDParticlePool
 {
+    // TODO(gh) Probably not a good idea...
     PBDParticle particles[4096];
     u32 particle_count;
 };

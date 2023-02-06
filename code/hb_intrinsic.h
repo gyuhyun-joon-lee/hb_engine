@@ -122,6 +122,12 @@ round_f32_to_u32(f32 value)
     return (u32)roundf(value);
 }
 
+inline u32
+ceil_f32_to_u32(f32 value)
+{
+    return (u32)ceilf(value);
+}
+
 inline f32
 floor_f32(f32 value)
 {

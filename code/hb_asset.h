@@ -100,25 +100,9 @@ struct LoadFontInfo
     f32 desired_font_height_px;
 };
 
-struct Asset
-{
-    AssetTag tag;
-    f32 value;
-
-    union
-    {
-        MeshAsset mesh_asset;
-        TextureAsset2D texture_asset;
-        GlyphAsset glyph_asset;
-    };
-};
-
 struct GameAssets
 {
     FontAsset debug_font_asset;
-
-    u32 asset_count;
-    Asset assets[512];
 
     // TODO(gh) Generalize this!!!
     u32 populated_mesh_asset;
