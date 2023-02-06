@@ -54,10 +54,10 @@ struct GatheredPBDParticleGroups
     u32 count;
 };
 
-struct FixedPointConstraint
+struct FixedPositionConstraint
 {
-    u32 particle_index;
-    v3 position; // world space
+    u32 index;
+    v3 fixed_position; // world space
 };
 
 /*
@@ -68,7 +68,6 @@ struct CollisionConstraint
 {
     u32 index0;
     u32 index1;
-
     // r0 and r1 can be retrieved from the particle directly
 };
 

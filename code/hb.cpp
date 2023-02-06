@@ -103,13 +103,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
 #endif
 
-        v2 temp = V2(0, 0);
-        v3 temp2 = V3(0, 0, 0);
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
         add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 15), V3(2, 2, 2), V3(1, 0, 0), 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
         add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 10), V3(4, 4, 4), V3(1, 1, 0), 0, EntityFlag_Collides);
-        // add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(0, 0, 10), 2.0f, V3(1, 0, 0), 10);
-        // add_rigid_body_sphere_entity(game_state, &game_state->transient_arena, V3(5, 5, 6), 2.0f, V3(0, 1, 0), 5);
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
@@ -117,7 +113,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         i32 fluid_cell_count_z = 16;
         f32 fluid_cell_dim = 12;
         v3 fluid_cell_left_bottom_p = V3(-fluid_cell_dim*fluid_cell_count_x/2, -fluid_cell_dim*fluid_cell_count_y/2, 0);
-        // v3 fluid_cell_left_bottom_p = V3(0, 0, 0);
 
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, gpu_work_queue,
                                     fluid_cell_left_bottom_p, V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 
@@ -299,16 +294,22 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticle *particle0 = particle_pool->particles + constraint->index0;
             PBDParticle *particle1 = particle_pool->particles + constraint->index1;
 
-            v3 d = solve_collision_constraint(particle0->position, particle0->radius, 
-                                              particle1->position, particle1->radius);
+            v3 delta = particle0->position - particle1->position;
+            f32 distance_between = length(delta);
+            f32 constraint_value = distance_between - (particle0->radius + particle1->radius);
 
-            // TODO(gh) If the inv_mass is 0, avoid summing the d_position at all
-            // to avoid floating point precision issue?
-            particle0->d_position_sum += particle0->inv_mass * d;
-            particle0->constraint_hit_count++;
+            if(constraint_value < 0) // Inequality constraint
+            {
+                v3 d = project_collision_constraint(delta, distance_between, constraint_value);
 
-            particle1->d_position_sum += particle1->inv_mass * -d;
-            particle1->constraint_hit_count++;
+                // TODO(gh) If the inv_mass is 0, avoid summing the d_position at all
+                // to avoid floating point precision issue?
+                particle0->d_position_sum += particle0->inv_mass * d;
+                particle0->constraint_hit_count++;
+
+                particle1->d_position_sum += particle1->inv_mass * -d;
+                particle1->constraint_hit_count++;
+            }
         }
 
         // update both position & proposed position
@@ -355,16 +356,22 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticle *particle0 = particle_pool->particles + constraint->index0;
             PBDParticle *particle1 = particle_pool->particles + constraint->index1;
 
-            v3 d = solve_collision_constraint(particle0->proposed_position, particle0->radius, 
-                                              particle1->proposed_position, particle1->radius);
+            v3 delta = particle0->proposed_position - particle1->proposed_position;
+            f32 distance_between = length(delta);
+            f32 constraint_value = distance_between - (particle0->radius + particle1->radius);
 
-            // TODO(gh) If the inv_mass is 0, avoid summing the d_position at all
-            // to avoid floating point precision issue?
-            particle0->d_position_sum += particle0->inv_mass * d;
-            particle0->constraint_hit_count++;
+            if(constraint_value < 0)
+            {
+                v3 d = project_collision_constraint(delta, distance_between, constraint_value);
 
-            particle1->d_position_sum += particle1->inv_mass * -d;
-            particle1->constraint_hit_count++;
+                // TODO(gh) If the inv_mass is 0, avoid summing the d_position at all
+                // to avoid floating point precision issue?
+                particle0->d_position_sum += particle0->inv_mass * d;
+                particle0->constraint_hit_count++;
+
+                particle1->d_position_sum += particle1->inv_mass * -d;
+                particle1->constraint_hit_count++;
+            }
         }
 
         // NOTE(gh) Update only the proposed position
