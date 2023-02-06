@@ -222,7 +222,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticle *particle = particle_pool->particles + particle_index;
 
             // TODO(gh) only using the gravity as external force
-            if(particle->inv_mass != 0.0f)
+            if(!compare_with_epsilon(particle->inv_mass, 0.0f))
             {
                 particle->velocity.z -= platform_input->dt_per_frame * 9.8f;
             }
@@ -299,17 +299,15 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticle *particle0 = particle_pool->particles + constraint->index0;
             PBDParticle *particle1 = particle_pool->particles + constraint->index1;
 
-            v3 delta = particle0->position - particle1->position;
-            f32 distance = length(delta);
-            f32 lagrange_multiplier = (distance - (particle0->radius+particle1->radius)) / 2.0f;
-            f32 c = -lagrange_multiplier / distance;
+            v3 d = solve_collision_constraint(particle0->position, particle0->radius, 
+                                              particle1->position, particle1->radius);
 
             // TODO(gh) If the inv_mass is 0, avoid summing the d_position at all
             // to avoid floating point precision issue?
-            particle0->d_position_sum += (c*particle0->inv_mass) * delta;
+            particle0->d_position_sum += particle0->inv_mass * d;
             particle0->constraint_hit_count++;
 
-            particle1->d_position_sum += (c*particle1->inv_mass) * (-delta);
+            particle1->d_position_sum += particle1->inv_mass * -d;
             particle1->constraint_hit_count++;
         }
 
@@ -357,14 +355,15 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticle *particle0 = particle_pool->particles + constraint->index0;
             PBDParticle *particle1 = particle_pool->particles + constraint->index1;
 
-            v3 delta_between = particle0->proposed_position - particle1->proposed_position;
-            f32 distance = length(delta_between);
-            f32 lagrange_multiplier = (distance - (particle0->radius+particle1->radius)) / 2.0f;
+            v3 d = solve_collision_constraint(particle0->proposed_position, particle0->radius, 
+                                              particle1->proposed_position, particle1->radius);
 
-            particle0->d_position_sum += (-lagrange_multiplier * particle0->inv_mass / distance) * delta_between;
+            // TODO(gh) If the inv_mass is 0, avoid summing the d_position at all
+            // to avoid floating point precision issue?
+            particle0->d_position_sum += particle0->inv_mass * d;
             particle0->constraint_hit_count++;
 
-            particle1->d_position_sum += (-lagrange_multiplier * particle1->inv_mass / distance) * (-delta_between);
+            particle1->d_position_sum += particle1->inv_mass * -d;
             particle1->constraint_hit_count++;
         }
 
