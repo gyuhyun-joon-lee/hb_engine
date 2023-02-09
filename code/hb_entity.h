@@ -13,6 +13,7 @@ enum EntityType
     EntityType_Sphere,
     EntityType_Cube,
     EntityType_Grass,
+    EntityType_SoftBody,
 };
 
 enum EntityFlag

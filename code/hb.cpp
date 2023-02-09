@@ -107,6 +107,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 50), V3(2, 2, 2), V3(1, 0, 0), 1/1.0f, EntityFlag_Movable|EntityFlag_Collides);
         add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 10), V3(4, 4, 4), V3(1, 1, 0), 0, EntityFlag_Collides);
 
+        add_pbd_soft_body_tetrahedron_entity(game_state, V3(0, 0, 0), V3(5, 0, 0), V3(0, 5, 0), V3(0, 0, 5),
+                                             V3(0, 0.2f, 1), 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
         i32 fluid_cell_count_y = 16;
@@ -173,6 +176,63 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         render_camera->p += -camera_speed*camera_right_dir;
     }
 
+    for(u32 entity_index = 0;
+            entity_index < game_state->entity_count;
+            ++entity_index)
+    {
+        Entity *entity = game_state->entities + entity_index;
+        PBDParticleGroup *group = &entity->particle_group;
+
+        switch(entity->type)
+        {
+            case EntityType_SoftBody:
+            {
+                // Pre solve
+                for(u32 particle_index = 0;
+                        particle_index < group->count;
+                        ++particle_index)
+                {
+                    PBDParticle *particle = group->particles + particle_index;
+                    if(particle->inv_mass > 0.0f)
+                    {
+                        particle->v += platform_input->dt_per_frame * V3(0, 0, 9.8f);
+
+                        particle->prev_p = particle->p;
+
+                        particle->p = platform_input->dt_per_frame * particle->v;
+
+                        if(particle->p.z < 0.0f)
+                        {
+                            // Revert to the previous position,
+                            // and set the z value to 0
+                            particle->p = particle->prev_p;
+                            particle->p.z = 0.0f;
+                        }
+                    }
+                }
+
+                // Solve
+                // TODO: Solve every edge length constraints
+
+                // TODO: Solve every volume constraints
+
+                // Post solve
+                for(u32 particle_index = 0;
+                        particle_index < group->count;
+                        ++particle_index)
+                {
+                    PBDParticle *particle = group->particles + particle_index;
+
+                    if(particle->inv_mass > 0.0f)
+                    {
+                        particle->v = (particle->p - particle->prev_p) / platform_input->dt_per_frame;
+                    }
+                }
+            }break;
+        }
+    }
+
+#if 0
     TempMemory pbd_memory = start_temp_memory(&game_state->transient_arena, kilobytes(512), true);
     GatheredPBDParticleGroups *gathered_particle_groups = push_struct(&pbd_memory, GatheredPBDParticleGroups);
     gathered_particle_groups->count = 0;
@@ -211,7 +271,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         PBDParticleGroup *group = gathered_particle_groups->groups + particle_group_index;
 
         for(u32 particle_index = group->start_index;
-                particle_index < group->one_past_end_index;
+                particle_index < group->one_past_last_index;
                 ++particle_index)
         {
             PBDParticle *particle = particle_pool->particles + particle_index;
@@ -241,7 +301,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         PBDParticleGroup *group = gathered_particle_groups->groups + particle_group_index;
 
         for(u32 particle_index = group->start_index;
-                particle_index < group->one_past_end_index;
+                particle_index < group->one_past_last_index;
                 ++particle_index)
         {
             PBDParticle *particle = particle_pool->particles + particle_index;
@@ -256,7 +316,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 PBDParticleGroup *test_group = gathered_particle_groups->groups + test_particle_group_index;
 
                 for(u32 test_particle_index = test_group->start_index;
-                        test_particle_index < test_group->one_past_end_index;
+                        test_particle_index < test_group->one_past_last_index;
                         ++test_particle_index)
                 {
                     PBDParticle *test_particle = particle_pool->particles + test_particle_index;
@@ -289,7 +349,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         PBDParticleGroup *group = gathered_particle_groups->groups + particle_group_index;
 
         for(u32 particle_index = group->start_index;
-                particle_index < group->one_past_end_index;
+                particle_index < group->one_past_last_index;
                 ++particle_index)
         {
             PBDParticle *particle = particle_pool->particles + particle_index;
@@ -370,7 +430,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticleGroup *group = gathered_particle_groups->groups + particle_group_index;
 
             for(u32 particle_index = group->start_index;
-                    particle_index < group->one_past_end_index;
+                    particle_index < group->one_past_last_index;
                     ++particle_index)
             {
                 PBDParticle *particle = particle_pool->particles + particle_index;
@@ -450,7 +510,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticleGroup *group = gathered_particle_groups->groups + particle_group_index;
 
             for(u32 particle_index = group->start_index;
-                    particle_index < group->one_past_end_index;
+                    particle_index < group->one_past_last_index;
                     ++particle_index)
             {
                 PBDParticle *particle = particle_pool->particles + particle_index;
@@ -477,7 +537,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         PBDParticleGroup *group = gathered_particle_groups->groups + particle_group_index;
 
         for(u32 particle_index = group->start_index;
-                particle_index < group->one_past_end_index;
+                particle_index < group->one_past_last_index;
                 ++particle_index)
         {
             PBDParticle *particle = particle_pool->particles + particle_index;
@@ -495,6 +555,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     end_temp_memory(&pbd_memory);
+#endif
 
     FluidCubeMAC *fluid_cube = &game_state->fluid_cube_mac;
     update_fluid_cube_mac(fluid_cube, &game_state->transient_arena, thread_work_queue, platform_input->dt_per_frame);
@@ -602,8 +663,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             case EntityType_Cube:
             {
+#if 0
                 for(u32 particle_index = entity->particle_group.start_index;
-                        particle_index < entity->particle_group.one_past_end_index;
+                        particle_index < entity->particle_group.one_past_last_index;
                         ++particle_index)
                 {
                     PBDParticle *particle = game_state->particle_pool.particles + particle_index;
@@ -614,6 +676,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                   AssetTag_SphereMesh, &game_state->assets, 
                                   true);
                 }
+#endif
             }break;
 
             case EntityType_Sphere:

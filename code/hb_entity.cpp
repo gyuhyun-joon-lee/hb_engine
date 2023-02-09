@@ -4,6 +4,9 @@
 
 #include "hb_entity.h"
 
+// TODO(gh) Fixed particle radius, make this dynamic(might sacrifice stability)
+#define particle_radius 1.0f
+
 internal b32
 is_entity_flag_set(u32 flags, EntityFlag flag)
 {
@@ -115,8 +118,6 @@ add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 colo
     result->color = color;
     result->should_cast_shadow = true;
 
-    // TODO(gh) Granularity of the particles?
-    f32 particle_radius = 1.0f;
     f32 particle_diameter = 2.0f*particle_radius;
     u32 particle_x_count = ceil_f32_to_u32(dim.x / particle_diameter);
     u32 particle_y_count = ceil_f32_to_u32(dim.y / particle_diameter);
@@ -128,10 +129,7 @@ add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 colo
 
     f32 inv_particle_mass = total_particle_count*inv_mass;
 
-    result->particle_group = initialize_pbd_particle_group(&game_state->particle_pool, total_particle_count);
-
-    // TODO(gh) This is only for the cube, but we want a generic voxelizing routine
-    // for every mesh
+    start_particle_allocation_from_pool(&game_state->particle_pool, &result->particle_group);
 
     // NOTE(gh) This complicated equation comes from the fact that the 'center' should be different 
     // based on whether the particle count was even or odd.
@@ -153,16 +151,11 @@ add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 colo
                     x < particle_x_count;
                     ++x)
             {
-                PBDParticle *particle = game_state->particle_pool.particles + 
-                                        result->particle_group.start_index + 
-                                        x + y_index + z_index;
-
-                particle->p = left_bottom_particle_center + particle_diameter*V3(x, y, z);
-                particle->v = V3(0, 0, 0);
-                particle->r = particle_radius;
-                particle->inv_mass = inv_particle_mass;
-                // TODO(gh) Not using the phase value for now
-                particle->phase = 0;
+                allocate_particle_from_pool(&game_state->particle_pool, 
+                                            left_bottom_particle_center + particle_diameter*V3(x, y, z),
+                                            V3(0, 0, 0),
+                                            particle_radius,
+                                            inv_particle_mass);
             }
 
             y_index += particle_x_count;
@@ -171,6 +164,64 @@ add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 colo
         z_index += particle_x_count*particle_y_count;
     }
 
+    end_particle_allocation_from_pool(&game_state->particle_pool, &result->particle_group);
+
     return result;
 }
+
+
+// bottom 3 point should be in counter clockwise order
+internal Entity *
+add_pbd_soft_body_tetrahedron_entity(GameState *game_state, 
+                                v3 bottom_p0, v3 bottom_p1, v3 bottom_p2, v3 top,
+                                v3 color, f32 inv_mass, u32 flags)
+{
+    Entity *result = add_entity(game_state, EntityType_SoftBody, flags);
+
+    f32 inv_particle_mass = 4 * inv_mass;
+
+    start_particle_allocation_from_pool(&game_state->particle_pool, &result->particle_group);
+
+    allocate_particle_from_pool(&game_state->particle_pool, 
+                                bottom_p0,
+                                V3(0, 0, 0),
+                                particle_radius,
+                                inv_particle_mass);
+
+    allocate_particle_from_pool(&game_state->particle_pool, 
+                                bottom_p1,
+                                V3(0, 0, 0),
+                                particle_radius,
+                                inv_particle_mass);
+
+    allocate_particle_from_pool(&game_state->particle_pool, 
+                                bottom_p2,
+                                V3(0, 0, 0),
+                                particle_radius,
+                                inv_particle_mass);
+
+    allocate_particle_from_pool(&game_state->particle_pool, 
+                                top,
+                                V3(0, 0, 0),
+                                particle_radius,
+                                inv_particle_mass);
+
+    end_particle_allocation_from_pool(&game_state->particle_pool, &result->particle_group);
+
+    return result;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

@@ -25,19 +25,16 @@ struct PBDParticle
         NOTE(gh) Temporary varaibles, should be cleared to 0 each frame
     */
     // TODO(gh) Might not be necessary(i.e don't store velocity, and get it implicitly each frame?)
-    v3 proposed_p; 
+    v3 prev_p;
     v3 d_p_sum;
     u32 constraint_hit_count;
 };
 
-// Every particle group uses the same particle 'pool',
-// and each particle can be attrived using the index
-// (from start_index to one_past_end_index-1)
 struct PBDParticleGroup
 {
-    // TODO(gh) Used for entity flag, but can we remove this?
-    u32 start_index;
-    u32 one_past_end_index;
+    // particles should be laid out sequentially
+    PBDParticle *particles;
+    u32 count;
 };
 
 struct PBDParticlePool
@@ -45,6 +42,9 @@ struct PBDParticlePool
     // TODO(gh) Probably not a good idea...
     PBDParticle particles[4096];
     u32 count;
+
+    // NOTE(gh) true = other entity is using the pool to allocate it's particles
+    b32 being_used_to_allocate;
 };
 
 // TODO(gh) Can only gather certain amount of particle groups
@@ -198,6 +198,37 @@ struct DistanceConstraint
         {
             particle[i].position = particle[i].proposed_position;
         }
+    }
+*/
+
+/*
+   https://box2d.org/files/ErinCatto_IterativeDynamics_GDC2005.pdf
+   NOTE(gh) Getting the derivate of the equality constraint C(x1, q1, x2, q2)
+   By the chain rule of differentiation,
+   derivative of C = Jacobian matrix * V, where V is [V1 W1 V2 W2]
+
+   Let's take a distance constraint as an example.
+   C = 
+
+   for(i = 1 to s do)
+   {
+        // index0 and index1 are the IDs to the rigid body
+        u32 index0 = Jmap(i,1) 
+        u32 index1 = Jmap(i,2) 
+        f32 sum = 0.0f;
+
+        // Constraint might involve just one rigid body
+        // which will make one of the Jacobian vector 0,
+        // which helps us saving some multiplcations
+        if(both b1 and b2 is valid) 
+        {
+        // V(b) = [V W] = [Vx Vy Vz Wx Wy Wz], where V is linear velocity & W is angular velocity 
+        sum += J(i,1)V(b1)
+        }
+
+        sum = J(i,2)V(b2)
+
+        c_derivative(i) = sum;
     }
 */
 

@@ -1,25 +1,45 @@
 #include "hb_pbd.h"
 
-internal PBDParticleGroup
-initialize_pbd_particle_group(PBDParticlePool *pool, u32 desired_count)
+internal void
+start_particle_allocation_from_pool(PBDParticlePool *pool, PBDParticleGroup *group)
 {
-    PBDParticleGroup result = {};
+    assert(!pool->being_used_to_allocate);
 
-    u32 max_particle_count = array_count(pool->particles);
+    pool->being_used_to_allocate = true;
+    group->particles = pool->particles;
+    group->count = pool->count; // temporary store the count
+}
 
-    if(pool->count + desired_count <= max_particle_count)
-    {
-        result.start_index = pool->count;
-        pool->count += desired_count;
-        result.one_past_end_index = pool->count;
-    }
-    else
-    {
-        // NOTE(gh) We ran out of the particles
-        assert(0);
-    }
+internal void
+end_particle_allocation_from_pool(PBDParticlePool *pool, PBDParticleGroup *group)
+{
+    // TODO(gh) Also safe guard the case where the user passes the different pool
+    // from the start?
+    assert(pool->being_used_to_allocate);
 
-    return result;
+    u32 particle_count = pool->count - group->count;
+    pool->count = particle_count;
+    assert(group->count > 0);
+
+    pool->being_used_to_allocate = false;
+}
+
+internal void
+allocate_particle_from_pool(PBDParticlePool *pool, 
+                            v3 p, v3 v, f32 r, f32 inv_mass, i32 phase = 0)
+{
+    PBDParticle *particle = pool->particles + pool->count++;
+    assert(pool->count <= array_count(pool->particles));
+
+    particle->p = p;
+    particle->v = v;
+    particle->r = r;
+    particle->inv_mass = inv_mass;
+
+    // Intializing temp variables
+    particle->prev_p = V3(0, 0, 0); 
+    particle->d_p_sum = V3(0, 0, 0);
+    particle->constraint_hit_count = 0;
 }
 
 // NOTE(gh) Projecting based on position 0,
