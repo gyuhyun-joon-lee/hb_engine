@@ -8,7 +8,7 @@
 
 // IMPORTANT(gh) vertex always should be PN
 vertex GBufferVertexOutput
-singlepass_cube_vertex(uint vertexID [[vertex_id]],
+render_to_g_buffer_vert(uint vertexID [[vertex_id]],
             uint instanceID [[instance_id]],
             constant PerFrameData *per_frame_data [[buffer(0)]],
             constant PerObjectData *per_object_data [[buffer(1)]], 
@@ -55,7 +55,7 @@ singlepass_cube_vertex(uint vertexID [[vertex_id]],
 }
 
 fragment GBuffers 
-singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
+render_to_g_buffer_frag(GBufferVertexOutput vertex_output [[stage_in]],
                     texture2d<float> shadowmap [[texture(0)]])
 
 {
@@ -79,7 +79,7 @@ singlepass_cube_frag(GBufferVertexOutput vertex_output [[stage_in]],
                 ++x)
         {
             float2 sample_p = vertex_output.p_in_light_coordinate.xy + float2(x, y) * float2(one_over_shadowmap_texture_width, one_over_shadowmap_texture_height);
-            shadow_factor += (shadowmap.sample(shadowmap_sampler, sample_p).x < vertex_output.p_in_light_coordinate.z) ? 1 : 0;
+            shadow_factor += (shadowmap.sample(shadowmap_sampler, sample_p).x < vertex_output.p_in_light_coordinate.z) ? 0 : 1;
         }
     }
 
@@ -117,9 +117,8 @@ constant float2 full_quad_vertices[]
 
 vertex DeferredLightingVertexOutput
 singlepass_deferred_lighting_vertex(uint vertexID [[vertex_id]],
-                // TODO(gh) again, bad idea to pass this one by one...
-                         constant float *light_p[[buffer(0)]],
-                         constant bool *enable_shadow[[buffer(1)]])
+                                    constant float *light_p[[buffer(0)]],
+                                    constant bool *enable_shadow[[buffer(1)]])
 {
     DeferredLightingVertexOutput result = {};
 

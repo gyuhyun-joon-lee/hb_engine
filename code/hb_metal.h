@@ -73,8 +73,7 @@ struct MetalRenderContext
 
     // Render Pipelines
     id<MTLRenderPipelineState> directional_light_shadowmap_pipeline;
-    // NOTE(gh) Those that are marked as 'singlepass' will be sharing 
-    id<MTLRenderPipelineState> singlepass_cube_pipeline;
+    id<MTLRenderPipelineState> render_to_g_buffer_pipeline;
     id<MTLRenderPipelineState> deferred_pipeline;
     id<MTLRenderPipelineState> grass_indirect_render_pipeline;
     id<MTLRenderPipelineState> generate_wind_noise_pipeline;

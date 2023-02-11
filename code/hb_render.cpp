@@ -490,8 +490,6 @@ push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 colo
 
     entry->p = p;
     entry->dim = dim;
-
-    entry->should_cast_shadow = should_cast_shadow;
     
     entry->color = color;
 }

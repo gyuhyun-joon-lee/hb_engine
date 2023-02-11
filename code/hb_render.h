@@ -170,8 +170,6 @@ struct RenderEntryMeshPN
     v3 p;
     v3 dim;
     v3 color;
-
-    b32 should_cast_shadow;
 };
 
 struct RenderEntryLine
@@ -181,22 +179,6 @@ struct RenderEntryLine
     v3 start;
     v3 end;
     v3 color;
-};
-
-struct RenderEntryGrass
-{
-    RenderEntryHeader header;
-
-    v3 p;
-    v3 dim;
-    v3 color;
-
-    b32 should_cast_shadow;
-
-    // NOTE(gh) offset to the combined vertex & index buffer
-    u32 vertex_buffer_offset;
-    u32 index_buffer_offset;
-    u32 index_count;
 };
 
 // TODO(gh) Replace this with quad?... or maybe not...

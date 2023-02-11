@@ -43,8 +43,6 @@ struct Entity
 
     v3 color;
 
-    b32 should_cast_shadow;
-
     // TODO(gh) Don't need this for all of the entities, too... 
     PBDParticleGroup particle_group;
 };

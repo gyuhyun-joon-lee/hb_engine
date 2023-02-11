@@ -680,7 +680,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 {
     // TODO(gh) Not a good way to handle lights
     local_persist f32 rad = 2.4f;
-    v3 directional_light_p = V3(3 * cosf(rad), 3 * sinf(rad), 100); 
+    v3 directional_light_p = V3(5, 5, 100); 
     v3 directional_light_direction = normalize(-directional_light_p); // This will be our -Z in camera for the shadowmap
 
     // TODO(gh) These are totally made up near, far, width values 
@@ -728,53 +728,49 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
             switch(header->type)
             {
+#if 0
                 case RenderEntryType_MeshPN:
                 {
                     RenderEntryMeshPN *entry = (RenderEntryMeshPN *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
-                    if(entry->should_cast_shadow)
-                    {
-                        m4x4 model = st_m4x4(entry->p, entry->dim);
-                        model = transpose(model); // make the matrix column-major
+                    m4x4 model = st_m4x4(entry->p, entry->dim);
+                    model = transpose(model); // make the matrix column-major
 
-                        metal_set_vertex_buffer(shadowmap_render_encoder, (id<MTLBuffer>)entry->vertex_buffer_handle, 0, 0);
-                        metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
-                        metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
+                    metal_set_vertex_buffer(shadowmap_render_encoder, (id<MTLBuffer>)entry->vertex_buffer_handle, 0, 0);
+                    metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
+                    metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
-                        // NOTE(gh) Mitigates the moire pattern by biasing, 
-                        // making the shadow map to place under the fragments that are being shaded.
-                        // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
+                    // NOTE(gh) Mitigates the moire pattern by biasing, 
+                    // making the shadow map to place under the fragments that are being shaded.
+                    // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
-                        metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
-                                          (id<MTLBuffer>)entry->index_buffer_handle, 0, entry->index_count);
-                    }
+                    metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
+                                      (id<MTLBuffer>)entry->index_buffer_handle, 0, entry->index_count);
                 }break;
+#endif
 
-#if 0
-                case RenderEntryType_Cube:
+                case RenderEntryType_ArbitraryMesh:
                 {
-                    RenderEntryCube *entry = (RenderEntryCube *)((u8 *)render_push_buffer->base + consumed);
+                    RenderEntryArbitraryMesh *entry = (RenderEntryArbitraryMesh *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
-                    if(entry->should_cast_shadow)
-                    {
-                        m4x4 model = st_m4x4(entry->p, entry->dim);
-                        model = transpose(model); // make the matrix column-major
+                    m4x4 model = M4x4();
 
-                        metal_set_vertex_buffer(shadowmap_render_encoder, render_context->combined_vertex_buffer.buffer, entry->vertex_buffer_offset, 0);
-                        metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
-                        metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
+                    metal_set_vertex_buffer(shadowmap_render_encoder, 
+                                            render_context->transient_buffer.buffer, 
+                                            entry->vertex_buffer_offset, 0);
+                    metal_set_vertex_bytes(shadowmap_render_encoder, &model, sizeof(model), 1);
+                    metal_set_vertex_bytes(shadowmap_render_encoder, &light_proj_view, sizeof(light_proj_view), 2);
 
-                        // NOTE(gh) Mitigates the moire pattern by biasing, 
-                        // making the shadow map to place under the fragments that are being shaded.
-                        // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
+                    // NOTE(gh) Mitigates the moire pattern by biasing, 
+                    // making the shadow map to place under the fragments that are being shaded.
+                    // metal_set_depth_bias(shadowmap_render_encoder, 0.015f, 7, 0.02f);
 
-                        metal_draw_indexed(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
-                                          render_context->combined_index_buffer.buffer, entry->index_buffer_offset, entry->index_count);
-                    }
+                    metal_draw_indexed_instances(shadowmap_render_encoder, MTLPrimitiveTypeTriangle, 
+                                                render_context->transient_buffer.buffer, entry->index_buffer_offset, entry->index_count, header->instance_count);
                 }break;
-#endif 
+
                 default: 
                 {
                     consumed += header->size;
@@ -1052,6 +1048,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
         switch(header->type)
         {
+            // TODO(gh) Collapse MeshPN and ArbitraryMesh in to one
             case RenderEntryType_MeshPN:
             {
                 RenderEntryMeshPN *entry = (RenderEntryMeshPN *)((u8 *)render_push_buffer->base + consumed);
@@ -1066,7 +1063,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
                 // TODO(gh) Sort the render entry based on cull mode
                 // metal_set_cull_mode(g_buffer_render_encoder, MTLCullModeBack); 
-                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
+                metal_set_render_pipeline(g_buffer_render_encoder, render_context->render_to_g_buffer_pipeline);
                 metal_set_vertex_bytes(g_buffer_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
                 metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
                 metal_set_vertex_buffer(g_buffer_render_encoder, 
@@ -1080,7 +1077,6 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_draw_indexed(g_buffer_render_encoder, MTLPrimitiveTypeTriangle, 
                         (id<MTLBuffer>)entry->index_buffer_handle, 0, entry->index_count);
             }break;
-
             case RenderEntryType_ArbitraryMesh:
             {
                 RenderEntryArbitraryMesh *entry = (RenderEntryArbitraryMesh *)((u8 *)render_push_buffer->base + consumed);
@@ -1090,7 +1086,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 per_object_data.model = M4x4();
                 per_object_data.color = entry->color;
 
-                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
+                metal_set_render_pipeline(g_buffer_render_encoder, render_context->render_to_g_buffer_pipeline);
                 metal_set_vertex_bytes(g_buffer_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
                 metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
 
@@ -1464,9 +1460,9 @@ int main(void)
     MTLColorWriteMask singlepass_color_attachment_write_masks[] = {MTLColorWriteMaskAll, 
                                                                    MTLColorWriteMaskAll,
                                                                    MTLColorWriteMaskAll};
-    metal_render_context.singlepass_cube_pipeline = 
+    metal_render_context.render_to_g_buffer_pipeline = 
         metal_make_render_pipeline(device, "Cube Pipeline", 
-                            "singlepass_cube_vertex", "singlepass_cube_frag", 
+                            "render_to_g_buffer_vert", "render_to_g_buffer_frag", 
                             shader_library,
                             MTLPrimitiveTopologyClassTriangle,
                             singlepass_color_attachment_pixel_formats, array_count(singlepass_color_attachment_pixel_formats),

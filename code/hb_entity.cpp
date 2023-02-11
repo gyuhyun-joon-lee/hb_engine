@@ -116,7 +116,6 @@ add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 colo
     Entity *result = add_entity(game_state, EntityType_Cube, flags);
 
     result->color = color;
-    result->should_cast_shadow = true;
 
     f32 particle_diameter = 2.0f*particle_radius;
     u32 particle_x_count = ceil_f32_to_u32(dim.x / particle_diameter);
