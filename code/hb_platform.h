@@ -235,6 +235,7 @@ enum GPUWorkType
     GPUWorkType_AllocateBuffer,
     GPUWorkType_AllocateTexture2D,
     GPUWorkType_WriteEntireTexture2D,
+    GPUWorkType_BuildAccelerationStructure,
 };
 struct ThreadAllocateBufferData
 {

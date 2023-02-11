@@ -63,7 +63,6 @@ render_to_g_buffer_frag(GBufferVertexOutput vertex_output [[stage_in]],
 
     // NOTE(gh) 0 means complete black, 1 means no shadow
     float shadow_factor = 0.0f;
-#if 1
     constexpr sampler shadowmap_sampler = sampler(coord::normalized, address::clamp_to_edge, filter::linear);
 
     // multisampling shadow
@@ -84,7 +83,6 @@ render_to_g_buffer_frag(GBufferVertexOutput vertex_output [[stage_in]],
     }
 
     shadow_factor /= 9.0f; // Because we sampled from 9 different texels
-#endif
 
     result.position = float4(vertex_output.p, 0.0f);
     result.normal = float4(vertex_output.N, shadow_factor); // also storing the shadow factor to the unused 4th component

@@ -219,9 +219,9 @@ add_pbd_soft_body_tetrahedron_entity(GameState *game_state,
                                 MemoryArena *arena,
                                 v3 top,
                                 v3 bottom_p0, v3 bottom_p1, v3 bottom_p2, 
-                                v3 color, f32 inv_mass, u32 flags)
+                                v3 color, f32 inv_edge_stiffness, f32 inv_mass, u32 flags)
 {
-    Entity *result = add_entity(game_state, EntityType_SoftBody, flags);
+    Entity *result = add_entity(game_state, EntityType_PBD, flags);
     result->color = color;
 
     f32 inv_particle_mass = 4 * inv_mass;
@@ -275,9 +275,9 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
                                 v3 top_p0, 
                                 v3 bottom_p0, v3 bottom_p1, v3 bottom_p2,
                                 v3 top_p1,
-                                v3 color, f32 inv_mass, u32 flags)
+                                v3 color, f32 inv_edge_stiffness, f32 inv_mass, u32 flags)
 {
-    Entity *result = add_entity(game_state, EntityType_SoftBody, flags);
+    Entity *result = add_entity(game_state, EntityType_PBD, flags);
     result->color = color;
 
     u32 vertex_count = 5;
@@ -316,6 +316,7 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
 
     group->distance_constraints = push_array(arena, DistanceConstraint, 9);
     group->distance_constraint_count = 0;
+    group->inv_distance_stiffness = inv_edge_stiffness;
     add_distance_constraint(group, 0, 1);
     add_distance_constraint(group, 1, 2);
     add_distance_constraint(group, 0, 2);
@@ -334,6 +335,17 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
     // dynamically
     add_volume_constraint(group, 0, 4, 2, 1);
 
+    return result;
+}
+
+internal Entity *
+add_pbd_soft_body_cube_entity(GameState *game_state, 
+                              MemoryArena *arena,
+                              v3 *vertices,
+                              u32 *indices, u32 index_count, 
+                              f32 inv_edge_stiffness, f32 inv_mass, u32 flags)
+{
+    Entity *result = add_entity(game_state, EntityType_PBD, EntityFlag_Collides);
     return result;
 }
 

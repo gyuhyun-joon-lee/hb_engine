@@ -6,6 +6,7 @@
     lagrange multiplier(lambda) = C(p) / sum(abs(gradient))
 */
 
+// TODO(gh) Instead of this AOS, use SOA
 struct PBDParticle
 {
     v3 p;
@@ -118,16 +119,11 @@ struct PBDParticleGroup
 
     DistanceConstraint *distance_constraints;
     u32 distance_constraint_count;
+    f32 inv_distance_stiffness;
 
     VolumeConstraint *volume_constraints;
     u32 volume_constraint_count;
-};
-
-// TODO(gh) Can only gather certain amount of particle groups
-struct GatheredPBDParticleGroups
-{
-    PBDParticleGroup groups[256];
-    u32 count;
+    // f32 inv_volume_stiffness;
 };
 
 

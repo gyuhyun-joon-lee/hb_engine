@@ -6,7 +6,6 @@
 #define HB_METAL_H
 
 // TODO(gh) newBufferWithBytesNoCopy looks very interesting, is it only possible in unified memory architectures?
-
 // NOTE(joon) shared buffer between CPU and GPU, in a coherent way
 struct MetalSharedBuffer
 {
@@ -140,6 +139,10 @@ struct MetalRenderContext
 
     MetalTimestamp grass_rendering_start_timestamp;
     MetalTimestamp grass_rendering_end_timestamp;
+
+    // Raytracing
+    MetalPrivateBuffer acc_scratch_buffer;
+    id<MTLAccelerationStructure> acc_structure;
 };
 
 #endif

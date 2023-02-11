@@ -104,8 +104,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #endif
 
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
-        add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 50), V3(2, 2, 2), V3(1, 0, 0), 1/1.0f, EntityFlag_Movable|EntityFlag_Collides);
-        add_pbd_rigid_body_cube_entity(game_state, V3(0, 0, 10), V3(4, 4, 4), V3(1, 1, 0), 0, EntityFlag_Collides);
 
 #if 0
         add_pbd_soft_body_tetrahedron_entity(game_state, &game_state->transient_arena, 
@@ -118,7 +116,21 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                              V3(0, 2, 14),
                                              V3(-4, 0, 10), V3(4, 0, 10), V3(0, 4, 10),
                                              V3(0, 2, 6),
-                                             V3(0, 0.2f, 1), 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+                                             V3(0, 0.2f, 1), 0.0f, 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+
+        add_pbd_soft_body_bipyramid_entity(game_state, &game_state->transient_arena, 
+                                             V3(12, 10, 14),
+                                             V3(6, 10, 10), V3(13, 9, 10), V3(10, 14, 10),
+                                             V3(10, 12, 6),
+                                             V3(0, 0.2f, 1), 0.0006f, 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+
+        add_pbd_soft_body_bipyramid_entity(game_state, &game_state->transient_arena, 
+                                             V3(-10, -8, 14),
+                                             V3(-14, -10, 7), V3(-6, -10, 9), V3(-10, -6, 10),
+                                             V3(-11, -9, 6),
+                                             V3(0, 0.2f, 1), 0.01f, 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+
+        // add_pbd_soft_body_cube_entity()
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
@@ -195,7 +207,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         switch(entity->type)
         {
-            case EntityType_SoftBody:
+            case EntityType_PBD:
             {
                 // TODO(gh) Later, we need to 'gather' all the particle groups
                 // and pre solve - solve - post solve step by step for every particle group!!
@@ -246,7 +258,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         v3 delta = particle0->p - particle1->p;
                         f32 C = length(delta) - c->rest_length;
 
-                        if(!compare_with_epsilon(C, 0.0f))
+                        if(C != 0.0f)
                         {
                             // Gradient of the constraint for each particles that were invovled in the constraint
                             // So this is actually gradient(C(xi))
@@ -256,8 +268,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             // TODO(gh) inv_stiffness stuff seems like it's causing a problem..
                             // NOTE(gh) inv_mass of the particles are involved
                             // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
-                            f32 inv_stiffness = 0.006f; 
-                            f32 a = inv_stiffness/square(sub_dt);
+                            f32 a = group->inv_distance_stiffness/square(sub_dt);
                             f32 lagrange_multiplier = 
                                 -C / (particle0->inv_mass + particle1->inv_mass + a);
 
@@ -293,7 +304,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         f32 volume = get_tetrahedron_volume(particle0->p, particle1->p, particle2->p, particle3->p);
                         f32 C = (volume - c->rest_volume);
 
-                        if(!compare_with_epsilon(C, 0.0f))
+                        if(C != 0.0f)
                         {
                             f32 sum_of_all_gradients = particle0->inv_mass*length_square(gradient0) + 
                                                        particle1->inv_mass*length_square(gradient1) + 
@@ -438,10 +449,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #endif
             }break;
 
-            case EntityType_SoftBody:
+            case EntityType_PBD:
             {
                 PBDParticleGroup *group = &entity->particle_group;
 
+                // TODO(gh) This is rendering all the tetradrons, 
+                // but we would wanna 'skin' it by rendering only the surfaces
+                // and maybe toggle between those
                 for(u32 c_index = 0;
                         c_index < group->volume_constraint_count;
                         ++c_index)
@@ -452,35 +466,39 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     PBDParticle *particle2 = group->particles + c->index2;
                     PBDParticle *particle3 = group->particles + c->index3;
 
-                    // TODO(gh) push_mesh_pn instead?
-                    v3 n0 = -normalize(particle3->p - particle0->p + 
-                                      particle2->p - particle0->p +
-                                      particle1->p - particle0->p);
-                    v3 n1 = -normalize(particle0->p - particle1->p + 
-                                      particle2->p - particle1->p +
-                                      particle3->p - particle1->p);
-                    v3 n2 = -normalize(particle0->p - particle2->p + 
-                                      particle1->p - particle2->p +
-                                      particle3->p - particle2->p);
-                    v3 n3 = -normalize(particle0->p - particle3->p + 
-                                      particle1->p - particle3->p +
-                                      particle2->p - particle3->p);
+                    v3 n013 = normalize(cross(particle1->p - particle0->p, particle3->p - particle0->p));
+                    v3 n123 = normalize(cross(particle3->p - particle1->p, particle2->p - particle1->p));
+                    v3 n320 = normalize(cross(particle0->p - particle2->p, particle3->p - particle2->p));
+                    v3 n102 = normalize(cross(particle1->p - particle2->p, particle0->p - particle2->p));
 
                     VertexPN vertices[] = 
                     {
-                        {particle0->p, n0},
-                        {particle1->p, n1},
-                        {particle2->p, n2},
-                        {particle3->p, n3},
+                        // 0, 1, 3, 
+                        {particle0->p, n013},
+                        {particle1->p, n013},
+                        {particle3->p, n013},
+                        // 1, 2, 3, 
+                        {particle1->p, n123},
+                        {particle2->p, n123},
+                        {particle3->p, n123},
+                        // 3, 2, 0,
+                        {particle3->p, n320},
+                        {particle2->p, n320},
+                        {particle0->p, n320},
+
+                        // 1, 0, 2,
+                        {particle1->p, n102},
+                        {particle0->p, n102},
+                        {particle2->p, n102},
                     };
                     u32 vertex_count = array_count(vertices);
 
                     u32 indices[] = 
                     {
-                        0, 1, 3, 
-                        1, 2, 3, 
-                        3, 2, 0,
-                        1, 0, 2,
+                        0, 1, 2, 
+                        3, 4, 5, 
+                        6, 7, 8, 
+                        9, 10, 11
                     };
                     u32 index_count = array_count(indices);
 
@@ -496,7 +514,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     push_line(platform_render_push_buffer, particle3->p, particle0->p, entity->color);
                     push_line(platform_render_push_buffer, particle3->p, particle1->p, entity->color);
                     push_line(platform_render_push_buffer, particle3->p, particle2->p, entity->color);
-
                 }
             }break;
         }

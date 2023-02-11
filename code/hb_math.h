@@ -1414,6 +1414,71 @@ st_m4x4(v3 translate, v3 scale)
     return result;
 }
 
+inline b32
+are_at_the_same_side_of_plane(v3 p0, v3 p1, 
+                              v3 plane_p0, v3 plane_p1, v3 plane_p2)
+{
+    b32 result = false;
+
+    v3 n = normalize(cross(plane_p1 - plane_p0, plane_p2 - plane_p0));
+    f32 d = dot(n, plane_p0);
+
+    i32 s0 = signbit(dot(n, p0) - d);
+    f32 s1 = signbit(dot(n, p1) - d);
+
+    // TODO(gh) Double check if we can just use ==
+    if((s0 == 0 && s1 == 0) || 
+        (s0 != 0 && s1 != 0))
+    {
+        result = true;
+    }
+
+    return result;
+}
+
+// NOTE(gh) The order of the vertices of the tetrahedron doesn't matter
+// because this test is simply 4 plane vs point test.
+// For example, let's say we are testing against plane formed by vertex 0, 1, 2.
+// After getting the plane equation, we will compare the result of plugging
+// the p that we want to test to this plane equation(this is called the signed distance function to the plane) 
+// with the result of plugging vertex 3, and see if the sign matches 
+// (and repeat the same process for the rest of the planes)
+internal b32
+is_inside_tetrahedron(v3 p, 
+                      v3 teth_p0, v3 teth_p1, v3 teth_p2, v3 teth_p3)
+{
+    b32 result = false;
+
+    // TODO(gh) This is absolutely slow, so maybe setup a SOA to make use of SIMD?
+    if(are_at_the_same_side_of_plane(p, teth_p3, teth_p0, teth_p1, teth_p2) &&
+       are_at_the_same_side_of_plane(p, teth_p0, teth_p3, teth_p1, teth_p2) &&
+       are_at_the_same_side_of_plane(p, teth_p1, teth_p0, teth_p3, teth_p2) &&
+       are_at_the_same_side_of_plane(p, teth_p2, teth_p0, teth_p1, teth_p3))
+    {
+        result = true;
+    }
+
+    return result;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #endif
 

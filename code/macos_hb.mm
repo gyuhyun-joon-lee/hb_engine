@@ -2,18 +2,19 @@
  * Written by Gyuhyun Lee
  */
 
-#include <Cocoa/Cocoa.h> 
-#include <CoreGraphics/CoreGraphics.h> 
-#include <mach/mach_time.h> // mach_absolute_time
-#include <stdio.h> // printf for debugging purpose
-#include <sys/stat.h>
-#include <libkern/OSAtomic.h>
-#include <pthread.h>
-#include <semaphore.h>
-#include <Carbon/Carbon.h>
-#include <dlfcn.h> // dlsym
-#include <metalkit/metalkit.h>
-#include <metal/metal.h>
+#import <Cocoa/Cocoa.h> 
+#import <CoreGraphics/CoreGraphics.h> 
+#import <mach/mach_time.h> // mach_absolute_time
+#import <stdio.h> // printf for debugging purpose
+#import <sys/stat.h>
+#import <libkern/OSAtomic.h>
+#import <pthread.h>
+#import <semaphore.h>
+#import <Carbon/Carbon.h>
+#import <dlfcn.h> // dlsym
+#import <metalkit/metalkit.h>
+#import <metal/metal.h>
+#import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 
 #undef internal
 #undef assert
@@ -472,6 +473,42 @@ PLATFORM_DO_THREAD_WORK_ITEM(macos_do_gpu_work_item)
                     ThreadWriteEntireTexture2D *d = (ThreadWriteEntireTexture2D *)item->data;
                     assert(d->handle && d->source);
                     metal_write_entire_texture2D((id<MTLTexture>)d->handle, d->source, d->width, d->height, d->bytes_per_pixel);
+                }break;
+
+                case GPUWorkType_BuildAccelerationStructure:
+                {
+                    MTLPrimitiveAccelerationStructureDescriptor *acc_descriptor = [MTLPrimitiveAccelerationStructureDescriptor descriptor];
+                    // Refit allows us to change the small amount of positions per frame,
+                    // but might decrease the raytracing performance
+                    acc_descriptor.usage = MTLAccelerationStructureUsageRefit;
+
+                    // TODO(gh) possible memory leak here, but don't care about it right now
+                    MTLAccelerationStructureTriangleGeometryDescriptor *geometry_descriptor = [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
+                    // geometry_descriptor.vertexBuffer = ;
+                    // geometry_descriptor.vertexBufferOffset = 0;
+                    // geometry_descriptor.vertexStride = 2*(sizeof(v3)); // TODO(gh) Only assuming the vertexPN
+
+                    // geometry_descriptor.indexBuffer = ;
+                    // geometry_descriptor.indexType = MTLIndexTypeUInt32;
+                    // geometry_descriptor.indexBufferOffset = 0;
+
+                    // geometry_descriptor.traingleCount = ;
+
+                    NSArray *geometry_descriptor_array = @[geometry_descriptor];
+                    acc_descriptor.geometryDescriptors = geometry_descriptor_array;
+
+                    MTLAccelerationStructureSizes acc_structure_size = [render_context->device accelerationStructureSizesWithDescriptor: acc_descriptor];
+
+                    id<MTLAccelerationStructure> acc_structure = [render_context->device newAccelerationStructureWithSize : acc_structure_size.accelerationStructureSize];
+
+                    // scratch buffer while building the acceleration structure
+                    id<MTLBuffer> scratch_buffer = [render_context->device newBufferWithLength: 
+                        acc_structure_size.buildScratchBufferSize
+                        options:MTLResourceStorageModePrivate];
+                    id<MTLCommandBuffer> build_acc_command_buffer = [render_context->command_queue commandBuffer];
+                    id<MTLAccelerationStructureCommandEncoder> build_acc_command_encoder = [build_acc_command_buffer accelerationStructureCommandEncoder];
+
+                    invalid_code_path;
                 }break;
 
                 default:
