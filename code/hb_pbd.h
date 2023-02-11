@@ -30,29 +30,14 @@ struct PBDParticle
     u32 constraint_hit_count;
 };
 
-struct PBDParticleGroup
-{
-    // particles should be laid out sequentially
-    PBDParticle *particles;
-    u32 count;
-};
 
 struct PBDParticlePool
 {
     // TODO(gh) Probably not a good idea...
     PBDParticle particles[4096];
     u32 count;
-
-    // NOTE(gh) true = other entity is using the pool to allocate it's particles
-    b32 being_used_to_allocate;
 };
 
-// TODO(gh) Can only gather certain amount of particle groups
-struct GatheredPBDParticleGroups
-{
-    PBDParticleGroup groups[256];
-    u32 count;
-};
 
 struct FixedPositionConstraint
 {
@@ -86,152 +71,64 @@ struct EnvironmentConstraint
 
 /*
     NOTE(gh) Distance constraint between two particles
-    C(x0, x1) = ;
+    C = distance_between(x0, x1) - rest_length;
+
+    gradient_c(x0) = normalize(x1 - x0); // so basically pull x0 towards x1
+    gradient_c(x1) = normalize(x0 - x1); // so basically pull x1 towards x0
+
+    lagrange_multiplier = -C / (w0 + w1 + alpha/dt^2),
+    where w0 and w1 are the inverse mass of the particles,
+    and alpha = 1/stiffness
 */
 struct DistanceConstraint
 {
-    u32 particle_index0;
-    u32 particle_index1;
+    u32 index0;
+    u32 index1;
 
-    f32 distance;
+    f32 rest_length;
 };
 
-// NOTE(gh) Pre Stablization.
-// If the convergence was not reached due to time constraint on the previous time step,
-// the initial condition when we start a new time step might be wrong, and because the velocity is implicitly calculated
-// from two successive timesteps, this might cause the particle to pop.
-// For example, let's say the particle was interpenetrating the ground with no velocity at time step 0.
-// On time step 1, the physics engine will detect the interpenetration and move the particle up on the ground,
-// and update the velocity to face upwards, because the new position is higher than the previous position
-// (kinectic energy added from nowhere to the object).
-// To mitigate this, pre-stabilize the scene by solving the collision constraints for the _current position_
-// right before we move onto the the main constraint solver, and then updating both the current position &
-// proposed position.
-
 /*
-    NOTE(gh) Complete steps for position-based rigid body
-    Unified Particle Physics for Real-Time Applications(https://mmacklin.com/uppfrta_preprint.pdf)
-    Position Based Dynamics by Pieterjan Bartels(https://pbartels.gitlab.io/portfolio/projects/PBD/)
+    0, 1, 2 forms the bottom triangle in counter-clockwise order, 
+    3 is the top vertex
 
-    for(each particle i)
-    {
-        particle[i].velocity += dt*net_force(i)/m; // TODO(gh) Double check if we have to divide net force by mass
-        particle[i].proposed_position = particle[i].position + dt*particle[i].velocity;
-    }
+    C = 6*(volume - rest_volume) 
+    gradient(x0) = (x3-x1) x (x2 - x1);
+    gradient(x1) = (x2-x0) x (x3 - x0);
+    gradient(x2) = (x3-x0) x (x1 - x0);
+    gradient(x3) = (x1-x0) x (x2 - x0);
 
-    for(each particle i)
-    {
-        find colliding particles using the proposed position; 
-        find Environment contacts; 
-        generate collision constraints;
-    }
-
-    // NOTE(gh) pre-stabilization. See the description above for more info!
-    for(solver iterations)
-    {
-        for(each particle i)
-        {
-            particle[i].d_position_sum = 0;
-            particle[i].count = 0;
-        }
-
-        // NOTE(gh) Only process the collision constraints for pre-stabilization!
-        for(each collision constraint C) 
-        {
-            for(each particle i affected by the constraint C)
-            {
-                solve constraint for i, using the _current position_ instead of the proposed position
-
-                particle[i].d_position_sum += result;
-                particle[i].constraint_count++;
-            }
-        }
-
-        for(each particle i)
-        {
-            // Update both the current position & proposed position after the pre-stabilization
-            particle[i].position +=  weight * particle[i].d_position_sum/particle[i].constraint_count;
-            particle[i].proposed_position +=  weight * particle[i].d_position_sum/particle[i].constraint_count;
-        }
-    } // pre-stabilization end
-
-    for(solver iterations) // TODO(gh) Test 5 times first
-    {
-        for(each constraint group)
-        {
-            for(each particle i)
-            {
-                // NOTE(gh) Under relaxation,
-                // all constraints are processed in parallel, 
-                // and we are going to average it to apply it for the next position.
-                particle[i].d_position_sum = 0;
-                particle[i].constraint_count = 0;
-            }
-
-            for(each constraint C)
-            {
-                // TODO(gh) Maybe we can pre-calculate lambda(lagrange multiplier) here,
-                // because it is particle-independant
-                f32 lagrange_multiplier = pre_calculate();
-                for(each particle i affected by the constraint C)
-                {
-                    solve constraint for i using the proposed position;
-                    particle[i].d_position_sum += result;
-                    particle[i].count++;
-                }
-            }
-
-            for(each particle i)
-            {
-                particle[i].proposed_position += weight * (particle[i].d_position_sum / particle[i].count);
-            }
-        }
-    }
-
-    for(each particle i)
-    {
-        v3 d_position = particle[i].proposed_position - particle[i].position;
-        particle[i].velocity = (d_position)/dt;
-
-        // NOTE(gh) particle sleeping, prevent micro stutter
-        if(length_square(d_position) > epsilon)
-        {
-            particle[i].position = particle[i].proposed_position;
-        }
-    }
+    largrange_multiplier = -C / (sum of every particle(inv_mass * square(length(gradient))) + alpha/dt^2);
 */
+struct VolumeConstraint
+{
+    u32 index0;
+    u32 index1;
+    u32 index2;
+    u32 index3;
 
-/*
-   https://box2d.org/files/ErinCatto_IterativeDynamics_GDC2005.pdf
-   NOTE(gh) Getting the derivate of the equality constraint C(x1, q1, x2, q2)
-   By the chain rule of differentiation,
-   derivative of C = Jacobian matrix * V, where V is [V1 W1 V2 W2]
+    f32 rest_volume;
+};
 
-   Let's take a distance constraint as an example.
-   C = 
+struct PBDParticleGroup
+{
+    // particles should be laid out sequentially
+    PBDParticle *particles;
+    u32 count;
 
-   for(i = 1 to s do)
-   {
-        // index0 and index1 are the IDs to the rigid body
-        u32 index0 = Jmap(i,1) 
-        u32 index1 = Jmap(i,2) 
-        f32 sum = 0.0f;
+    DistanceConstraint *distance_constraints;
+    u32 distance_constraint_count;
 
-        // Constraint might involve just one rigid body
-        // which will make one of the Jacobian vector 0,
-        // which helps us saving some multiplcations
-        if(both b1 and b2 is valid) 
-        {
-        // V(b) = [V W] = [Vx Vy Vz Wx Wy Wz], where V is linear velocity & W is angular velocity 
-        sum += J(i,1)V(b1)
-        }
+    VolumeConstraint *volume_constraints;
+    u32 volume_constraint_count;
+};
 
-        sum = J(i,2)V(b2)
-
-        c_derivative(i) = sum;
-    }
-*/
-
+// TODO(gh) Can only gather certain amount of particle groups
+struct GatheredPBDParticleGroups
+{
+    PBDParticleGroup groups[256];
+    u32 count;
+};
 
 
 

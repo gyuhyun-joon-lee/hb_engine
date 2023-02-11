@@ -537,6 +537,9 @@ push_arbitrary_mesh(PlatformRenderPushBuffer *render_push_buffer, v3 color, Vert
     RenderEntryArbitraryMesh *entry = push_render_element(render_push_buffer, RenderEntryArbitraryMesh);
     entry->header.type = RenderEntryType_ArbitraryMesh;
     entry->header.size = sizeof(*entry);
+    entry->header.instance_count = 1;
+
+    entry->color = color;
 
     entry->vertex_buffer_offset = push_data(render_push_buffer->transient_buffer, 
                                             &render_push_buffer->transient_buffer_used, 

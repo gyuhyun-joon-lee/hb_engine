@@ -232,6 +232,8 @@ struct RenderEntryArbitraryMesh
     RenderEntryHeader header;
     u32 instance_buffer_offset; // offset to the instance data in the giant buffer
 
+    v3 color;
+
     // NOTE(gh) offset to the combined vertex & index buffer
     u32 vertex_buffer_offset;
     u32 index_buffer_offset;

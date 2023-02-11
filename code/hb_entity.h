@@ -13,6 +13,8 @@ enum EntityType
     EntityType_Sphere,
     EntityType_Cube,
     EntityType_Grass,
+    // TODO(gh) Later down the road, we want to uniform the softbody
+    // by treating it as a bunch of tetrahedrons
     EntityType_SoftBody,
 };
 

@@ -1086,9 +1086,14 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 RenderEntryArbitraryMesh *entry = (RenderEntryArbitraryMesh *)((u8 *)render_push_buffer->base + consumed);
                 consumed += sizeof(*entry);
 
-                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
+                PerObjectData per_object_data = {};
+                per_object_data.model = M4x4();
+                per_object_data.color = entry->color;
 
-                metal_set_vertex_buffer(g_buffer_render_encoder, render_context->transient_buffer.buffer, entry->instance_buffer_offset, 1);
+                metal_set_render_pipeline(g_buffer_render_encoder, render_context->singlepass_cube_pipeline);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &per_frame_data, sizeof(per_frame_data), 0);
+                metal_set_vertex_bytes(g_buffer_render_encoder, &per_object_data, sizeof(per_object_data), 1);
+
                 metal_set_vertex_buffer(g_buffer_render_encoder, 
                                         render_context->transient_buffer.buffer, 
                                         entry->vertex_buffer_offset, 2);
@@ -1341,7 +1346,7 @@ int main(void)
     platform_memory.transient_memory = (u8 *)platform_memory.permanent_memory + platform_memory.permanent_memory_size;
 
     // TODO(gh) get monitor width and height and use that 
-#if 0
+#if 1
     // 2.5k -ish
     i32 window_width = 3200;
     i32 window_height = 1800;

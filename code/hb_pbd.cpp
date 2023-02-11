@@ -3,36 +3,27 @@
 internal void
 start_particle_allocation_from_pool(PBDParticlePool *pool, PBDParticleGroup *group)
 {
-    assert(!pool->being_used_to_allocate);
-
-    pool->being_used_to_allocate = true;
-    group->particles = pool->particles;
-    group->count = pool->count; // temporary store the count
+    group->particles = pool->particles + pool->count;
+    // Temporary store the pool count
+    group->count = pool->count;
 }
 
 internal void
 end_particle_allocation_from_pool(PBDParticlePool *pool, PBDParticleGroup *group)
 {
-    // TODO(gh) Also safe guard the case where the user passes the different pool
-    // from the start?
-    assert(pool->being_used_to_allocate);
-
-    u32 particle_count = pool->count - group->count;
-    pool->count = particle_count;
+    group->count = pool->count - group->count;
     assert(group->count > 0);
-
-    pool->being_used_to_allocate = false;
 }
 
 internal void
 allocate_particle_from_pool(PBDParticlePool *pool, 
-                            v3 p, v3 v, f32 r, f32 inv_mass, i32 phase = 0)
+                            v3 p, f32 r, f32 inv_mass, i32 phase = 0)
 {
     PBDParticle *particle = pool->particles + pool->count++;
     assert(pool->count <= array_count(pool->particles));
 
     particle->p = p;
-    particle->v = v;
+    particle->v = V3(0, 0, 0);
     particle->r = r;
     particle->inv_mass = inv_mass;
 
