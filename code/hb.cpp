@@ -112,23 +112,45 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                              V3(0, 0.2f, 1), 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
 #endif
 
+#if 1
         add_pbd_soft_body_bipyramid_entity(game_state, &game_state->transient_arena, 
                                              V3(0, 2, 14),
                                              V3(-4, 0, 10), V3(4, 0, 10), V3(0, 4, 10),
                                              V3(0, 2, 6),
-                                             V3(0, 0.2f, 1), 0.0f, 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+                                             0.0f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
         add_pbd_soft_body_bipyramid_entity(game_state, &game_state->transient_arena, 
                                              V3(12, 10, 14),
                                              V3(6, 10, 10), V3(13, 9, 10), V3(10, 14, 10),
                                              V3(10, 12, 6),
-                                             V3(0, 0.2f, 1), 0.0006f, 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+                                             0.0006f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
         add_pbd_soft_body_bipyramid_entity(game_state, &game_state->transient_arena, 
                                              V3(-10, -8, 14),
                                              V3(-14, -10, 7), V3(-6, -10, 9), V3(-10, -6, 10),
                                              V3(-11, -9, 6),
-                                             V3(0, 0.2f, 1), 0.01f, 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
+                                              0.01f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
+#endif
+
+        v3 cube_p[] = 
+        {
+            // top
+            V3(-2, -2, 10), V3(2, -2, 10), V3(2, 2, 10), V3(-2, 2, 10),
+            // bottom
+            V3(-2, -2, 5), V3(2, -2, 5), V3(2, 2, 5), V3(-2, 2, 5)
+        };
+        add_pbd_soft_body_cube_entity(game_state, &game_state->transient_arena, 
+                                     cube_p, array_count(cube_p),
+                                     30.01f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
+
+
+#if 0
+        add_pbd_soft_body_cube_entity(game_state, 
+                                      &game_state->transient_arena,
+                                      VertexPN *vertices, u32 vertex_count,
+                                      u32 *indices, u32 index_count, 
+                                      f32 inv_edge_stiffness, f32 inv_mass, u32 flags)
+#endif
 
         // add_pbd_soft_body_cube_entity()
 
@@ -294,11 +316,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         PBDParticle *particle3 = group->particles + c->index3;
 
                         f32 one_over_6 = 1/6.0f;
-                        // v3 gradient0 = one_over_6*cross(particle3->p - particle1->p, particle2->p - particle1->p)
+                        v3 gradient1 = one_over_6*cross(particle0->p - particle2->p, particle3->p - particle2->p);
+                        v3 gradient2 = one_over_6*cross(particle3->p - particle1->p, particle0->p - particle1->p);
+                        v3 gradient3 = one_over_6*cross(particle1->p - particle2->p, particle0->p - particle2->p);
                         // NOTE(gh) Due to translation invariance, the sum of all the gradient should be 0
-                        v3 gradient1 = one_over_6*cross(particle2->p - particle0->p, particle3->p - particle0->p);
-                        v3 gradient2 = one_over_6*cross(particle3->p - particle0->p, particle1->p - particle0->p);
-                        v3 gradient3 = one_over_6*cross(particle1->p - particle0->p, particle2->p - particle0->p);
                         v3 gradient0 = -(gradient1+gradient2+gradient3);
 
                         f32 volume = get_tetrahedron_volume(particle0->p, particle1->p, particle2->p, particle3->p);
@@ -443,9 +464,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 // TODO(gh) Don't pass mesh asset ID!!!
                 push_mesh_pn(platform_render_push_buffer, 
                           entity->generic_entity_info.position, entity->generic_entity_info.dim, entity->color, 
+                          &entity->mesh_assetID,
                           AssetTag_FloorMesh,
-                          &game_state->assets,  
-                          false);
+                          &game_state->assets);
 #endif
             }break;
 
@@ -460,36 +481,37 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         c_index < group->volume_constraint_count;
                         ++c_index)
                 {
+                    // TODO(gh) Use push_mesh_pn, but by updating the gpu side buffer
+                    // every frame?
                     VolumeConstraint *c = group->volume_constraints + c_index;
-                    PBDParticle *particle0 = group->particles + c->index0;
-                    PBDParticle *particle1 = group->particles + c->index1;
-                    PBDParticle *particle2 = group->particles + c->index2;
-                    PBDParticle *particle3 = group->particles + c->index3;
+                    PBDParticle *part0 = group->particles + c->index0;
+                    PBDParticle *part1 = group->particles + c->index1;
+                    PBDParticle *part2 = group->particles + c->index2;
+                    PBDParticle *part3 = group->particles + c->index3;
 
-                    v3 n013 = normalize(cross(particle1->p - particle0->p, particle3->p - particle0->p));
-                    v3 n123 = normalize(cross(particle3->p - particle1->p, particle2->p - particle1->p));
-                    v3 n320 = normalize(cross(particle0->p - particle2->p, particle3->p - particle2->p));
-                    v3 n102 = normalize(cross(particle1->p - particle2->p, particle0->p - particle2->p));
+                    v3 n013 = normalize(cross(part0->p - part1->p, part3->p - part1->p));
+                    v3 n123 = normalize(cross(part2->p - part1->p, part3->p - part1->p));
+                    v3 n320 = normalize(cross(part3->p - part2->p, part0->p - part2->p));
+                    v3 n102 = normalize(cross(part2->p - part1->p, part0->p - part1->p));
 
                     VertexPN vertices[] = 
                     {
-                        // 0, 1, 3, 
-                        {particle0->p, n013},
-                        {particle1->p, n013},
-                        {particle3->p, n013},
-                        // 1, 2, 3, 
-                        {particle1->p, n123},
-                        {particle2->p, n123},
-                        {particle3->p, n123},
-                        // 3, 2, 0,
-                        {particle3->p, n320},
-                        {particle2->p, n320},
-                        {particle0->p, n320},
-
-                        // 1, 0, 2,
-                        {particle1->p, n102},
-                        {particle0->p, n102},
-                        {particle2->p, n102},
+                        // 0, 3, 1, 
+                        {part0->p, n013},
+                        {part3->p, n013},
+                        {part1->p, n013},
+                        // 1, 3, 2, 
+                        {part1->p, n123},
+                        {part3->p, n123},
+                        {part2->p, n123},
+                        // 3, 0, 2,
+                        {part3->p, n320},
+                        {part0->p, n320},
+                        {part2->p, n320},
+                        // 1, 2, 0,
+                        {part1->p, n102},
+                        {part2->p, n102},
+                        {part0->p, n102},
                     };
                     u32 vertex_count = array_count(vertices);
 
@@ -507,13 +529,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                         vertices, vertex_count, 
                                         indices, index_count);
 
-                    push_line(platform_render_push_buffer, particle0->p, particle1->p, entity->color);
-                    push_line(platform_render_push_buffer, particle1->p, particle2->p, entity->color);
-                    push_line(platform_render_push_buffer, particle2->p, particle0->p, entity->color);
+                    push_line(platform_render_push_buffer, part0->p, part1->p, entity->color);
+                    push_line(platform_render_push_buffer, part1->p, part2->p, entity->color);
+                    push_line(platform_render_push_buffer, part2->p, part0->p, entity->color);
 
-                    push_line(platform_render_push_buffer, particle3->p, particle0->p, entity->color);
-                    push_line(platform_render_push_buffer, particle3->p, particle1->p, entity->color);
-                    push_line(platform_render_push_buffer, particle3->p, particle2->p, entity->color);
+                    push_line(platform_render_push_buffer, part3->p, part0->p, entity->color);
+                    push_line(platform_render_push_buffer, part3->p, part1->p, entity->color);
+                    push_line(platform_render_push_buffer, part3->p, part2->p, entity->color);
                 }
             }break;
         }

@@ -473,16 +473,14 @@ push_frustum(PlatformRenderPushBuffer *render_push_buffer, v3 color,
 
 internal void
 push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
-            AssetTag tag, GameAssets *asset, b32 should_cast_shadow)
+            u32 *mesh_assetID, AssetTag tag, GameAssets *asset)
 {
     RenderEntryMeshPN *entry = push_render_element(render_push_buffer, RenderEntryMeshPN);
 
     entry->header.type = RenderEntryType_MeshPN;
     entry->header.size = sizeof(*entry);
 
-    // TODO(gh) entity should not have vertices directly, the asset system should be able to 
-    // get the vertex and index information using tag and match vector
-    MeshAsset *mesh_asset = get_mesh_asset(asset, tag);
+    MeshAsset *mesh_asset = get_mesh_asset(asset, mesh_assetID, tag);
     entry->vertex_buffer_handle = mesh_asset->vertex_buffer.handle;
     entry->vertex_count = mesh_asset->vertex_count;
     entry->index_buffer_handle = mesh_asset->index_buffer.handle;

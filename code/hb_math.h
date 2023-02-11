@@ -1461,6 +1461,15 @@ is_inside_tetrahedron(v3 p,
     return result;
 }
 
+internal f32
+get_tetrahedron_volume(v3 top, 
+                       v3 bottom0, v3 bottom1, v3 bottom2)
+{
+    f32 result = (1/6.0f) * dot(cross(bottom1 - bottom0, bottom2 - bottom0), top - bottom0);
+
+    return result;
+}
+
 
 
 

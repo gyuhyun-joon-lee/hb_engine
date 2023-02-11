@@ -172,44 +172,27 @@ add_distance_constraint(PBDParticleGroup *group, u32 index0, u32 index1)
 {
     DistanceConstraint *c = group->distance_constraints + group->distance_constraint_count++;
 
-    if(index0 > index1)
-    {
-        c->index0 = index1;
-        c->index1 = index0;
-    }
-    else
-    {
-        c->index0 = index0;
-        c->index1 = index1;
-    }
+    c->index0 = index0;
+    c->index1 = index1;
 
     c->rest_length = length(group->particles[index0].p - group->particles[index1].p);
 }
 
-// NOTE(gh) p0 p1 p2 are the bottom plane vertices in counter clockwise order,
-// p3 is the top vertex
-internal f32
-get_tetrahedron_volume(v3 p0, v3 p1, v3 p2, v3 p3)
-{
-    f32 result = (1/6.0f) * dot(cross(p1 - p0, p2 - p0), p3 - p0);
-
-    return result;
-}
 
 internal void
 add_volume_constraint(PBDParticleGroup *group, 
-                     u32 index0, u32 index1, u32 index2, u32 index3)
+                     u32 top, u32 bottom0, u32 bottom1, u32 bottom2)
 {
-    PBDParticle *particle0 = group->particles + index0;
-    PBDParticle *particle1 = group->particles + index1;
-    PBDParticle *particle2 = group->particles + index2;
-    PBDParticle *particle3 = group->particles + index3;
+    PBDParticle *particle0 = group->particles + top;
+    PBDParticle *particle1 = group->particles + bottom0;
+    PBDParticle *particle2 = group->particles + bottom1;
+    PBDParticle *particle3 = group->particles + bottom2;
 
     VolumeConstraint *c = group->volume_constraints + group->volume_constraint_count++;
-    c->index0 = index0;
-    c->index1 = index1;
-    c->index2 = index2;
-    c->index3 = index3;
+    c->index0 = top;
+    c->index1 = bottom0;
+    c->index2 = bottom1;
+    c->index3 = bottom2;
     c->rest_volume = get_tetrahedron_volume(particle0->p, particle1->p, particle2->p, particle3->p);
 }
 
@@ -219,7 +202,7 @@ add_pbd_soft_body_tetrahedron_entity(GameState *game_state,
                                 MemoryArena *arena,
                                 v3 top,
                                 v3 bottom_p0, v3 bottom_p1, v3 bottom_p2, 
-                                v3 color, f32 inv_edge_stiffness, f32 inv_mass, u32 flags)
+                                f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
     result->color = color;
@@ -229,6 +212,11 @@ add_pbd_soft_body_tetrahedron_entity(GameState *game_state,
     PBDParticleGroup *group = &result->particle_group;
 
     start_particle_allocation_from_pool(&game_state->particle_pool, group);
+
+    allocate_particle_from_pool(&game_state->particle_pool,
+                                top,
+                                particle_radius,
+                                inv_particle_mass);
 
     allocate_particle_from_pool(&game_state->particle_pool, 
                                 bottom_p0,
@@ -242,11 +230,6 @@ add_pbd_soft_body_tetrahedron_entity(GameState *game_state,
 
     allocate_particle_from_pool(&game_state->particle_pool, 
                                 bottom_p2,
-                                particle_radius,
-                                inv_particle_mass);
-
-    allocate_particle_from_pool(&game_state->particle_pool,
-                                top,
                                 particle_radius,
                                 inv_particle_mass);
 
@@ -275,7 +258,7 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
                                 v3 top_p0, 
                                 v3 bottom_p0, v3 bottom_p1, v3 bottom_p2,
                                 v3 top_p1,
-                                v3 color, f32 inv_edge_stiffness, f32 inv_mass, u32 flags)
+                                f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
     result->color = color;
@@ -286,6 +269,11 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
     PBDParticleGroup *group = &result->particle_group;
 
     start_particle_allocation_from_pool(&game_state->particle_pool, group);
+
+    allocate_particle_from_pool(&game_state->particle_pool,
+                                top_p0,
+                                particle_radius,
+                                inv_particle_mass);
 
     allocate_particle_from_pool(&game_state->particle_pool, 
                                 bottom_p0,
@@ -299,11 +287,6 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
 
     allocate_particle_from_pool(&game_state->particle_pool, 
                                 bottom_p2,
-                                particle_radius,
-                                inv_particle_mass);
-
-    allocate_particle_from_pool(&game_state->particle_pool,
-                                top_p0,
                                 particle_radius,
                                 inv_particle_mass);
 
@@ -333,7 +316,55 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
     add_volume_constraint(group, 0, 1, 2, 3);
     // TODO(gh) This weird order is due to how we are constructing the vertices
     // dynamically
-    add_volume_constraint(group, 0, 4, 2, 1);
+    add_volume_constraint(group, 1, 2, 3, 4);
+
+    return result;
+}
+
+struct Tetrahedron
+{
+    // top vertex, and the bottom 3 in counter clockwise order
+    u32 indices[4];
+    b32 being_used;
+};
+
+internal u32
+push_tetrahedron_vertex(v3 vertex, v3 *t_vertices, u32 *current_count, u32 max_count)
+{
+    u32 i = *current_count;
+    t_vertices[i] = vertex;
+
+    (*current_count)++;
+    assert(*current_count <= max_count);
+
+    return i;
+}
+
+internal Tetrahedron *
+push_tetrahedron(u32 top, 
+                 u32 bottom0, u32 bottom1, u32 bottom2, 
+                 Tetrahedron *ts, u32 max_count)
+{
+    Tetrahedron *result = 0;
+
+    for(u32 i = 0;
+            i < max_count;
+            ++i)
+    {
+        Tetrahedron *t = ts + i;
+        if(!t->being_used)
+        {
+            result = t;
+            break;
+        }
+    }
+    assert(result);
+
+    result->indices[0] = top;
+    result->indices[1] = bottom0;
+    result->indices[2] = bottom1;
+    result->indices[3] = bottom2;
+    result->being_used = true;
 
     return result;
 }
@@ -341,13 +372,142 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
 internal Entity *
 add_pbd_soft_body_cube_entity(GameState *game_state, 
                               MemoryArena *arena,
-                              v3 *vertices,
-                              u32 *indices, u32 index_count, 
-                              f32 inv_edge_stiffness, f32 inv_mass, u32 flags)
+                              v3 *vertices, u32 vertex_count,
+                              f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
 {
-    Entity *result = add_entity(game_state, EntityType_PBD, EntityFlag_Collides);
+    Entity *result = add_entity(game_state, EntityType_PBD, flags);
+#if 0
+
+    v3 center = {};
+    for(u32 i = 0;
+            i < vertex_count;
+            ++i)
+    {
+        center += vertices[i];
+    }
+    center /= vertex_count;
+
+    // Find the bounding sphere of the mesh
+    f32 max_distance_square = flt_min;
+    for(u32 i = 0;
+            i < vertex_count;
+            ++i)
+    {
+        f32 d = length_square(vertices[i] - center);
+        if(d > max_distance_square)
+        {
+            max_distance_square = d;
+        }
+    }
+
+    u32 max_teth_count = 100;
+    u32 max_teth_vertex_count = 4 * max_teth_count;
+    TempMemory temp_memory = start_temp_memory(arena, sizeof(Tetrahedron)*max_teth_count + 
+                                                      sizeof(v3) * max_teth_vertex_count);
+    Tetrahedron *teths = push_array(&temp_memory, Tetrahedron, max_teth_count);
+    v3 *teth_vertices = push_array(&temp_memory, v3, max_teth_vertex_count);
+    u32 teth_vertex_count = 0;
+
+    // TODO(gh) Push the first tetrahedron that is big enough 
+    // for the bounding sphere of the mesh. The size is a bit ad-hoc
+    f32 r = sqrt(max_distance_square);
+    // length of the teth edge
+    f32 s = 5 * r;
+    push_tetrahedron(
+        // top
+        push_tetrahedron_vertex(center + V3(0, 0, s), teth_vertices, &teth_vertex_count, max_teth_vertex_count),
+        // bottom 3
+        push_tetrahedron_vertex(center + V3(-s, -s, -s), teth_vertices, &teth_vertex_count, max_teth_vertex_count),
+        push_tetrahedron_vertex(center + V3(s, -s, -s), teth_vertices, &teth_vertex_count, max_teth_vertex_count),
+        push_tetrahedron_vertex(center + V3(0, s, -s), teth_vertices, &teth_vertex_count, max_teth_vertex_count),
+        teths, max_teth_count);
+
+#if 0
+    // TODO(gh) Just used for validation, needs to be removed
+    for(u32 i = 0;
+            i < vertex_count;
+            ++i)
+    {
+        assert(is_inside_tetrahedron(vertices[i], 
+                                     tetrahedron_p[0], tetrahedron_p[1], tetrahedron_p[2], tetrahedron_p[3]));
+    }
+#endif
+
+    for(u32 vertex_index = 0;
+            vertex_index < vertex_count;
+            ++vertex_index)
+    {
+        u32 t_vertexID = push_tetrahedron_vertex(vertices[vertex_index], teth_vertices, &teth_vertex_count, max_teth_vertex_count);
+
+        b32 found_bounding_teth = false;
+        for(u32 teth_index = 0;
+                !found_bounding_teth && (teth_index < max_teth_count);
+                ++teth_index)
+        {
+            Tetrahedron *teth = teths + teth_index;
+
+            if(is_inside_tetrahedron(vertices[vertex_index], 
+                                     teth_vertices[teth->indices[0]], 
+                                     teth_vertices[teth->indices[1]], teth_vertices[teth->indices[2]], teth_vertices[teth->indices[3]]))
+            {
+                found_bounding_teth = true;
+
+                // If the point was inside the t, we need to make 4 new ts and delete the orignal one
+                push_tetrahedron(t_vertexID, teth->indices[0], teth->indices[1], teth->indices[2], teths, max_teth_count);
+                push_tetrahedron(t_vertexID, teth->indices[0], teth->indices[2], teth->indices[3], teths, max_teth_count);
+                push_tetrahedron(t_vertexID, teth->indices[0], teth->indices[3], teth->indices[1], teths, max_teth_count);
+                push_tetrahedron(t_vertexID, teth->indices[1], teth->indices[3], teth->indices[2], teths, max_teth_count);
+
+                teth->being_used = false;
+            }
+        }
+
+        assert(found_bounding_teth);
+    }
+
+    f32 total_volume = get_tetrahedron_volume;
+    for(u32 teth_index = 0;
+            teth_index < max_teth_count;
+            ++teth_index)
+    {
+        Tetrahedron * teth = teths + teth_index;
+        if(teth->being_used)
+        {
+            total_volume += get_tetrahedron_volume();
+        }
+    }
+
+    end_temp_memory(&temp_memory);
+
+#endif
     return result;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

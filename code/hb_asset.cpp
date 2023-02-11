@@ -64,6 +64,7 @@ get_gpu_visible_buffer(ThreadWorkQueue *gpu_work_queue, u64 size)
     return result;
 }
 
+
 // TODO(gh) Only loads VertexPN vertices
 internal void
 load_mesh_asset(GameAssets *assets, ThreadWorkQueue *gpu_work_queue, 
@@ -103,21 +104,32 @@ load_mesh_asset(GameAssets *assets, ThreadWorkQueue *gpu_work_queue,
 }
 
 internal MeshAsset *
-get_mesh_asset(GameAssets *asset, AssetTag tag)
+get_mesh_asset(GameAssets *asset, u32 *mesh_assetID, AssetTag tag)
 {
     MeshAsset *result = 0;
 
-    for(u32 i = 0;
-            i < asset->populated_mesh_asset;
-            ++i)
+    if(*mesh_assetID != 0)
     {
-        MeshAsset *mesh_asset = asset->mesh_assets + i;
-        if(mesh_asset->tag == tag)
+        // There is already a populated assetID.
+        // This is possible if the entity was a softbody which needs seperate
+        // asset(i.e vertices) per entity, or was previously rendered
+        result = asset->mesh_assets + *mesh_assetID;
+    }
+    else
+    {
+        for(u32 i = 0;
+                i < asset->populated_mesh_asset;
+                ++i)
         {
-            result = mesh_asset;
-            break;
+            MeshAsset *mesh_asset = asset->mesh_assets + i;
+            if(mesh_asset->tag == tag)
+            {
+                result = mesh_asset;
+                break;
+            }
         }
     }
+
     assert(result);
 
     return result;

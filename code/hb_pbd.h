@@ -90,23 +90,20 @@ struct DistanceConstraint
 };
 
 /*
-    0, 1, 2 forms the bottom triangle in counter-clockwise order, 
-    3 is the top vertex
+    0 is the top vertex,
+    1, 2, 3 forms the bottom triangle in counter-clockwise order, 
 
-    C = 6*(volume - rest_volume) 
-    gradient(x0) = (x3-x1) x (x2 - x1);
-    gradient(x1) = (x2-x0) x (x3 - x0);
-    gradient(x2) = (x3-x0) x (x1 - x0);
-    gradient(x3) = (x1-x0) x (x2 - x0);
-
-    largrange_multiplier = -C / (sum of every particle(inv_mass * square(length(gradient))) + alpha/dt^2);
+    gradient(x0) = (x2-x1) x (x3 - x1);
+    gradient(x1) = (x0-x2) x (x3 - x2);
+    gradient(x2) = (x3-x1) x (x0 - x1);
+    gradient(x3) = (x1-x2) x (x0 - x2);
 */
 struct VolumeConstraint
 {
-    u32 index0;
-    u32 index1;
-    u32 index2;
-    u32 index3;
+    u32 index0; // top
+    u32 index1; // bottom0
+    u32 index2; // bottom1
+    u32 index3; // bottom2
 
     f32 rest_volume;
 };

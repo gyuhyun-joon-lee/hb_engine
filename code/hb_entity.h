@@ -38,6 +38,14 @@ struct Entity
     EntityType type;
     u32 flags;
 
+    // TODO(gh) We need this, because some entities are not retrievable 
+    // only using the asset tag(i.e softbody vertices, their vertices 
+    // slightly differ from each other). This ID will get populated at the
+    // start of the game for now, but we can make this so that static entities 
+    // populate this asset just as we were doing before(when we were rendering),
+    // and only populate the dynamic entites like softbody entities
+    u32 mesh_assetID;
+
     GenericEntityInfo generic_entity_info;
 
     v3 color;

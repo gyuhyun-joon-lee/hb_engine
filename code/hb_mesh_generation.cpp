@@ -196,3 +196,31 @@ generate_floor_mesh(TempMemory *temp_memory, u32 x_quad_count, u32 y_quad_count,
 
     return result;
 }
+
+internal GeneratedMesh
+generate_cube_mesh(TempMemory temp_memory, u32 x_quad_count, u32 y_quad_count,
+                    f32 max_height)
+{
+    GeneratedMesh result = {};
+    return result;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
