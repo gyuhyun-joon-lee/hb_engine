@@ -457,14 +457,14 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
 
     f32 volume = get_tetrahedron_volume(teth_vertices[0], teth_vertices[1], teth_vertices[2], teth_vertices[3]);
 
-#if 0
+#if 1
     // TODO(gh) Just used for validation, needs to be removed
     for(u32 i = 0;
             i < vertex_count;
             ++i)
     {
         assert(is_inside_tetrahedron(vertices[i], 
-                                     tetrahedron_p[0], tetrahedron_p[1], tetrahedron_p[2], tetrahedron_p[3]));
+                                     teth_vertices[0], teth_vertices[1], teth_vertices[2], teth_vertices[3]));
     }
 #endif
 
@@ -519,6 +519,8 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
                     teth_vertices[teth->indices[3]]);
 
             total_teth_count++;
+            // TODO(gh) If any of the indices were 0, 1, 2, or 3 (vertices of the bounding tetrahedron),
+            // we will simply disable that teth
 #if 0
             if(teth->indices[0] != 0 && teth->indices[0] != 1 && teth->indices[0] != 2 && teth->indices[0] != 3 &&
                teth->indices[1] != 0 && teth->indices[1] != 1 && teth->indices[1] != 2 && teth->indices[1] != 3 &&
@@ -540,8 +542,10 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
     PBDParticleGroup *group = &result->particle_group;
     f32 inv_particle_mass = vertex_count * inv_mass;
 
+    // NOTE(gh) First, allocate all particles. Note that the bounding tetrahedron's vertices(index 0,1,2,3)
+    // will be allocated as where, but they will be neglected since we won't allow any constraints involving 
+    // those vertices
     start_particle_allocation_from_pool(&game_state->particle_pool, group);
-    // NOTE(gh) First, allocate all particles
     for(u32 teth_vertex_index = 0;
             teth_vertex_index < teth_vertex_count;
             ++teth_vertex_index)

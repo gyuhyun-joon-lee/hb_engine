@@ -137,7 +137,7 @@ start_memory_arena(void *base, size_t size, b32 should_be_zero = true)
 internal void *
 push_size(MemoryArena *memory_arena, size_t size, b32 should_be_no_temp_memory = true, size_t alignment = 0)
 {
-    assert(size != 0);
+   assert(size != 0);
 
     if(should_be_no_temp_memory)
     {

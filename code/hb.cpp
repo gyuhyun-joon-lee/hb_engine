@@ -128,18 +128,19 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         v3 cube_p[] = 
         {
-            // top
-            V3(-2, -2, 50), 
 #if 0
-            V3(2, -2, 30), V3(2, 2, 30), V3(-2, 2, 30),
-            // bottom
-            V3(-2, -2, 28), V3(2, -2, 28), V3(2, 2, 28), V3(-2, 2, 28)
+            V3(0, 0, 60), 
+            V3(-2, -2, 50), V3(2, -2, 50), V3(0, 2, 50),
 #endif
+            // top
+            V3(-2, -2, 60), V3(2, -2, 60), V3(2, 2, 60), V3(-2, 2, 60),
+            // bottom
+            V3(-2, -2, 50), V3(2, -2, 50), V3(2, 2, 50), V3(-2, 2, 50)
         };
         add_pbd_soft_body_cube_entity(game_state, 
                                      &pbd_arena, &game_state->transient_arena, 
                                      cube_p, array_count(cube_p),
-                                     0.0f, 1/10.0f, V3(0.7f, 0.2f, 0), EntityFlag_Movable|EntityFlag_Collides);
+                                     0.0006f, 1/10.0f, V3(0.7f, 0.2f, 0), EntityFlag_Movable|EntityFlag_Collides);
 
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
@@ -483,7 +484,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     PBDParticle *part2 = group->particles + c->index2;
                     PBDParticle *part3 = group->particles + c->index3;
 
-                    f32 scale = 0.8f;
+                    f32 scale = 1.0f;
+                    if(group->volume_constraint_count >= 4)
+                    {
+                        scale = 0.4f;
+                    }
                     v3 center = 0.25f * (part0->p + part1->p + part2->p + part3->p);
                     v3 p0 = scale*(part0->p - center) + center;
                     v3 p1 = scale*(part1->p - center) + center;
