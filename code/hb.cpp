@@ -105,27 +105,21 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
+        MemoryArena pbd_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));
+
 #if 0
-        add_pbd_soft_body_tetrahedron_entity(game_state, &game_state->transient_arena, 
-                                             V3(0, 0, 15),
-                                             V3(-2, -2, 9), V3(5, 0, 10), V3(0, 5, 12),
-                                             V3(0, 0.2f, 1), 1/10.0f, EntityFlag_Movable|EntityFlag_Collides);
-#endif
-
-#if 1
-        add_pbd_soft_body_bipyramid_entity(game_state, &game_state->transient_arena, 
+        add_pbd_soft_body_tetrahedron_entity(game_state, &pbd_arena, 
                                              V3(0, 2, 14),
-                                             V3(-4, 0, 10), V3(4, 0, 10), V3(0, 4, 10),
-                                             V3(0, 2, 6),
-                                             0.0f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
+                                             V3(-4, 0, 5), V3(4, 0, 12), V3(0, 4, 8),
+                                             0.0f, 1/10.0f, V3(0, 0.8f, 0.2f), EntityFlag_Movable|EntityFlag_Collides);
 
-        add_pbd_soft_body_bipyramid_entity(game_state, &game_state->transient_arena, 
+        add_pbd_soft_body_bipyramid_entity(game_state, &pbd_arena, 
                                              V3(12, 10, 14),
                                              V3(6, 10, 10), V3(13, 9, 10), V3(10, 14, 10),
                                              V3(10, 12, 6),
                                              0.0006f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
-        add_pbd_soft_body_bipyramid_entity(game_state, &game_state->transient_arena, 
+        add_pbd_soft_body_bipyramid_entity(game_state, &pbd_arena, 
                                              V3(-10, -8, 14),
                                              V3(-14, -10, 7), V3(-6, -10, 9), V3(-10, -6, 10),
                                              V3(-11, -9, 6),
@@ -135,24 +129,18 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         v3 cube_p[] = 
         {
             // top
-            V3(-2, -2, 10), V3(2, -2, 10), V3(2, 2, 10), V3(-2, 2, 10),
-            // bottom
-            V3(-2, -2, 5), V3(2, -2, 5), V3(2, 2, 5), V3(-2, 2, 5)
-        };
-        add_pbd_soft_body_cube_entity(game_state, &game_state->transient_arena, 
-                                     cube_p, array_count(cube_p),
-                                     30.01f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
-
-
+            V3(-2, -2, 50), 
 #if 0
-        add_pbd_soft_body_cube_entity(game_state, 
-                                      &game_state->transient_arena,
-                                      VertexPN *vertices, u32 vertex_count,
-                                      u32 *indices, u32 index_count, 
-                                      f32 inv_edge_stiffness, f32 inv_mass, u32 flags)
+            V3(2, -2, 30), V3(2, 2, 30), V3(-2, 2, 30),
+            // bottom
+            V3(-2, -2, 28), V3(2, -2, 28), V3(2, 2, 28), V3(-2, 2, 28)
 #endif
+        };
+        add_pbd_soft_body_cube_entity(game_state, 
+                                     &pbd_arena, &game_state->transient_arena, 
+                                     cube_p, array_count(cube_p),
+                                     0.0f, 1/10.0f, V3(0.7f, 0.2f, 0), EntityFlag_Movable|EntityFlag_Collides);
 
-        // add_pbd_soft_body_cube_entity()
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
@@ -231,12 +219,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         {
             case EntityType_PBD:
             {
-                // TODO(gh) Later, we need to 'gather' all the particle groups
-                // and pre solve - solve - post solve step by step for every particle group!!
-
                 u32 substep_count = 10;
                 f32 sub_dt = platform_input->dt_per_frame/substep_count;
                 
+#if 1
                 for(u32 substep_index = 0;
                         substep_index < substep_count;
                         ++substep_index)
@@ -277,28 +263,35 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         PBDParticle *particle0 = group->particles + c->index0;
                         PBDParticle *particle1 = group->particles + c->index1;
 
-                        v3 delta = particle0->p - particle1->p;
-                        f32 C = length(delta) - c->rest_length;
-
-                        if(C != 0.0f)
+                        if(particle0->inv_mass + particle1->inv_mass != 0.0f)
                         {
-                            // Gradient of the constraint for each particles that were invovled in the constraint
-                            // So this is actually gradient(C(xi))
-                            v3 gradient0 = normalize(delta);
-                            v3 gradient1 = -gradient0;
-
-                            // TODO(gh) inv_stiffness stuff seems like it's causing a problem..
-                            // NOTE(gh) inv_mass of the particles are involved
-                            // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
-                            f32 a = group->inv_distance_stiffness/square(sub_dt);
-                            f32 lagrange_multiplier = 
-                                -C / (particle0->inv_mass + particle1->inv_mass + a);
-
-                            if(lagrange_multiplier != 0)
+                            v3 delta = particle0->p - particle1->p;
+                            f32 delta_length = length(delta);
+                            if(delta_length != 0.0f)
                             {
-                                // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
-                                particle0->p += lagrange_multiplier*particle0->inv_mass*gradient0;
-                                particle1->p += lagrange_multiplier*particle1->inv_mass*gradient1;
+                                f32 C = delta_length - c->rest_length;
+
+                                if(C != 0.0f)
+                                {
+                                    // Gradient of the constraint for each particles that were invovled in the constraint
+                                    // So this is actually gradient(C(xi))
+                                    v3 gradient0 = normalize(delta);
+                                    v3 gradient1 = -gradient0;
+
+                                    // TODO(gh) inv_stiffness stuff seems like it's causing a problem..
+                                    // NOTE(gh) inv_mass of the particles are involved
+                                    // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
+                                    f32 a = group->inv_distance_stiffness/square(sub_dt);
+                                    f32 lagrange_multiplier = 
+                                        -C / (particle0->inv_mass + particle1->inv_mass + a);
+
+                                    if(lagrange_multiplier != 0)
+                                    {
+                                        // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
+                                        particle0->p += lagrange_multiplier*particle0->inv_mass*gradient0;
+                                        particle1->p += lagrange_multiplier*particle1->inv_mass*gradient1;
+                                    }
+                                }
                             }
                         }
                     }
@@ -363,6 +356,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         }
                     }
                 }
+#endif
             }break;
         }
     }
@@ -489,29 +483,36 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     PBDParticle *part2 = group->particles + c->index2;
                     PBDParticle *part3 = group->particles + c->index3;
 
-                    v3 n013 = normalize(cross(part0->p - part1->p, part3->p - part1->p));
-                    v3 n123 = normalize(cross(part2->p - part1->p, part3->p - part1->p));
-                    v3 n320 = normalize(cross(part3->p - part2->p, part0->p - part2->p));
-                    v3 n102 = normalize(cross(part2->p - part1->p, part0->p - part1->p));
+                    f32 scale = 0.8f;
+                    v3 center = 0.25f * (part0->p + part1->p + part2->p + part3->p);
+                    v3 p0 = scale*(part0->p - center) + center;
+                    v3 p1 = scale*(part1->p - center) + center;
+                    v3 p2 = scale*(part2->p - center) + center;
+                    v3 p3 = scale*(part3->p - center) + center;
+
+                    v3 n013 = normalize(cross(p0 - p1, p3 - p1));
+                    v3 n123 = normalize(cross(p2 - p1, p3 - p1));
+                    v3 n320 = normalize(cross(p3 - p2, p0 - p2));
+                    v3 n102 = normalize(cross(p2 - p1, p0 - p1));
 
                     VertexPN vertices[] = 
                     {
                         // 0, 3, 1, 
-                        {part0->p, n013},
-                        {part3->p, n013},
-                        {part1->p, n013},
+                        {p0, n013},
+                        {p3, n013},
+                        {p1, n013},
                         // 1, 3, 2, 
-                        {part1->p, n123},
-                        {part3->p, n123},
-                        {part2->p, n123},
+                        {p1, n123},
+                        {p3, n123},
+                        {p2, n123},
                         // 3, 0, 2,
-                        {part3->p, n320},
-                        {part0->p, n320},
-                        {part2->p, n320},
+                        {p3, n320},
+                        {p0, n320},
+                        {p2, n320},
                         // 1, 2, 0,
-                        {part1->p, n102},
-                        {part2->p, n102},
-                        {part0->p, n102},
+                        {p1, n102},
+                        {p2, n102},
+                        {p0, n102},
                     };
                     u32 vertex_count = array_count(vertices);
 
@@ -529,13 +530,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                         vertices, vertex_count, 
                                         indices, index_count);
 
-                    push_line(platform_render_push_buffer, part0->p, part1->p, entity->color);
-                    push_line(platform_render_push_buffer, part1->p, part2->p, entity->color);
-                    push_line(platform_render_push_buffer, part2->p, part0->p, entity->color);
+                    push_line(platform_render_push_buffer, p0, p1, entity->color);
+                    push_line(platform_render_push_buffer, p1, p2, entity->color);
+                    push_line(platform_render_push_buffer, p2, p0, entity->color);
 
-                    push_line(platform_render_push_buffer, part3->p, part0->p, entity->color);
-                    push_line(platform_render_push_buffer, part3->p, part1->p, entity->color);
-                    push_line(platform_render_push_buffer, part3->p, part2->p, entity->color);
+                    push_line(platform_render_push_buffer, p3, p0, entity->color);
+                    push_line(platform_render_push_buffer, p3, p1, entity->color);
+                    push_line(platform_render_push_buffer, p3, p2, entity->color);
                 }
             }break;
         }

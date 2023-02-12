@@ -128,6 +128,7 @@ start_memory_arena(void *base, size_t size, b32 should_be_zero = true)
     return result;
 }
 
+
 // NOTE(gh): Works for both platform memory(world arena) & temp memory
 #define push_array(memory, type, count) (type *)push_size(memory, count * sizeof(type))
 #define push_struct(memory, type) (type *)push_size(memory, sizeof(type))
@@ -147,6 +148,17 @@ push_size(MemoryArena *memory_arena, size_t size, b32 should_be_no_temp_memory =
 
     void *result = (u8 *)memory_arena->base + memory_arena->used;
     memory_arena->used += size;
+
+    return result;
+}
+
+internal MemoryArena
+start_sub_arena(MemoryArena *base_arena, size_t size, b32 should_be_zero = true)
+{
+    MemoryArena result = {};
+
+    result.base = (u8 *)push_size(base_arena, size, should_be_zero);
+    result.total_size = size;
 
     return result;
 }

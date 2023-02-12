@@ -1839,8 +1839,8 @@ int main(void)
     metal_render_context.directional_light_shadowmap_depth_texture = 
         metal_make_texture2D(device, 
                               MTLPixelFormatDepth32Float, 
-                              1024, 
-                              1024,
+                              4096, 
+                              4096,
                               MTLTextureUsageRenderTarget,
                               MTLStorageModePrivate);
     metal_render_context.directional_light_shadowmap_renderpass = 

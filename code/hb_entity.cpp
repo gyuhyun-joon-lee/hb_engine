@@ -170,12 +170,32 @@ add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 colo
 internal void
 add_distance_constraint(PBDParticleGroup *group, u32 index0, u32 index1)
 {
-    DistanceConstraint *c = group->distance_constraints + group->distance_constraint_count++;
+    // TODO(gh) First, search through the constraints to see if there is a duplicate.
+    // This is a very slow operation that scales horribly, so might be better if we 
+    // can use maybe hashing??
 
-    c->index0 = index0;
-    c->index1 = index1;
+    b32 should_add_new_constraint = true;
+    for(u32 c_index = 0;
+            c_index < group->distance_constraint_count;
+            ++c_index)
+    {
+        DistanceConstraint *c = group->distance_constraints + c_index;
+        if((c->index0 == index0 && c->index1 == index1) || 
+          (c->index0 == index1 && c->index1 == index0))
+        {
+            should_add_new_constraint = false;
+        }
+    }
 
-    c->rest_length = length(group->particles[index0].p - group->particles[index1].p);
+    if(should_add_new_constraint)
+    {
+        DistanceConstraint *c = group->distance_constraints + group->distance_constraint_count++;
+
+        c->index0 = index0;
+        c->index1 = index1;
+
+        c->rest_length = length(group->particles[index0].p - group->particles[index1].p);
+    }
 }
 
 
@@ -237,6 +257,7 @@ add_pbd_soft_body_tetrahedron_entity(GameState *game_state,
 
     group->distance_constraints = push_array(arena, DistanceConstraint, 6);
     group->distance_constraint_count = 0;
+    group->inv_distance_stiffness = inv_edge_stiffness;
     add_distance_constraint(group, 0, 1);
     add_distance_constraint(group, 0, 2);
     add_distance_constraint(group, 1, 2);
@@ -245,6 +266,7 @@ add_pbd_soft_body_tetrahedron_entity(GameState *game_state,
     add_distance_constraint(group, 2, 3);
 
     group->volume_constraints = push_array(arena, VolumeConstraint, 1);
+    group->volume_constraint_count = 0;
     add_volume_constraint(group, 0, 1, 2, 3);
 
     return result;
@@ -313,6 +335,7 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
     add_distance_constraint(group, 2, 4);
 
     group->volume_constraints = push_array(arena, VolumeConstraint, 2);
+    group->volume_constraint_count = 0;
     add_volume_constraint(group, 0, 1, 2, 3);
     // TODO(gh) This weird order is due to how we are constructing the vertices
     // dynamically
@@ -371,38 +394,48 @@ push_tetrahedron(u32 top,
 
 internal Entity *
 add_pbd_soft_body_cube_entity(GameState *game_state, 
-                              MemoryArena *arena,
+                              MemoryArena *arena, MemoryArena *temp_arena, 
                               v3 *vertices, u32 vertex_count,
                               f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
-#if 0
+    result->color = color;
 
     v3 center = {};
-    for(u32 i = 0;
-            i < vertex_count;
-            ++i)
-    {
-        center += vertices[i];
-    }
-    center /= vertex_count;
-
-    // Find the bounding sphere of the mesh
     f32 max_distance_square = flt_min;
-    for(u32 i = 0;
-            i < vertex_count;
-            ++i)
+    if(vertex_count > 1)
     {
-        f32 d = length_square(vertices[i] - center);
-        if(d > max_distance_square)
+        for(u32 i = 0;
+                i < vertex_count;
+                ++i)
         {
-            max_distance_square = d;
+            center += vertices[i];
         }
+        center /= vertex_count;
+
+        // Find the bounding sphere of the mesh
+        for(u32 i = 0;
+                i < vertex_count;
+                ++i)
+        {
+            f32 d = length_square(vertices[i] - center);
+            if(d > max_distance_square)
+            {
+                max_distance_square = d;
+            }
+        }
+    }
+    else
+    {
+        // NOTE(gh) We only have one vertex, so set the center to that vertex
+        // and set the arbitrary distance
+        center = vertices[0];
+        max_distance_square = 1.0f;
     }
 
     u32 max_teth_count = 100;
     u32 max_teth_vertex_count = 4 * max_teth_count;
-    TempMemory temp_memory = start_temp_memory(arena, sizeof(Tetrahedron)*max_teth_count + 
+    TempMemory temp_memory = start_temp_memory(temp_arena, sizeof(Tetrahedron)*max_teth_count + 
                                                       sizeof(v3) * max_teth_vertex_count);
     Tetrahedron *teths = push_array(&temp_memory, Tetrahedron, max_teth_count);
     v3 *teth_vertices = push_array(&temp_memory, v3, max_teth_vertex_count);
@@ -410,7 +443,7 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
 
     // TODO(gh) Push the first tetrahedron that is big enough 
     // for the bounding sphere of the mesh. The size is a bit ad-hoc
-    f32 r = sqrt(max_distance_square);
+    f32 r = 1.2f*sqrt(max_distance_square);
     // length of the teth edge
     f32 s = 5 * r;
     push_tetrahedron(
@@ -421,6 +454,8 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
         push_tetrahedron_vertex(center + V3(s, -s, -s), teth_vertices, &teth_vertex_count, max_teth_vertex_count),
         push_tetrahedron_vertex(center + V3(0, s, -s), teth_vertices, &teth_vertex_count, max_teth_vertex_count),
         teths, max_teth_count);
+
+    f32 volume = get_tetrahedron_volume(teth_vertices[0], teth_vertices[1], teth_vertices[2], teth_vertices[3]);
 
 #if 0
     // TODO(gh) Just used for validation, needs to be removed
@@ -446,26 +481,84 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
         {
             Tetrahedron *teth = teths + teth_index;
 
-            if(is_inside_tetrahedron(vertices[vertex_index], 
+            if(teth->being_used && 
+                is_inside_tetrahedron(vertices[vertex_index], 
                                      teth_vertices[teth->indices[0]], 
                                      teth_vertices[teth->indices[1]], teth_vertices[teth->indices[2]], teth_vertices[teth->indices[3]]))
             {
                 found_bounding_teth = true;
 
                 // If the point was inside the t, we need to make 4 new ts and delete the orignal one
-                push_tetrahedron(t_vertexID, teth->indices[0], teth->indices[1], teth->indices[2], teths, max_teth_count);
-                push_tetrahedron(t_vertexID, teth->indices[0], teth->indices[2], teth->indices[3], teths, max_teth_count);
-                push_tetrahedron(t_vertexID, teth->indices[0], teth->indices[3], teth->indices[1], teths, max_teth_count);
-                push_tetrahedron(t_vertexID, teth->indices[1], teth->indices[3], teth->indices[2], teths, max_teth_count);
+                push_tetrahedron(t_vertexID, teth->indices[0], teth->indices[2], teth->indices[1], teths, max_teth_count);
+                push_tetrahedron(t_vertexID, teth->indices[0], teth->indices[3], teth->indices[2], teths, max_teth_count);
+                push_tetrahedron(t_vertexID, teth->indices[0], teth->indices[1], teth->indices[3], teths, max_teth_count);
+                push_tetrahedron(t_vertexID, teth->indices[1], teth->indices[2], teth->indices[3], teths, max_teth_count);
 
                 teth->being_used = false;
+
             }
         }
 
         assert(found_bounding_teth);
     }
 
-    f32 total_volume = get_tetrahedron_volume;
+    // Validate and remove the teths that contains any of 4 vertices
+    // that were encapsulating the bounding sphere of the mesh
+    f32 total_volume = 0.0f;
+    u32 total_teth_count = 0;
+    for(u32 teth_index = 0;
+            teth_index < max_teth_count;
+            ++teth_index)
+    {
+        Tetrahedron *teth = teths + teth_index;
+        if(teth->being_used)
+        {
+            total_volume += get_tetrahedron_volume(teth_vertices[teth->indices[0]], 
+                    teth_vertices[teth->indices[1]],
+                    teth_vertices[teth->indices[2]],
+                    teth_vertices[teth->indices[3]]);
+
+            total_teth_count++;
+#if 0
+            if(teth->indices[0] != 0 && teth->indices[0] != 1 && teth->indices[0] != 2 && teth->indices[0] != 3 &&
+               teth->indices[1] != 0 && teth->indices[1] != 1 && teth->indices[1] != 2 && teth->indices[1] != 3 &&
+               teth->indices[2] != 0 && teth->indices[2] != 1 && teth->indices[2] != 2 && teth->indices[2] != 3 &&
+               teth->indices[3] != 0 && teth->indices[3] != 1 && teth->indices[3] != 2 && teth->indices[3] != 3)
+            {
+            }
+            else
+            {
+                teth->being_used = false;
+            }
+#endif
+        }
+    }
+
+    f32 b = abs(volume - total_volume);
+    assert(b < 1.0f);
+
+    PBDParticleGroup *group = &result->particle_group;
+    f32 inv_particle_mass = vertex_count * inv_mass;
+
+    start_particle_allocation_from_pool(&game_state->particle_pool, group);
+    // NOTE(gh) First, allocate all particles
+    for(u32 teth_vertex_index = 0;
+            teth_vertex_index < teth_vertex_count;
+            ++teth_vertex_index)
+    {
+        allocate_particle_from_pool(&game_state->particle_pool,
+                                    teth_vertices[teth_vertex_index],
+                                    particle_radius,
+                                    inv_particle_mass);
+    }
+    end_particle_allocation_from_pool(&game_state->particle_pool, group);
+
+    group->distance_constraints = push_array(arena, DistanceConstraint, 6 * total_teth_count);
+    group->distance_constraint_count = 0;
+    group->inv_distance_stiffness = inv_edge_stiffness;
+    group->volume_constraints = push_array(arena, VolumeConstraint, total_teth_count);
+    group->volume_constraint_count = 0;
+
     for(u32 teth_index = 0;
             teth_index < max_teth_count;
             ++teth_index)
@@ -473,13 +566,23 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
         Tetrahedron * teth = teths + teth_index;
         if(teth->being_used)
         {
-            total_volume += get_tetrahedron_volume();
+            u32 index0 = teth->indices[0];
+            u32 index1 = teth->indices[1];
+            u32 index2 = teth->indices[2];
+            u32 index3 = teth->indices[3];
+            add_distance_constraint(group, index0, index1);
+            add_distance_constraint(group, index0, index2);
+            add_distance_constraint(group, index0, index3);
+            add_distance_constraint(group, index1, index2);
+            add_distance_constraint(group, index1, index3);
+            add_distance_constraint(group, index2, index3);
+
+            add_volume_constraint(group, index0, index1, index2, index3);
         }
     }
 
     end_temp_memory(&temp_memory);
 
-#endif
     return result;
 }
 
