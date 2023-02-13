@@ -67,7 +67,6 @@ struct CameraFrustum
     - So before the projection matrix, near < far (i.e 1 < 5). 
       However, in the projection matrix, n > f (i.e -1 > -5) because both values will be negated.
 */
-
 struct Camera
 {
     quat orientation;

@@ -225,7 +225,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
     // NOTE(gh) orientation, which is a unit quaternion, has 4 DOF, but we have to have only 3.
-    // By normalizing the orientation, we can get 4-1=3DOF
+    // By normalizing the orientation, we can get 4-1=3DOF.
+    // 0.5 comes from the quaternion differentiation
     render_camera->orientation = 
         normalize(render_camera->orientation +
                   0.5f*Quat(0, camera_rotation)*render_camera->orientation);
