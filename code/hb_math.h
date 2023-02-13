@@ -1318,9 +1318,9 @@ is_pure_quat(quat q)
 
 // NOTE(gh) This matrix is an orthogonal matrix, so inverse == transpose
 inline m3x3
-rotation_quat_to_m3x3(quat q)
+orientation_quat_to_m3x3(quat q)
 {
-    // NOTE(gh) q is a unit-norm quaterion, whether pure or non-pure
+    // NOTE(gh) q is a unit-norm quaterion
     m3x3 result = {};
     result.e[0][0] = 1 - 2.0f*(q.y*q.y + q.z*q.z);
     result.e[0][1] = 2.0f*(q.x*q.y - q.s*q.z);
@@ -1382,22 +1382,6 @@ inline m4x4
 translate(v3 xyz)
 {
     return translate(xyz.x, xyz.y, xyz.z);
-}
-
-// NOTE(gh) operation order here is translate * rotation * scale
-inline m4x4
-srt_m4x4(v3 translate, quat orientation, v3 scale)
-{
-    m3x3 r = rotation_quat_to_m3x3(orientation);
-    m3x3 s = scale_m3x3(scale);
-
-    m4x4 result = M4x4(r * s);
-    result.e[0][3] = translate.x;
-    result.e[1][3] = translate.y;
-    result.e[2][3] = translate.z;
-    result.e[3][3] = 1.0f;
-
-    return result;
 }
 
 inline m4x4

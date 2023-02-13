@@ -61,14 +61,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         MemoryArena pbd_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));
 
         game_state->game_camera = init_fps_camera(V3(0, -10, 22), 1.0f, 135, 1.0f, 1000.0f);
-        game_state->game_camera.pitch += 1.5f;
         game_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
         // Close camera
-        // game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(0, 0, 0), 5.0f, 135, 0.01f, 10000.0f);
+        // game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(), 5.0f, 135, 0.01f, 10000.0f);
         // Far away camera
-        game_state->circle_camera = init_circle_camera(V3(0, 0, 20), V3(0, 0, 0), 20.0f, 135, 0.01f, 10000.0f);
+        game_state->circle_camera = init_circle_camera(V3(0, 0, 20), V3(), 20.0f, 135, 0.01f, 10000.0f);
         // Really far away camera
-        // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
+        // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(), 50.0f, 135, 0.01f, 10000.0f);
 
         load_game_assets(&game_state->assets, &game_state->transient_arena, platform_api, gpu_work_queue);
         PlatformReadFileResult bunny_file = platform_api->read_file("/Volumes/meka/HB_engine/data/teapot.obj");
@@ -135,7 +134,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
 #endif
 
-        add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
+        add_floor_entity(game_state, &game_state->transient_arena, V3(), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
 
 #if 1
@@ -193,33 +192,46 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     Camera *render_camera = game_camera;
     //render_camera = debug_camera;
+
+    // This is an axis angle rotation, which will be a pure quaternion 
+    // when used to update the orientation.
+    v3 camera_rotation = V3();
      
     if(render_camera == debug_camera)
     {
-        game_camera->roll += 0.8f * platform_input->dt_per_frame;
-    }
-
-    f32 camera_rotation_speed = 3.0f * platform_input->dt_per_frame;
-
-    if(platform_input->action_up)
-    {
-        render_camera->pitch += camera_rotation_speed;
-    }
-    if(platform_input->action_down)
-    {
-        render_camera->pitch -= camera_rotation_speed;
-    }
-    if(platform_input->action_left)
-    {
-        render_camera->roll += camera_rotation_speed;
-    }
-    if(platform_input->action_right)
-    {
-        render_camera->roll -= camera_rotation_speed;
+        // game_camera->roll += 0.8f * platform_input->dt_per_frame;
     }
 
     v3 camera_dir = get_camera_lookat(render_camera);
-    v3 camera_right_dir = get_camera_right(render_camera);
+    v3 camera_right = get_camera_right(render_camera);
+    v3 camera_up = normalize(cross(camera_right, camera_dir)); 
+
+    f32 camera_rotation_speed = 3.0f * platform_input->dt_per_frame;
+    if(platform_input->action_up)
+    {
+        camera_rotation += camera_rotation_speed * camera_right;
+    }
+    if(platform_input->action_down)
+    {
+        camera_rotation -= camera_rotation_speed * camera_right;
+    }
+    if(platform_input->action_left)
+    {
+        camera_rotation += camera_rotation_speed * V3(0, 0, 1);
+    }
+    if(platform_input->action_right)
+    {
+        camera_rotation -= camera_rotation_speed * V3(0, 0, 1);
+    }
+
+    // NOTE(gh) orientation, which is a unit quaternion, has 4 DOF, but we have to have only 3.
+    // By normalizing the orientation, we can get 4-1=3DOF
+    render_camera->orientation = 
+        normalize(render_camera->orientation +
+                  0.5f*Quat(0, camera_rotation)*render_camera->orientation);
+
+#if 1
+
     f32 camera_speed = 30.0f * platform_input->dt_per_frame;
     if(platform_input->move_up)
     {
@@ -231,12 +243,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
     if(platform_input->move_right)
     {
-        render_camera->p += camera_speed*camera_right_dir;
+        render_camera->p += camera_speed*camera_right;
     }
     if(platform_input->move_left)
     {
-        render_camera->p += -camera_speed*camera_right_dir;
+        render_camera->p += -camera_speed*camera_right;
     }
+#endif
 
     for(u32 entity_index = 0;
             entity_index < game_state->entity_count;
@@ -504,14 +517,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     // NOTE(gh) render entity start
     init_render_push_buffer(platform_render_push_buffer, render_camera, game_camera,
             game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
-            V3(0, 0, 0), true);
+            V3(), true);
     platform_render_push_buffer->enable_shadow = true;
     platform_render_push_buffer->enable_grass_rendering = true;
 
     if(debug_platform_render_push_buffer)
     {
         init_render_push_buffer(debug_platform_render_push_buffer, render_camera, game_camera,
-                    0, 0, 0, V3(0, 0, 0), false);
+                    0, 0, 0, V3(), false);
     }
 
     for(u32 entity_index = 0;

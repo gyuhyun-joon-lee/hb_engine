@@ -12,13 +12,11 @@ init_fps_camera(v3 p, f32 focal_length, f32 fov_in_degree, f32 near, f32 far)
     result.p = p;
     result.focal_length = focal_length;
 
+    result.orientation = Quat(1, V3()); // angle == 0
+
     result.fov = degree_to_radian(fov_in_degree);
     result.near = near;
     result.far = far;
-
-    result.pitch = 0.0f;
-    result.yaw = 0.0f;
-    result.roll = 0.0f;
 
     return result;
 }
@@ -82,12 +80,58 @@ camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_ax
     TIMED_BLOCK();
     m4x4 result = {};
 
+
+    return result;
+}
+
+#if 1
+internal v3
+get_camera_lookat(Camera *camera)
+{
+    v3 result = orientation_quat_to_m3x3(camera->orientation) * V3(0, 0, -1); 
+
+    return result;
+}
+
+internal v3
+get_camera_right(Camera *camera)
+{
+    v3 result = orientation_quat_to_m3x3(camera->orientation) * V3(1, 0, 0);
+
+    return result;
+}
+
+internal v3
+get_camera_up(Camera *camera)
+{
+    v3 result = orientation_quat_to_m3x3(camera->orientation) * V3(0, 1, 0);
+    return result;
+}
+#endif
+
+internal m4x4
+camera_transform(Camera *camera)
+{
+    // orientation quaternion should always be a unit quaternion
+    assert(compare_with_epsilon(length_square(camera->orientation), 1.0f));
+
+    m3x3 orientation_matrix = orientation_quat_to_m3x3(camera->orientation);
+
+    // TODO(gh) Since the vectors have so many 0s, we can avoid the matrix-vector
+    // multiplication
+    // We assume that the initial coordinates of the camera matches with the 
+    // world coordinates
+    v3 camera_x_axis = orientation_matrix*V3(1, 0, 0);
+    v3 camera_y_axis = orientation_matrix*V3(0, 1, 0);
+    v3 camera_z_axis = orientation_matrix*V3(0, 0, 1);
+
     // NOTE(gh) to pack the rotation & translation into one matrix(with an order of translation and the rotation),
     // we need to first multiply the translation by the rotation matrix
-    v3 multiplied_translation = V3(dot(camera_x_axis, -camera_p), 
-                                    dot(camera_y_axis, -camera_p),
-                                    dot(camera_z_axis, -camera_p));
+    v3 multiplied_translation = V3(dot(camera_x_axis, -camera->p), 
+                                    dot(camera_y_axis, -camera->p),
+                                    dot(camera_z_axis, -camera->p));
 
+    m4x4 result = M4x4();
     result.rows[0] = V4(camera_x_axis, multiplied_translation.x);
     result.rows[1] = V4(camera_y_axis, multiplied_translation.y);
     result.rows[2] = V4(camera_z_axis, multiplied_translation.z);
@@ -96,35 +140,6 @@ camera_transform(v3 camera_p, v3 camera_x_axis, v3 camera_y_axis, v3 camera_z_ax
     result.rows[3] = V4(0.0f, 0.0f, 0.0f, 1.0f); 
 
     return result;
-}
-
-internal m4x4
-camera_transform(Camera *camera)
-{
-    // NOTE(gh) FPS camear removes one axis to avoid gimbal lock. 
-    m3x3 camera_local_rotation = z_rotate(camera->roll) * x_rotate(camera->pitch);
-    
-    // NOTE(gh) camera aligns with the world coordinate in default.
-    v3 camera_x_axis = normalize(camera_local_rotation * V3(1, 0, 0));
-    v3 camera_y_axis = normalize(camera_local_rotation * V3(0, 1, 0));
-    v3 camera_z_axis = normalize(camera_local_rotation * V3(0, 0, 1));
-    m3x3 transpose_camera_local_rotation = transpose(camera_local_rotation);
-
-    return camera_transform(camera->p, camera_x_axis, camera_y_axis, camera_z_axis);
-}
-
-internal m4x4
-camera_transform(CircleCamera *camera)
-{
-    // -z is the looking direction
-    v3 camera_z_axis = -normalize(camera->lookat_p - camera->p);
-
-    // TODO(gh) This does not work if the camera was direction looking down or up in world z axis
-    assert(!(camera_z_axis.x == 0.0f && camera_z_axis.y == 0.0f));
-    v3 camera_x_axis = normalize(cross(V3(0, 0, 1), camera_z_axis));
-    v3 camera_y_axis = normalize(cross(camera_z_axis, camera_x_axis));
-
-    return camera_transform(camera->p, camera_x_axis, camera_y_axis, camera_z_axis);
 }
 
 // NOTE(gh) persepctive projection matrix for (-1, -1, 0) to (1, 1, 1) NDC like Metal
@@ -160,29 +175,6 @@ perspective_projection_near_is_01(f32 fov, f32 n, f32 f, f32 width_over_height)
     return result;
 }
 
-
-internal v3
-get_camera_lookat(Camera *camera)
-{
-    // TODO(gh) I don't think the math here is correct, shouldn't we do this in backwards 
-    // to go from camera space to world space, considering that (0, 0, -1) is the camera lookat in
-    // camera space??
-    m3x3 camera_local_rotation = z_rotate(camera->roll) * x_rotate(camera->pitch);
-    v3 result = camera_local_rotation * V3(0, 0, -1); 
-
-    return result;
-}
-
-// TODO(gh) Does not work when camera is directly looking up or down
-internal v3
-get_camera_right(Camera *camera)
-{
-    // TODO(gh) Up vector might be same as the camera direction
-    v3 camera_dir = get_camera_lookat(camera);
-    v3 result = normalize(cross(camera_dir, V3(0, 0, 1)));
-
-    return result;
-}
 
 // TODO(gh) This operation is quite expensive, find out to optimize it
 internal void
@@ -576,25 +568,6 @@ start_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer,
     entry->instance_buffer_offset = render_push_buffer->transient_buffer_used;
 
     return (RenderEntryHeader *)entry;
-}
-
-internal void
-push_render_entry_instance(PlatformRenderPushBuffer *render_push_buffer, RenderEntryHeader *entry_header,
-                            v3 p, v3 scale, v3 rotation_axis, f32 rotation_angle, v3 color)
-{
-    assert(render_push_buffer->recording_instanced_rendering == true);
-
-    quat rotation = get_quat_with_axis_angle(rotation_axis, rotation_angle);
-    PerObjectData per_object_data = {};
-    per_object_data.model = transpose(srt_m4x4(p, rotation, scale));
-    per_object_data.color = color;
-
-    push_data(render_push_buffer->transient_buffer, 
-                &render_push_buffer->transient_buffer_used, 
-                render_push_buffer->transient_buffer_size,
-                &per_object_data, sizeof(per_object_data));
-    
-    entry_header->instance_count++;
 }
 
 internal void
