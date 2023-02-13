@@ -23,7 +23,7 @@ typedef uintptr_t uintptr;
 
 typedef float r32;
 typedef float f32;
-typedef double r64;
+typedef float f64;
 
 #define Flt_Min FLT_MIN
 #define Flt_Max FLT_MAX

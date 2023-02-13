@@ -393,10 +393,10 @@ push_tetrahedron(u32 top,
 }
 
 internal Entity *
-add_pbd_soft_body_cube_entity(GameState *game_state, 
-                              MemoryArena *arena, MemoryArena *temp_arena, 
-                              v3 *vertices, u32 vertex_count,
-                              f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
+add_pbd_mesh_entity(GameState *game_state, 
+                    MemoryArena *arena, MemoryArena *temp_arena, 
+                    v3 *vertices, u32 vertex_count,
+                    f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
     result->color = color;
@@ -414,16 +414,7 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
         center /= vertex_count;
 
         // Find the bounding sphere of the mesh
-        for(u32 i = 0;
-                i < vertex_count;
-                ++i)
-        {
-            f32 d = length_square(vertices[i] - center);
-            if(d > max_distance_square)
-            {
-                max_distance_square = d;
-            }
-        }
+        max_distance_square = length_square(vertices[0] - center);
     }
     else
     {
@@ -433,7 +424,7 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
         max_distance_square = 1.0f;
     }
 
-    u32 max_teth_count = 100;
+    u32 max_teth_count = 8192*4;
     u32 max_teth_vertex_count = 4 * max_teth_count;
     TempMemory temp_memory = start_temp_memory(temp_arena, sizeof(Tetrahedron)*max_teth_count + 
                                                       sizeof(v3) * max_teth_vertex_count);
@@ -443,7 +434,7 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
 
     // TODO(gh) Push the first tetrahedron that is big enough 
     // for the bounding sphere of the mesh. The size is a bit ad-hoc
-    f32 r = 1.2f*sqrt(max_distance_square);
+    f32 r = 2.2f*sqrt(max_distance_square);
     // length of the teth edge
     f32 s = 5 * r;
     push_tetrahedron(
@@ -513,20 +504,22 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
         Tetrahedron *teth = teths + teth_index;
         if(teth->being_used)
         {
+#if 0
             total_volume += get_tetrahedron_volume(teth_vertices[teth->indices[0]], 
                     teth_vertices[teth->indices[1]],
                     teth_vertices[teth->indices[2]],
                     teth_vertices[teth->indices[3]]);
+#endif
 
-            total_teth_count++;
             // TODO(gh) If any of the indices were 0, 1, 2, or 3 (vertices of the bounding tetrahedron),
             // we will simply disable that teth
-#if 0
+#if 1
             if(teth->indices[0] != 0 && teth->indices[0] != 1 && teth->indices[0] != 2 && teth->indices[0] != 3 &&
                teth->indices[1] != 0 && teth->indices[1] != 1 && teth->indices[1] != 2 && teth->indices[1] != 3 &&
                teth->indices[2] != 0 && teth->indices[2] != 1 && teth->indices[2] != 2 && teth->indices[2] != 3 &&
                teth->indices[3] != 0 && teth->indices[3] != 1 && teth->indices[3] != 2 && teth->indices[3] != 3)
             {
+                total_teth_count++;
             }
             else
             {
@@ -536,8 +529,10 @@ add_pbd_soft_body_cube_entity(GameState *game_state,
         }
     }
 
-    f32 b = abs(volume - total_volume);
-    assert(b < 1.0f);
+    if(total_volume > 0.0f)
+    {
+        assert(abs(volume - total_volume) < 1.0f);
+    }
 
     PBDParticleGroup *group = &result->particle_group;
     f32 inv_particle_mass = vertex_count * inv_mass;

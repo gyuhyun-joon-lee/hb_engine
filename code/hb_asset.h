@@ -13,6 +13,7 @@ enum AssetTag
     AssetTag_Null,
     AssetTag_FloorMesh,
     AssetTag_SphereMesh,
+    AssetTag_BunnyMesh,
 
     AssetTag_Glyph,
 };

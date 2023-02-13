@@ -1,878 +1,871 @@
 #include "hb_obj.h"
 
-internal void
-eat_all_white_spaces(ObjTokenizer *tokenizer)
+// NOTE(gh) 'peek' function takes a Tokenizer as a value, therefore 
+// not advancing the tokenizer
+// 'eat' function takes a tokenizer pointer, and will advance the tokenizer
+inline void
+eat(Tokenizer *tokenizer, i32 a)
 {
-    // TODO(gyuhyun) Because certain OS uses \n\r as a carriage return,
-    // we cannot break this loop when the character is \n
-    while((//*tokenizer->at == '\n' ||
-          *tokenizer->at == '\r' || 
-          *tokenizer->at == ' '||
-          *tokenizer->at == '#' ) &&
-          tokenizer->at <= tokenizer->end)
+    tokenizer->at += a;
+}
+
+// NOTE(gh) this function has no bound checking
+internal b32
+string_compare(char *a, char *b)
+{
+    b32 result = true;
+
+    while((*a != '\0') && 
+        ((u8)*b != '\0'))
     {
-        if(*tokenizer->at == '#')
+        if(*a != (u8)*b)
         {
-            while(*tokenizer->at != '\n')
-            {
-                tokenizer->at++;
-            }
+            result = false;
+            break;
         }
-        else
-        {
-            tokenizer->at++;
-        }
+
+        a++;
+        b++;
+    }
+
+    return result;
+}
+
+// NOTE(gh) this function has no bound check
+internal void
+unsafe_string_append(char *dest, char *source, u32 source_size)
+{
+    while(*dest != '\0')
+    {
+        dest++;
+    }
+
+    while(source_size-- > 0)
+    {
+        *dest++ = *source++;
     }
 }
 
-// TODO(gyuhyun) This is somewhat special compared to the general peek token,
-// which might make people confused :(
+// NOTE(gh) this function has no bound check
 internal void
-peek_string_token(ObjTokenizer *tokenizer, ObjStringToken *token)
+unsafe_string_append(char *dest, char *source)
 {
-    eat_all_white_spaces(tokenizer);
-
-    u8 *c = tokenizer->at;
-    while(!(*tokenizer->at == '\n' ||
-          *tokenizer->at == '\r') &&
-          tokenizer->at < tokenizer->end)
+    while(*dest != '\0')
     {
-        token->string[token->string_size++] = *tokenizer->at;
+        dest++;
+    }
+    
+    while(*source != '\0')
+    {
+        *dest++ = *source++;
+    }
+}
+
+// NOTE(gh) THIS DOES NOT WORK IF THERE WAS A DIRECTORY WITH .
+internal void
+get_extension(char *dest, char *source)
+{
+    assert(*dest == 0);
+
+    while(*source != '.')
+    {
+        source++;
+    }
+
+    source++;
+
+    while(*source != '\0')
+    {
+        *dest++ = *source++;
+    }
+}
+
+internal void
+eat_until_whitespace(Tokenizer *tokenizer)
+{
+    while(tokenizer->at < tokenizer->one_past_end)
+    {
+        if(*tokenizer->at == '\n' ||
+            *tokenizer->at == '\r' ||
+           *tokenizer->at == ' ')
+        {
+            break;
+        }
+
         tokenizer->at++;
     }
 }
 
-// NOTE(gyuhyun) This function is more like a general purpose token getter, with minimum erro checking.
-// the error checking itself will happen inside the parsing loop, not here.
-internal ObjToken
-peek_token(ObjTokenizer *tokenizer, b32 should_advance)
+internal void
+eat_until_newline(Tokenizer *tokenizer)
 {
-    ObjToken result = {};
-
-    eat_all_white_spaces(tokenizer);
-    
-    u32 advance = 0;
-    if(tokenizer->at < tokenizer->end)
+    while(tokenizer->at != tokenizer->one_past_end)
     {
-        switch(*tokenizer->at)
+        if(*tokenizer->at == '\n' ||
+            *tokenizer->at == '\r')
         {
-            case 'v':
-            {
-                if(*(tokenizer->at+1) == 't')
-                {
-                    result.type = ObjTokenType_vt;
-                    advance = 2;
-                }
-                else if(*(tokenizer->at+1) == 'n')
-                {
-                    result.type = ObjTokenType_vn;
-                    advance = 2;
-                }
-                else
-                {
-                    result.type = ObjTokenType_v;
-                    advance = 1;
-                }
-            }break;
+            break;
+        }
 
-            case 'f':
-            {
-                result.type = ObjTokenType_f;
-                advance = 1;
-            }break;
+        tokenizer->at++;
+    }
+}
 
-            case 's':
-            {
-                result.type = ObjTokenType_s;
-                advance = 1;
-            }break;
 
-            case '-':
-            {
-                result.type = ObjTokenType_hyphen;
-                advance = 1;
-            }break;
+internal void
+eat_all_whitespaces(Tokenizer *tokenizer)
+{
+    while(tokenizer->at != tokenizer->one_past_end)
+    {
+        if(!(*tokenizer->at == '\n' ||
+            *tokenizer->at == '\r' ||
+           *tokenizer->at == ' '))
+        {
+            break;
+        }
 
-            case '/':
-            {
-                result.type = ObjTokenType_slash;
-                advance = 1;
-            }break;
+        tokenizer->at++;
+    }
+}
 
-            case 'o':
-            {
-                if(*tokenizer->at == 'o' &&
-                    *(tokenizer->at+1) == ' ')
-                {
-                    result.type = ObjTokenType_o;
-                    tokenizer->at = get_closest_carriage_return(tokenizer->at, tokenizer->end);
-                }
-                else if(*tokenizer->at == 'o' &&
-                        *(tokenizer->at+1) == 'f' &&
-                        *(tokenizer->at+2) == 'f')
-                {
-                    result.type = ObjTokenType_off;
-                    tokenizer->at = get_closest_carriage_return(tokenizer->at, tokenizer->end);
-                }
-            }break;
+internal ParseNumericResult
+eat_numeric(Tokenizer *tokenizer)
+{
+#if 0
+    assert(*start == '0' || 
+            *start == '1' || 
+            *start == '2' || 
+            *start == '3' || 
+            *start == '4' || 
+            *start == '5' || 
+            *start == '6' || 
+            *start == '7' || 
+            *start == '8' || 
+            *start == '9');
+#endif
 
-            case 'm':
-            {
-                if(*tokenizer->at == 'm' &&
-                    *(tokenizer->at+1) == 't' && 
-                    *(tokenizer->at+2) == 'l' && 
-                    *(tokenizer->at+3) == 'l' && 
-                    *(tokenizer->at+4) == 'i' && 
-                    *(tokenizer->at+5) == 'b')
-                {
-                    result.type = ObjTokenType_mtllib;
-                    advance = 6;
-                }
-            }break;
+    ParseNumericResult result = {};
 
-            case 'u':
-            {
-                if(*tokenizer->at == 'u' &&
-                    *(tokenizer->at+1) == 's' &&
-                    *(tokenizer->at+2) == 'e' &&
-                    *(tokenizer->at+3) == 'm' &&
-                    *(tokenizer->at+4) == 't' &&
-                    *(tokenizer->at+5) == 'l')
-                {
-                    result.type = ObjTokenType_usemtl;
-                    advance = 6;
-                }
-            }break;
+    b32 scientific_notation = false;
+    f64 decimal_point_adjustment = 10.0f;
+    f64 number = 0;
+    while(tokenizer->at < tokenizer->one_past_end)
+    {
+        if(*tokenizer->at >= '0' && *tokenizer->at <= '9' )
+        {
+            number *= 10;
+            number += *tokenizer->at-'0';
+        }
+        else if(*tokenizer->at == '.')
+        {
+            result.is_float = true;
+        }
+        else if(*tokenizer->at == 'e')
+        {
+            // -5.4335527188698052e-09
+            scientific_notation = true;
+            break;
+        }
+        else
+        {
+            break;
+        }
 
-            case 'g':
+        if(result.is_float)
+        {
+            decimal_point_adjustment *= 0.1f;
+        }
+
+        tokenizer->at++;
+    }
+
+    if(result.is_float)
+    {
+        result.value_f32 = (f32)(number*decimal_point_adjustment);
+    }
+    else
+    {
+        result.value_i32 = (i32)number;
+    }
+
+    if(scientific_notation)
+    {
+        assert(*tokenizer->at == 'e');
+        eat(tokenizer, 1);
+
+        b32 scientific_plus = false;
+        if(*tokenizer->at == '+')
+        {
+            scientific_plus = true;
+        }
+        eat(tokenizer, 1);
+
+        f32 scientific_value = 0;
+        while(tokenizer->at < tokenizer->one_past_end)
+        {
+            if(*tokenizer->at >= '0' && *tokenizer->at <= '9' )
             {
-                // NOTE(gyuhyun) g means 'group', which we don't care for now
-                tokenizer->at = get_closest_carriage_return(tokenizer->at, tokenizer->end);
+                scientific_value *= 10;
+                scientific_value += (*tokenizer->at-'0');
+            }
+            else
+            {
+                break;
             }
 
-            case '\n':
+            eat(tokenizer, 1);
+        }
+
+        result.value_f32 *= powf(10.0f, (scientific_plus ? 1 : -1) * scientific_value);
+    }
+    
+    return result;
+}
+
+internal void
+numeric_obj_token_to_f32(ObjToken token, f32 *dest)
+{
+    if(token.type == obj_token_type_f32)
+    {
+        *dest = token.value_f32;
+    }
+    else if(token.type == obj_token_type_i32)
+    {
+        *dest = (f32)token.value_i32;
+    }
+    else
+    {
+        invalid_code_path;
+    }
+}
+
+
+
+internal PlyToken
+eat_ply_token(Tokenizer *tokenizer)
+{
+    PlyToken result = {};
+
+    // NOTE(gh) eat all the unnecessary charcters(whilespace, newline...)
+    eat_all_whitespaces(tokenizer);
+
+    if(tokenizer->at < tokenizer->one_past_end)
+    {
+        if(string_compare((char *)tokenizer->at, "element"))
+        {
+            result.type = ply_token_type_element;
+            eat_until_whitespace(tokenizer);
+        }
+        else if(string_compare((char *)tokenizer->at, "vertex"))
+        {
+            result.type = ply_token_type_vertex;
+            eat_until_whitespace(tokenizer);
+        }
+        else if(string_compare((char *)tokenizer->at, "face"))
+        {
+            result.type = ply_token_type_face;
+            eat_until_whitespace(tokenizer);
+        }
+        else if(string_compare((char *)tokenizer->at, "end_header"))
+        {
+            result.type = ply_token_type_end_header;
+            eat_until_whitespace(tokenizer);
+        }
+        else if(string_compare((char *)tokenizer->at, "property"))
+        {
+            result.type = ply_token_type_property;
+            eat_until_whitespace(tokenizer);
+        }
+  
+        else
+        {
+            b32 hyphen_appeared = false;
+            switch(*tokenizer->at)
             {
-                result.type = ObjTokenType_newline;
-                advance = 1;
-            }break;
-
-            case '0':
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7':
-            case '8':
-            case '9':
-            {
-                ParseNumericResult parse_result = parse_numeric(tokenizer->at);
-
-                if(parse_result.isFloat)
+                case '-':
                 {
-                    result.type = ObjTokenType_f32;
-                    result.value_f32 = parse_result.value_f32;
-                }
-                else
+                    hyphen_appeared = true;
+                    tokenizer->at++;
+                };
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                case '8':
+                case '9':
                 {
-                    result.type = ObjTokenType_i32;
-                    result.value_i32 = parse_result.value_i32;
-                }
+                    ParseNumericResult parse_numeric_result = eat_numeric(tokenizer);
 
-                if(tokenizer->_previous_token_type == ObjTokenType_hyphen)
-                {
-                    if(parse_result.isFloat)
+                    if(parse_numeric_result.is_float)
                     {
-                        result.value_f32 *= -1.0f;
+                        result.type = ply_token_type_f32;
+                        result.value_f32 = parse_numeric_result.value_f32;
+                        result.is_float = true;
+
+                        if(hyphen_appeared)
+                        {
+                            result.value_f32 *= -1.0f;
+                            hyphen_appeared = false;
+                        }
                     }
                     else
                     {
-                        result.value_i32 *= -1;
-                    }
-                }
-
-                advance = parse_result.advance;
-            }break;
-
-            case '#':
-            {
-                tokenizer->at = get_closest_carriage_return(tokenizer->at, tokenizer->end);
-            }break;
-        }
-    }
-
-    if(should_advance)
-    {
-        tokenizer->at += advance;
-    }
-
-    tokenizer->_previous_token_type = result.type;
-
-    return result;
-}
-
-internal ObjPreParseResult
-pre_parse_obj(u8 *file, size_t file_size)
-{
-    ObjPreParseResult result = {};
-
-    ObjTokenizer tokenizer = {};
-    tokenizer.at = file;
-    tokenizer.end = file+file_size;
-
-    b32 is_parsing = true;
-   
-    while(tokenizer.at < tokenizer.end)
-    {
-        ObjToken token = peek_token(&tokenizer, true);
-
-        switch(token.type)
-        {
-            case ObjTokenType_v:
-            {
-                result.total_position_count++;
-            }break;
-
-            case ObjTokenType_vn:
-            {
-                result.total_normal_count++;
-            }break;
-
-            case ObjTokenType_vt:
-            {
-                result.total_texcoord_count++;
-            }break;
-
-            case ObjTokenType_o:
-            {
-                result.total_object_count++;
-            }break;
-
-            case ObjTokenType_mtllib:
-            {
-                tokenizer.at = get_closest_carriage_return(tokenizer.at, tokenizer.end);
-            }break;
-
-            case ObjTokenType_usemtl:
-            {
-                result.total_mtl_info_count++;
-                tokenizer.at = get_closest_carriage_return(tokenizer.at, tokenizer.end);
-            }break;
-
-            case ObjTokenType_f:
-            {
-                b32 newline_appeared = false;
-
-                // NOTE(gyuhyun) f v/vt/vn v/vt/vn ... 
-                u32 property_indicator = 0;
-                // NOTE(gyuhyun) Math here is : actual_index_count = 3 * (index_count_for_this_line - 2);
-                u32 position_index_count_for_this_line = 0;
-                u32 normal_index_count_for_this_line = 0;
-                u32 texcoord_index_count_for_this_line = 0;
-                while(!newline_appeared)
-                {
-                    // TODO(gyuhyun) The 'safer' way to do this would be
-                    // 1. peek token without advancing
-                    // 2. advance the tokenizer at the end of the switch statement
-                    // This way, we can cover the case where there was two 'f' in a single line
-                    token = peek_token(&tokenizer, true);
-
-                    switch(token.type)
-                    {
-                        case ObjTokenType_i32:
+                        result.type = ply_token_type_i32;
+                        result.value_i32 = parse_numeric_result.value_i32;
+                        result.is_float = false;
+                        if(hyphen_appeared)
                         {
-                            if(property_indicator == 0)
-                            {
-                                position_index_count_for_this_line++;
-                            }
-                            else if(property_indicator == 1)
-                            {
-                                texcoord_index_count_for_this_line++;
-                            }
-                            else
-                            {
-                                normal_index_count_for_this_line++;
-
-                                // finished parsing a single vertex, reset the property indicator
-                                // to parse the next vertex
-                                property_indicator = 0;
-                            }
-                        }break;
-
-                        case ObjTokenType_slash:
-                        {
-                            property_indicator++;
-                        }break;
-
-                        case ObjTokenType_newline:
-                        {
-                            newline_appeared = true;
-                        }break;
-
-                        default:
-                        {
-                            // NOTE(gyuhyun) face line should not contain any other letters
-                            invalid_code_path;
-                        }break;
-                    }
-                }
-
-                result.total_position_index_count += 3 * (position_index_count_for_this_line - 2);
-                result.total_texcoord_index_count += 3 * (texcoord_index_count_for_this_line - 2);
-                result.total_normal_index_count += 3 * (normal_index_count_for_this_line - 2);
-            }break;
-        }
-    }
-
-    // obj file should have at least the position data
-    assert(result.total_position_count && result.total_position_index_count);
-
-    // NOTE(gyuhyun) It might be possible for an obj file to contain only one object,
-    // which means there was no line starting with 'o'
-    if(result.total_object_count == 0)
-    {
-        result.total_object_count = 1;
-    }
-    return result;
-}
-
-internal void
-peek_and_store_floating_numbers(ObjTokenizer *tokenizer, u32 desired_number_count, f32 *n)
-{
-    u32 numeric_number_count = 0;
-
-    b32 is_parsing = true;
-    while(is_parsing)
-    {
-        ObjToken token = peek_token(tokenizer, true);
-
-        switch(token.type)
-        {
-            case ObjTokenType_f32: 
-            {
-                *n = token.value_f32;
-                numeric_number_count++;
-            }break;
-
-            case ObjTokenType_i32: 
-            {
-                *n = token.value_i32;
-                numeric_number_count++;
-            }break;
-
-            case ObjTokenType_hyphen:
-            {
-                // Do nothing, will be handled by the peek_token
-            }break;
-
-            default:
-            {
-                if(numeric_number_count == desired_number_count)
-                {
-                    is_parsing = false;
-                }
-                else
-                {
-                    // Other token appeared before parsing three numeric tokens 
-                    invalid_code_path;
-                }
-            }break; 
-        }
-    }
-}
-
-internal ObjParseMemory
-allocate_obj_parse_memory(ObjPreParseResult *pre_parse_result)
-{
-    ObjParseMemory result = {};
-
-    result.loaded_objects = (LoadedObjObject *)malloc(sizeof(LoadedObjObject) * pre_parse_result->total_object_count);
-
-    if(pre_parse_result->total_position_count)
-    {
-        result.positions = (v3 *)malloc(sizeof(v3) * pre_parse_result->total_position_count);
-    }
-
-    if(pre_parse_result->total_normal_count)
-    {
-        result.normals = (v3 *)malloc(sizeof(v3) * pre_parse_result->total_normal_count);
-    }
-
-    if(pre_parse_result->total_texcoord_count)
-    {
-        result.texcoords = (v2 *)malloc(sizeof(v2) * pre_parse_result->total_texcoord_count);
-    }
-
-    if(pre_parse_result->total_position_index_count)
-    {
-        result.position_indices = (u32 *)malloc(sizeof(u32) * pre_parse_result->total_position_index_count);
-    }
-
-    if(pre_parse_result->total_normal_index_count)
-    {
-        result.normal_indices = (u32 *)malloc(sizeof(u32) * pre_parse_result->total_normal_index_count);
-    }
-
-    if(pre_parse_result->total_texcoord_index_count)
-    {
-        result.texcoord_indices = (u32 *)malloc(sizeof(u32) * pre_parse_result->total_texcoord_index_count);
-    }
-
-    return result;
-}
-
-internal void
-parse_obj(ObjParseMemory *memory, ObjPreParseResult *pre_parse_result, u8 *file, u32 file_size)
-{
-    // NOTE(gyuhyun) Validations
-    assert(memory->positions && memory->position_indices);
-    if(pre_parse_result->total_normal_count)
-    {
-        assert(memory->normals);
-    }
-    if(pre_parse_result->total_texcoord_count)
-    {
-        assert(memory->texcoords);
-    }
-    if(pre_parse_result->total_normal_index_count)
-    {
-        assert(memory->normal_indices);
-    }
-    if(pre_parse_result->total_texcoord_index_count)
-    {
-        assert(memory->texcoord_indices);
-    }
-
-    ObjTokenizer tokenizer = {};
-    tokenizer.at = file;
-    tokenizer.end = file+file_size;
-
-    u32 used_mtl_info_count = 0;
-    u32 used_position_count = 0;
-    u32 used_normal_count = 0;
-    u32 used_texcoord_count = 0;
-
-    u32 used_position_index_count = 0;
-    u32 used_normal_index_count = 0;
-    u32 used_texcoord_index_count = 0;
-
-    for(u32 object_index = 0;
-            object_index < pre_parse_result->total_object_count && tokenizer.at != tokenizer.end;
-            )
-    {
-        LoadedObjObject *object = memory->loaded_objects + object_index;
-
-        // NOTE(gyuhyun) Initialize the pointers
-        object->positions = memory->positions + used_position_count;
-        object->normals = memory->normals + used_normal_count;
-        object->texcoords = memory->texcoords + used_texcoord_count;
-
-        object->position_indices = memory->position_indices + used_position_index_count;
-        object->normal_indices = memory->normal_indices + used_normal_index_count;
-        object->texcoord_indices = memory->texcoord_indices + used_texcoord_index_count;
-
-        b32 is_parsing_this_object = true;
-        while(tokenizer.at < tokenizer.end && is_parsing_this_object)
-        {
-            ObjToken token = peek_token(&tokenizer, true);
-
-            switch(token.type)
-            {
-                case ObjTokenType_o:
-                {
-                    object_index++;
-                }break;
-
-                case ObjTokenType_v:
-                {
-                    // feed up to three numeric tokens(including minus)
-                    peek_and_store_floating_numbers(&tokenizer, 3, object->positions[object->position_count++].e);
-                }break;
-
-                case ObjTokenType_vn:
-                {
-                     peek_and_store_floating_numbers(&tokenizer, 3, object->normals[object->normal_count++].e);
-                }break;
-
-                case ObjTokenType_vt:
-                {
-                    // TODO(joon) feed up to two numeric tokens(not including minus)
-                     peek_and_store_floating_numbers(&tokenizer, 2, object->texcoords[object->texcoord_count++].e);
-                }break;
-
-                case ObjTokenType_f:
-                {
-                    b32 newline_appeared = false;
-
-                    // NOTE : property_indicator%3 == 0(v), 1(vt), 2(vn),
-                    u32 property_indicator = 0;
-
-                    // TODO(gyuhyun) This is just a copy paste of what we were doing before...
-                    // which works fine for now, but we might wanna find a cleanr way to do this later
-                    u32 first_position_index = 0;
-                    u32 position_index_count_this_line = 0;
-
-                    u32 first_texcoord_index = 0;
-                    u32 texcoord_index_count_this_line = 0;
-
-                    u32 first_normal_index = 0;
-                    u32 normal_index_count_this_line = 0;
-                    
-                    while(!newline_appeared)
-                    {
-                        token = peek_token(&tokenizer, true);
-
-                        switch(token.type)
-                        {
-                            case ObjTokenType_i32:
-                            {
-                                u32 index_to_store = token.value_i32 - 1;
-
-                                if(property_indicator == 0)
-                                {
-                                    if(position_index_count_this_line < 3)
-                                    {
-                                        if(position_index_count_this_line == 0)
-                                        {
-                                            first_position_index = index_to_store;
-                                        }
-                                        object->position_indices[object->position_index_count++] = index_to_store;
-
-                                        position_index_count_this_line++;
-                                    }
-                                    else
-                                    {
-                                        u32 previous_index = object->position_indices[object->position_index_count-1];
-
-                                        object->position_indices[object->position_index_count++] = first_position_index;
-                                        object->position_indices[object->position_index_count++] = previous_index;
-                                        object->position_indices[object->position_index_count++] = index_to_store;
-                                    }
-                                }
-                                else if(property_indicator == 1)
-                                {
-                                    if(texcoord_index_count_this_line < 3)
-                                    {
-                                        if(texcoord_index_count_this_line == 0)
-                                        {
-                                            first_texcoord_index = index_to_store;
-                                        }
-                                        object->texcoord_indices[object->texcoord_index_count++] = index_to_store;
-
-                                        texcoord_index_count_this_line++;
-                                    }
-                                    else
-                                    {
-                                        u32 previous_index = object->texcoord_indices[object->texcoord_index_count-1];
-
-                                        object->texcoord_indices[object->texcoord_index_count++] = first_texcoord_index;
-                                        object->texcoord_indices[object->texcoord_index_count++] = previous_index;
-                                        object->texcoord_indices[object->texcoord_index_count++] = index_to_store;
-                                    }
-                                }
-                                else
-                                {
-                                    if(normal_index_count_this_line < 3)
-                                    {
-                                        if(normal_index_count_this_line == 0)
-                                        {
-                                            first_normal_index = index_to_store;
-                                        }
-                                        object->normal_indices[object->normal_index_count++] = index_to_store;
-
-                                        normal_index_count_this_line++;
-                                    }
-                                    else
-                                    {
-                                        u32 previous_index = object->normal_indices[object->normal_index_count-1];
-
-                                        object->normal_indices[object->normal_index_count++] = first_normal_index;
-                                        object->normal_indices[object->normal_index_count++] = previous_index;
-                                        object->normal_indices[object->normal_index_count++] = index_to_store;
-                                    }
-
-                                    property_indicator = 0;
-                                }
-                            }break;
-
-                            case ObjTokenType_slash:
-                            {
-                                property_indicator++;
-                            }break;
-
-                            case ObjTokenType_newline:
-                            {
-                                newline_appeared = true;
-                            }break;
-
-                            default:
-                            {
-                                invalid_code_path;
-                            }break; 
+                            result.value_i32 *= -1;
+                            hyphen_appeared = false;
                         }
                     }
                 }break;
 
-                case ObjTokenType_mtllib:
+                default:
                 {
-                    ObjStringToken string_token = {};
-                    peek_string_token(&tokenizer, &string_token);
-                }break;
-
-                case ObjTokenType_usemtl:
-                {
-                    if(!object->mtl_infos)
-                    {
-                        object->mtl_infos = memory->mtl_infos + used_mtl_info_count;
-                    }
-
-                    ObjMtlInfo *mtl_info = object->mtl_infos + object->mtl_info_count++;
-
-                    ObjStringToken string_token = {};
-                    peek_string_token(&tokenizer, &string_token);
-
-                    // TODO(gyuhyun) We first need to do the pre-parsing & parsing routine for the .mtl files,
-                    // and then populate the object's mtl infos 
-                }break;
-
-                case ObjTokenType_o:
-                {
-                    is_parsing_this_object = false;
-                }break;
-
-                case ObjTokenType_null:
-                {
-                    if(tokenizer.at != tokenizer.end)
-                    {
-                        invalid_code_path;
-                    }
                 }break;
             }
+
         }
 
-        // NOTE(gyuhyun) advance how much we used inside the memory pool
-        used_position_count += object->position_count;
-        used_normal_count += object->normal_count;
-        used_texcoord_count += object->texcoord_count;
-
-        used_position_index_count += object->position_index_count;
-        used_normal_index_count += object->normal_index_count;
-        used_texcoord_index_count += object->texcoord_index_count;
-
-        used_mtl_info_count += object->mtl_info_count;
-    }
-
-    assert(used_position_count == pre_parse_result->total_position_count);
-    assert(used_normal_count == pre_parse_result->total_normal_count);
-    assert(used_texcoord_count == pre_parse_result->total_texcoord_count);
-    assert(used_position_index_count == pre_parse_result->total_position_index_count);
-    assert(used_normal_index_count == pre_parse_result->total_normal_index_count);
-    assert(used_texcoord_index_count == pre_parse_result->total_texcoord_index_count);
-}
-
-internal void
-eat_all_white_spaces(MtlTokenizer *tokenizer)
-{
-    while((*tokenizer->at == '\n' ||
-          *tokenizer->at == '\r' || 
-          *tokenizer->at == ' '||
-          *tokenizer->at == '#' ) &&
-          tokenizer->at <= tokenizer->end)
-    {
-        if(*tokenizer->at == '#')
-        {
-            while(*tokenizer->at != '\n')
-            {
-                tokenizer->at++;
-            }
-        }
-        else
-        {
-            tokenizer->at++;
-        }
-    }
-}
-
-inline u32
-string_size(const char *string)
-{
-    u32 result = 0;
-    while(*string != '\0')
-    {
-        string++;
-        result++;
     }
 
     return result;
 }
 
-internal MtlToken
-peek_token(MtlTokenizer *tokenizer)
+internal PlyToken
+eat_and_check_ply_token(Tokenizer *tokenizer, PlyTokenType expected_type)
 {
-    MtlToken result = {};
-
-    eat_all_white_spaces(tokenizer);
-    
-    if(tokenizer->at < tokenizer->end)
-    {
-        // newmtl
-        if(*tokenizer->at == 'n' &&
-            *(tokenizer->at + 1) == 'e' &&
-            *(tokenizer->at + 2) == 'w' &&
-            *(tokenizer->at + 3) == 'm' &&
-            *(tokenizer->at + 4) == 't' &&
-            *(tokenizer->at + 5) == 'l')
-        {
-            result.type = MtlTokenType_newmtl;
-            tokenizer->at += string_size("newmtl");
-        }
-
-        else if(*tokenizer->at == 'K' &&
-                *(tokenizer->at + 1) == 'd')
-        {
-            result.type = MtlTokenType_Kd;
-            tokenizer->at += string_size("Kd");
-        }
-
-        else if(*tokenizer->at == 'K' &&
-                *(tokenizer->at + 1) == 'e')
-        {
-            result.type = MtlTokenType_Ke;
-            tokenizer->at += string_size("Ke");
-        }
-
-        else if(*tokenizer->at == 'N' &&
-                *(tokenizer->at + 1) == 's')
-        {
-            result.type = MtlTokenType_Ns;
-            tokenizer->at += string_size("Ns");
-        }
-
-        else if(*tokenizer->at == 'd')
-        {
-            result.type = MtlTokenType_d;
-            tokenizer->at += string_size("d");
-        }
-
-        else if(*tokenizer->at == 'i' &&
-                *(tokenizer->at + 1) == 'l' &&
-                *(tokenizer->at + 2) == 'l' &&
-                *(tokenizer->at + 3) == 'u' &&
-                *(tokenizer->at + 4) == 'm')
-        {
-            result.type = MtlTokenType_illum;
-            tokenizer->at += string_size("illum");
-        }
-
-        else if(*tokenizer->at == 'K' &&
-                *(tokenizer->at + 1) == 'a')
-        {
-            result.type = MtlTokenType_Ka;
-            tokenizer->at += string_size("Ka");
-        }
-
-        else if(*tokenizer->at == 'K' &&
-                *(tokenizer->at + 1) == 's')
-        {
-            result.type = MtlTokenType_Ks;
-            tokenizer->at += string_size("Ks");
-        }
-
-        else if(*tokenizer->at == 'N' &&
-                *(tokenizer->at + 1) == 'i')
-        {
-            result.type = MtlTokenType_Ni;
-            tokenizer->at += string_size("Ni");
-        }
-
-        else if(*tokenizer->at == 'm' &&
-                *(tokenizer->at + 1) == 'a' &&
-                *(tokenizer->at + 2) == 'p' &&
-                *(tokenizer->at + 3) == '_' &&
-                *(tokenizer->at + 4) == 'K' &&
-                *(tokenizer->at + 5) == 'd')
-        {
-            result.type = MtlTokenType_map_Kd;
-            tokenizer->at += string_size("map_Kd");
-            tokenizer->at = get_closest_carriage_return(tokenizer->at, tokenizer->end);
-        }
-
-        else if(*tokenizer->at == '0' || 
-                *tokenizer->at == '1' || 
-                *tokenizer->at == '2' || 
-                *tokenizer->at == '3' || 
-                *tokenizer->at == '4' || 
-                *tokenizer->at == '5' || 
-                *tokenizer->at == '6' || 
-                *tokenizer->at == '7' || 
-                *tokenizer->at == '8' || 
-                *tokenizer->at == '9')
-        {
-            ParseNumericResult parse_numeric_result = parse_numeric(tokenizer->at);
-
-            if(parse_numeric_result.isFloat)
-            {
-                result.type = MtlTokenType_f32;
-                result.value_f32 = parse_numeric_result.value_f32;
-            }
-            else
-            {
-                result.type = MtlTokenType_i32;
-                result.value_i32 = parse_numeric_result.value_i32;
-            }
-
-            if(tokenizer->_previous_token_type == MtlTokenType_hyphen)
-            {
-                if(parse_numeric_result.isFloat)
-                {
-                    result.value_f32 *= -1.0f;
-                }
-                else
-                {
-                    result.value_i32 *= -1;
-                }
-            }
-
-            tokenizer->at += parse_numeric_result.advance;
-        }
-
-        else
-        {
-            invalid_code_path;
-        }
-    }
-
-    tokenizer->_previous_token_type = result.type;
+    PlyToken result = eat_ply_token(tokenizer);
+    assert(result.type == expected_type);
 
     return result;
 }
 
-
-internal MtlPreParseResult
-pre_parse_mtl(u8 *file, size_t file_size)
+internal PlyToken
+peek_ply_token(Tokenizer tokenizer)
 {
-    MtlPreParseResult result = {};
+    PlyToken result = eat_ply_token(&tokenizer);
 
-    MtlTokenizer tokenizer = {};
-    tokenizer.at = file;
-    tokenizer.end = file+file_size;
+    return result;
+}
 
-    while(tokenizer.at < tokenizer.end)
+internal ParsePlyHeaderResult
+parse_ply_header(u8 *memory, u32 file_size)
+{
+    ParsePlyHeaderResult result = {};
+
+    Tokenizer tokenizer = {};
+    tokenizer.at = memory;
+    tokenizer.one_past_end = memory + file_size;
+
+    b32 end_header_appeared = false;
+    while(tokenizer.at < tokenizer.one_past_end && !end_header_appeared)
     {
-        MtlToken token = peek_token(&tokenizer);
+        PlyToken token = eat_ply_token(&tokenizer);
 
         switch(token.type)
         {
-            case MtlTokenType_newmtl:
+            case ply_token_type_element:
             {
-                result.total_mtl_count++;
-                tokenizer.at = get_closest_carriage_return(tokenizer.at, tokenizer.end);
+                PlyToken element_name = eat_ply_token(&tokenizer);
+                if(element_name.type == ply_token_type_vertex)
+                {
+                    PlyToken vertex_count = eat_and_check_ply_token(&tokenizer, ply_token_type_i32);
+                    result.vertex_count = vertex_count.value_i32;
+                }
+                else if(element_name.type == ply_token_type_face)
+                {
+                    // It seems like this information is useless?
+                }
+                else
+                {
+                    invalid_code_path;
+                }
+
+
+            }break;
+
+            case ply_token_type_property:
+            {
+                PlyToken type = eat_ply_token(&tokenizer); 
+                PlyToken axis = eat_ply_token(&tokenizer); // x or y or z
+
+                result.vertex_property_count++;
+            }break;
+
+            case ply_token_type_end_header:
+            {
+                end_header_appeared = true;
             }break;
         }
     }
 
+    // TODO(gh) hack, probably not a bad idea (but what if .ply file only has two elements?)
+    result.vertex_property_count--;
+
+    // NOTE(gh) ply files do not specify how many indices are there, so we need to get them ourselvese
+    for(u32 vertex_index = 0;
+            vertex_index < result.vertex_count;
+            ++vertex_index)
+    {
+        for(u32 property_index = 0;
+                property_index < result.vertex_property_count;
+                ++property_index)
+        {
+            PlyToken token = eat_ply_token(&tokenizer);
+
+            assert(token.type == ply_token_type_f32 ||
+                   token.type == ply_token_type_i32);
+
+        }
+    }
+
+    while(tokenizer.at < tokenizer.one_past_end && 
+            peek_ply_token(tokenizer).type != 0) // For eof
+    {
+        PlyToken index_count = eat_ply_token(&tokenizer);
+        assert(index_count.type == ply_token_type_i32 &&
+                index_count.value_i32 >= 3);
+
+        result.index_count += (u32)(3 * (index_count.value_i32 - 2));
+
+        eat_until_newline(&tokenizer);
+    }
+    // NOTE(gh) now get how many indices do we need
+
     return result;
+}
+
+// NOTE(gh) minimal ply parser, that only parses vertices for now. 
+internal void
+parse_ply(u8 *memory, u32 file_size, ParsePlyHeaderResult header, f32 *vertices, u32 *indices)
+{
+    Tokenizer tokenizer = {};
+    tokenizer.at = memory;
+    tokenizer.one_past_end = memory + file_size;
+
+    while(tokenizer.at < tokenizer.one_past_end)
+    {
+        PlyToken token = eat_ply_token(&tokenizer);
+
+        if(token.type == ply_token_type_end_header)
+        {
+            break;
+        }
+    }
+
+    u32 vertex_index = 0;
+    for(u32 i = 0;
+            i < header.vertex_count;
+            ++i)
+    {
+        for(u32 vertex_property_index = 0;
+                vertex_property_index < header.vertex_property_count;
+                ++vertex_property_index)
+        {
+            PlyToken token = eat_ply_token(&tokenizer);
+            assert(token.type == ply_token_type_f32 || 
+                    token.type == ply_token_type_i32);
+
+            if(token.is_float)
+            {
+                vertices[vertex_index] = token.value_f32;
+            }
+            else
+            {
+                vertices[vertex_index] = (f32)token.value_i32;
+            }
+
+            vertex_index++;
+        }
+
+        eat_until_newline(&tokenizer);
+    }
+
+    u32 index_index = 0;
+    // NOTE(gh) this assumes that the indices will always appear at the last
+    while(tokenizer.at < tokenizer.one_past_end && 
+            peek_ply_token(tokenizer).type != 0) // for eof
+    {
+        PlyToken index_count = eat_ply_token(&tokenizer);
+        assert(index_count.type == ply_token_type_i32 &&
+                index_count.value_i32 >= 3);
+
+        PlyToken index_0 = eat_ply_token(&tokenizer); // will be used as a first index to the strip for this line
+        PlyToken index_1 = eat_ply_token(&tokenizer);
+        PlyToken index_2 = eat_ply_token(&tokenizer);
+
+        assert(index_0.type == ply_token_type_i32 && 
+               index_1.type == ply_token_type_i32 &&
+               index_2.type == ply_token_type_i32);
+
+        indices[index_index++] = index_0.value_i32;
+        indices[index_index++] = index_1.value_i32;
+        indices[index_index++] = index_2.value_i32;
+
+        // starting from 1, as we already parsed the first strip
+        for(u32 strip_index = 1;
+                strip_index < index_count.value_i32 - 2;
+                ++strip_index)
+        {
+            u32 second_index = indices[index_index-1];
+            
+            indices[index_index++] = index_0.value_i32;
+            indices[index_index++] = second_index;
+            indices[index_index++] = eat_ply_token(&tokenizer).value_i32;
+        }
+    }
+
+    assert(index_index == header.index_count);
+}
+
+// NOTE/gh: This function is more like a general purpose token getter, with minimum erro checking.
+// the error checking itself will happen inside the parsing loop, not here.
+internal ObjToken
+eat_obj_token(Tokenizer *tokenizer)
+{
+    ObjToken result = {};
+
+    eat_all_whitespaces(tokenizer);
+    
+    if(tokenizer->at < tokenizer->one_past_end)
+    {
+        b32 hyphen_appeared = false;
+        if(*tokenizer->at ==  '-')
+        {
+            // NOTE(gh) rare case where the case should go on, instead of breaking out
+            hyphen_appeared = true;
+            tokenizer->at++;
+        }
+
+        if(string_compare((char *)tokenizer->at, "v "))
+        {
+            result.type = obj_token_type_v;
+            eat_until_whitespace(tokenizer);
+        }
+        else if(string_compare((char *)tokenizer->at, "vt "))
+        {
+            result.type = obj_token_type_vt;
+            eat_until_whitespace(tokenizer);
+        }
+        else if(string_compare((char *)tokenizer->at, "vn "))
+        {
+            result.type = obj_token_type_vn;
+            eat_until_whitespace(tokenizer);
+        }
+        else if(string_compare((char *)tokenizer->at, "f "))
+        {
+            result.type = obj_token_type_f;
+            eat_until_whitespace(tokenizer);
+        }
+        else if(string_compare((char *)tokenizer->at, "mtllib "))
+        {
+            eat_until_newline(tokenizer);
+        }
+        else if(string_compare((char *)tokenizer->at, "o "))
+        {
+            eat_until_newline(tokenizer);
+        }
+        else if(*tokenizer->at == '/')
+        {
+            result.type = obj_token_type_slash;
+            eat(tokenizer, 1);
+        }
+        else if(*tokenizer->at == '#')
+        {
+            eat_until_newline(tokenizer);
+        }
+        else if((*tokenizer->at >= '0') && 
+            (*tokenizer->at <= '9'))
+        {
+            ParseNumericResult parse_result = eat_numeric(tokenizer);
+
+            if(parse_result.is_float)
+            {
+                result.type = obj_token_type_f32;
+                result.value_f32 = parse_result.value_f32;
+
+                if(hyphen_appeared)
+                {
+                    result.value_f32 *= -1.0f;
+                    hyphen_appeared = false;
+                }
+            }
+
+            else
+            {
+                result.type = obj_token_type_i32;
+                result.value_i32 = parse_result.value_i32;
+
+                if(hyphen_appeared)
+                {
+                    result.value_i32 *= -1;
+                    hyphen_appeared = false;
+                }
+            }
+
+        }
+    }
+
+    return result;
+}
+
+internal ObjToken
+peek_obj_token(Tokenizer tokenizer)
+{
+    ObjToken result = eat_obj_token(&tokenizer);
+
+    return result;
+}
+
+// TODO(gh): parsing positions and vertex normals work just fine,
+// but havent yet tested with the texture coords. Will do when I have a png loader :)
+// pre_parse returns how many vertices / normals / indices the user needs to allocate.
+internal PreParseObjResult
+pre_parse_obj(u8 *file, size_t file_size)
+{
+    assert(file && file_size > 0);
+
+    PreParseObjResult result = {};
+
+    Tokenizer tokenizer = {};
+    tokenizer.at = file;
+    tokenizer.one_past_end = file + file_size;
+
+    b32 v_appeared = false;
+    b32 vn_appeared = false;
+    b32 vt_appeared = false;
+
+    while(tokenizer.at < tokenizer.one_past_end)
+    {
+        ObjToken token = eat_obj_token(&tokenizer);
+        switch(token.type)
+        {
+            case obj_token_type_v:
+            {
+                result.position_count++;
+                v_appeared = true;
+            }break;
+            case obj_token_type_vn:
+            {
+                result.normal_count++;
+                vn_appeared = true;
+            }break;
+            case obj_token_type_vt:
+            {
+                result.texcoord_count++;
+                vt_appeared = true;
+            }break;
+
+            case obj_token_type_f:
+            {
+                u32 number_count = 0;
+                while(1)
+                {
+                    ObjToken t = peek_obj_token(tokenizer);
+
+                    if(t.type == obj_token_type_i32)
+                    {
+                        number_count++;
+                        eat_obj_token(&tokenizer); // actually advance
+                    }
+                    else if(t.type == obj_token_type_slash)
+                    {
+                        eat_obj_token(&tokenizer); // actually advance
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                assert(v_appeared || vt_appeared || vn_appeared);
+
+                // TODO(gh) What happens if the normal index and the position index were different?
+                u32 strip_count = (number_count / (v_appeared + vt_appeared + vn_appeared));
+                result.index_count += 3 * (strip_count - 2);
+            }break;
+        }
+    }
+
+    if(v_appeared)
+    {
+        if(!vt_appeared && !vn_appeared)
+        {
+            result.vertex_type = obj_vertex_type_v;
+        }
+        else if(!vt_appeared && vn_appeared)
+        {
+            result.vertex_type = obj_vertex_type_v_vn;
+        }
+        else if(vt_appeared && !vn_appeared)
+        {
+            result.vertex_type = obj_vertex_type_v_vt;
+        }
+        else if(vt_appeared && vn_appeared)
+        {
+            result.vertex_type = obj_vertex_type_v_vt_vn;
+        }
+    }
+    else
+    {
+        invalid_code_path;
+    }
+
+    return result;
+}
+
+internal void
+parse_obj(PreParseObjResult *pre_parse, u8 *file, u32 file_size, 
+        v3 *positions, v3 *normals, v2 *texcoords, u32 *indices)
+{
+    assert(file && file_size > 0);
+    assert(pre_parse->vertex_type == obj_vertex_type_v || 
+           pre_parse->vertex_type == obj_vertex_type_v_vn);
+
+    Tokenizer tokenizer = {};
+    tokenizer.at = file;
+    tokenizer.one_past_end = file + file_size;
+
+    u32 position_index = 0;
+    u32 normal_index = 0;
+    u32 index_index = 0;
+    while(tokenizer.at < tokenizer.one_past_end)
+    {
+        ObjToken token = eat_obj_token(&tokenizer);
+        switch(token.type)
+        {
+            case obj_token_type_v:
+            {
+                ObjToken p0 = eat_obj_token(&tokenizer);
+                ObjToken p1 = eat_obj_token(&tokenizer);
+                ObjToken p2 = eat_obj_token(&tokenizer);
+
+                v3 *position = positions + position_index++;
+
+                numeric_obj_token_to_f32(p0, &position->x);
+                numeric_obj_token_to_f32(p1, &position->y);
+                numeric_obj_token_to_f32(p2, &position->z);
+            }break;
+
+            case obj_token_type_vn:
+            {
+                ObjToken n0 = eat_obj_token(&tokenizer);
+                ObjToken n1 = eat_obj_token(&tokenizer);
+                ObjToken n2 = eat_obj_token(&tokenizer);
+
+                v3 *normal = normals + normal_index++;
+
+                numeric_obj_token_to_f32(n0, &normal->x);
+                numeric_obj_token_to_f32(n1, &normal->y);
+                numeric_obj_token_to_f32(n2, &normal->z);
+            }break;
+
+            case obj_token_type_vt:
+            {
+                // TODO(gh): add support for vt
+            }break;
+
+            case obj_token_type_f:
+            {
+                switch(pre_parse->vertex_type)
+                {
+                    case obj_vertex_type_v:
+                    {
+                        ObjToken i0 = eat_obj_token(&tokenizer);
+                        ObjToken i1 = eat_obj_token(&tokenizer);
+                        ObjToken i2 = eat_obj_token(&tokenizer);
+                        indices[index_index++] = i0.value_i32;
+                        indices[index_index++] = i1.value_i32;
+                        indices[index_index++] = i2.value_i32;
+
+                        while(1)
+                        {
+                            ObjToken t = peek_obj_token(tokenizer);
+                            if(t.type == obj_token_type_i32)
+                            {
+                                indices[index_index++] = i0.value_i32;
+                                indices[index_index] = indices[index_index-2];
+                                index_index++;
+                                indices[index_index++] = t.value_i32;
+
+                                eat_obj_token(&tokenizer);
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                    }break;
+                    case obj_vertex_type_v_vn:
+                    {
+                        ObjToken i0 = eat_obj_token(&tokenizer);
+                        ObjToken s0 = eat_obj_token(&tokenizer);
+                        ObjToken s1 = eat_obj_token(&tokenizer);
+                        ObjToken vni0 = eat_obj_token(&tokenizer);
+
+                        ObjToken i1 = eat_obj_token(&tokenizer);
+                        ObjToken s2 = eat_obj_token(&tokenizer);
+                        ObjToken s3 = eat_obj_token(&tokenizer);
+                        ObjToken vni1 = eat_obj_token(&tokenizer);
+
+                        ObjToken i2 = eat_obj_token(&tokenizer);
+                        ObjToken s4 = eat_obj_token(&tokenizer);
+                        ObjToken s5 = eat_obj_token(&tokenizer);
+                        ObjToken vni2 = eat_obj_token(&tokenizer);
+
+                        indices[index_index++] = i0.value_i32;
+                        indices[index_index++] = i1.value_i32;
+                        indices[index_index++] = i2.value_i32;
+
+                        //f 304808//304808 304802//304802 304823//304823 
+
+                        u32 number_count;
+                        while(1)
+                        {
+                            ObjToken t = peek_obj_token(tokenizer);
+                            if(t.type == obj_token_type_i32)
+                            {
+                                if((number_count & 2) == 0)
+                                {
+                                    indices[index_index++] = i0.value_i32;
+                                    indices[index_index] = indices[index_index-2];
+                                    index_index++;
+                                    indices[index_index++] = t.value_i32;
+                                }
+
+                                number_count++;
+
+                                eat_obj_token(&tokenizer);
+                            }
+                            else if(t.type == obj_token_type_slash)
+                            {
+                                eat_obj_token(&tokenizer);
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+
+                    }break;
+
+                    // TODO(gh) implement these!
+                    case obj_vertex_type_v_vt:
+                    {
+                    }break;
+                    case obj_vertex_type_v_vt_vn:
+                    {
+                    }break;
+                }
+            }break;
+        }
+    }
 }
 
 

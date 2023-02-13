@@ -26,6 +26,7 @@
 #include "hb_render.cpp"
 #include "hb_image_loader.cpp"
 #include "hb_fluid.cpp"
+#include "hb_obj.cpp"
 
 // TODO(gh) not a great idea
 #include <time.h>
@@ -52,10 +53,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->max_entity_count = 8192;
         game_state->entities = push_array(&game_state->transient_arena, Entity, game_state->max_entity_count);
 
+        // NOTE(gh) Initialize the arenas
         game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
                 game_state->transient_arena.total_size + 
                 game_state->mass_agg_arena.total_size,
                 megabytes(16));
+        MemoryArena pbd_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));
 
         game_state->game_camera = init_fps_camera(V3(0, -10, 22), 1.0f, 135, 1.0f, 1000.0f);
         game_state->game_camera.pitch += 1.5f;
@@ -67,6 +70,35 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // Really far away camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(0, 0, 0), 50.0f, 135, 0.01f, 10000.0f);
 
+        load_game_assets(&game_state->assets, &game_state->transient_arena, platform_api, gpu_work_queue);
+        PlatformReadFileResult bunny_file = platform_api->read_file("/Volumes/meka/HB_engine/data/teapot.obj");
+        PreParseObjResult bunny_pre_parse_result = pre_parse_obj(bunny_file.memory, bunny_file.size);
+        v3 *positions = push_array(&game_state->transient_arena, v3, bunny_pre_parse_result.position_count);
+        u32 *indices = push_array(&game_state->transient_arena, u32, bunny_pre_parse_result.index_count);
+        parse_obj(&bunny_pre_parse_result, bunny_file.memory, bunny_file.size, 
+                    positions, 0, 0, indices);
+
+#if 0
+        VertexPN *vertices = push_array(&game_state->transient_arena, VertexPN, bunny_pre_parse_result.position_count);
+        for(u32 vertex_index = 0;
+                vertex_index < bunny_pre_parse_result.position_count;
+                ++vertex_index)
+        {
+            vertices[vertex_index].p = positions[vertex_index];
+            vertices[vertex_index].n = V3();
+        }
+
+        add_pbd_mesh_entity(game_state, 
+                            &pbd_arena, &game_state->transient_arena, 
+                            positions, bunny_pre_parse_result.position_count,
+                            0.0006f, 1/10.0f, V3(0.7f, 0.2f, 0), EntityFlag_Movable|EntityFlag_Collides);
+#endif
+#if 0
+        load_mesh_asset(GameAssets *assets, ThreadWorkQueue *gpu_work_queue, 
+                        AssetTag_BunnyMesh, 
+                        vertices, bunny_pre_parse_result.position_count,
+                        u32 *indices, bunny_pre_parse_result.index_count);
+#endif
 #if 0
         v2 grid_dim = V2(80, 80); // TODO(gh) just temporary, need to 'gather' the floors later
         game_state->grass_grid_count_x = 2;
@@ -105,9 +137,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         add_floor_entity(game_state, &game_state->transient_arena, V3(0, 0, 0), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
-        MemoryArena pbd_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));
 
-#if 0
+#if 1
         add_pbd_soft_body_tetrahedron_entity(game_state, &pbd_arena, 
                                              V3(0, 2, 14),
                                              V3(-4, 0, 5), V3(4, 0, 12), V3(0, 4, 8),
@@ -126,22 +157,21 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                               0.01f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 #endif
 
+#if 0
         v3 cube_p[] = 
         {
-#if 0
             V3(0, 0, 60), 
             V3(-2, -2, 50), V3(2, -2, 50), V3(0, 2, 50),
-#endif
             // top
             V3(-2, -2, 60), V3(2, -2, 60), V3(2, 2, 60), V3(-2, 2, 60),
             // bottom
             V3(-2, -2, 50), V3(2, -2, 50), V3(2, 2, 50), V3(-2, 2, 50)
         };
-        add_pbd_soft_body_cube_entity(game_state, 
+        add_pbd_mesh_entity(game_state, 
                                      &pbd_arena, &game_state->transient_arena, 
                                      cube_p, array_count(cube_p),
                                      0.0006f, 1/10.0f, V3(0.7f, 0.2f, 0), EntityFlag_Movable|EntityFlag_Collides);
-
+#endif
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
@@ -154,7 +184,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                     fluid_cell_left_bottom_p, V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 
                                     fluid_cell_dim);
 
-        load_game_assets(&game_state->assets, &game_state->transient_arena, platform_api, gpu_work_queue);
 
         game_state->is_initialized = true;
     }
@@ -220,7 +249,45 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         {
             case EntityType_PBD:
             {
-                u32 substep_count = 10;
+                /*
+                   NOTE(gh) A little bit about how PBD works
+                   Currently we are using Gauss - Seidel relaxation, which means for every iteration,
+                   we are using the updated position to get the new position. However, following
+                   http://mmacklin.com/smallsteps.pdf, we aren't solving the constraints with multiple iterations.
+                   Instead we divide the dt into small sub steps. This introduces us the following problems.
+
+                   Problem 1. Collision handling
+                   Dividing the time step can possibly mean the increased amount of collision detection per frame.
+                   We can negate this by doing the collision handling once at the start and hope for the best.
+
+                   Problem 2. Precision
+                   In XPBD, a lot of the equations include square(sub_step), which means that f32 might not be
+                   sufficient for calculation. For example, if the sub step gets higher than 100, the gravity will stop
+                   working due to lost precision. We can limit the number of sub steps(15~20), or use double, which 
+                   if fine for the CPU, but bad for the GPU.
+
+                   All PBD starts with the linearization using the taylor expansion(gradient == partial differtiation).
+                   C(p + dp) (approx)= C(p) + gradient(C) * dp = 0 ...eq(1)
+                   Here, p includes the properties of all the particles that were involved in this constraint.
+                   So the eq(1) is equivalent to
+                   C(p0, p1 ...) + sum(gradient(C(pi))*dp(i)) = 0
+
+                   However, this equation is undetermined. For example, if the constraint was a distance constraint where
+                   the distance between the two particles should be maintained, there are endless possible positions.
+
+                   By limiting the direction of dp to the gradient(C(pi)), the equation can be solved.
+                   dp(i) = s*wi*gradient(C(pi)) ... eq(2), 
+                   where s is typically called a lagrange multiplier, and wi is a inverse mass of the particle(we'll get to this later).
+
+                   plugging eq(2) to eq(1), we get
+                   s = -C/sum(wi*square(gradient(C(pi)))). 
+
+                   Nice thing about having a inverse mass property in eq(2) is that the linear momentum is preserved.
+                   For the linear momentum to be preserved, the sum(mi*dp(i)) should be 0.
+                   Plugging eq(2) to it, we get s * sum(gradient(C(pi))), which is 0 due to translation invariance(Need to dig into this later).
+                   (What about the angular momentum?)
+                */
+                u32 substep_count = 20;
                 f32 sub_dt = platform_input->dt_per_frame/substep_count;
                 
 #if 1
@@ -237,7 +304,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         if(particle->inv_mass > 0.0f)
                         {
                             particle->v += sub_dt * V3(0, 0, -9.8f);
-                            // TODO(gh) Better damping?
+                            // TODO(gh) This damping is wrong,
+                            // use the formula from XPBD which involves modified lagrange multiplier
                             particle->v *= 0.999f;
 
                             particle->prev_p = particle->p;

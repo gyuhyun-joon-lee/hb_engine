@@ -1,49 +1,9 @@
-#ifndef HB_OBJ_H
-#define HB_OBJ_H
+#ifndef PARSER_H
+#define PARSER_H
 
-/*
-    NOTE(gyuhyun) : 
-    1. Peek token does not peek the string token and will assert if if finds anything that cannot be recognized. 
-    Instead, the one who actually cares about the string token(which pretty much means the parser)
-    will 'peek' the string token and advance the tokenizer.
-
-    The more general way of doing this would be tokenizing everything(including the whitespace, newline, string ...)
-    and use them, but we don't quite need this because the format for the obj and mtl files are already defined and 
-    pretty simple.
-*/
-
-enum MtlTokenType
+struct ParseNumericResult
 {
-    MtlTokenType_null,
-
-    MtlTokenType_newmtl,
-    MtlTokenType_Kd,
-    MtlTokenType_Ke,
-    MtlTokenType_Ns,
-    MtlTokenType_d,
-    MtlTokenType_illum,
-    MtlTokenType_Ka,
-    MtlTokenType_Ks,
-    MtlTokenType_Ni,
-    MtlTokenType_map_Kd,
-
-    MtlTokenType_i32,
-    MtlTokenType_f32,
-    MtlTokenType_hyphen,
-};
-
-struct MtlTokenizer
-{
-    u8 *at;
-    u8 *end;
-
-    MtlTokenType _previous_token_type;
-};
-
-struct MtlToken
-{
-    MtlTokenType type;
-
+    b32 is_float;
     union
     {
         i32 value_i32;
@@ -51,43 +11,19 @@ struct MtlToken
     };
 };
 
-struct MtlPreParseResult
-{
-    u32 total_mtl_count;
-};
-
 enum ObjTokenType
 {
-    ObjTokenType_null,
+    obj_token_type_null,
 
-    ObjTokenType_v,
-    ObjTokenType_vn,
-    ObjTokenType_vt,
-    ObjTokenType_f,
-    ObjTokenType_i32,
-    ObjTokenType_f32,
-    ObjTokenType_slash,
-    ObjTokenType_hyphen,
-    ObjTokenType_o, // objects 
-    ObjTokenType_newline, // used to flush vertex information, face information...
-
-    // NOTE(gyuhyun) not supported or ignored
-    ObjTokenType_s,
-    ObjTokenType_off,
-    ObjTokenType_mtllib,
-    ObjTokenType_g,
-    ObjTokenType_usemtl,
-};
-
-struct ObjTokenizer
-{
-    u8 *at;
-    u8 *end;
-
-    // NOTE(gyuhyun) storing previous token generates too much headache..(c++ is terrible at this)
-    // let's just hope we never have to store the actual token XD
-    // Also, the value means the previous token type only inside the peek token function.
-    ObjTokenType _previous_token_type;
+    obj_token_type_v,
+    obj_token_type_vn,
+    obj_token_type_vt,
+    obj_token_type_f,
+    obj_token_type_i32,
+    obj_token_type_f32,
+    obj_token_type_slash,
+    //obj_token_type_hyphen,
+    obj_token_type_comment,
 };
 
 struct ObjToken
@@ -101,114 +37,169 @@ struct ObjToken
     };
 };
 
-struct ObjStringToken
+enum ObjVertexType
 {
-    char string[64];
-    u32 string_size;
+    obj_vertex_type_v,
+    obj_vertex_type_v_vn,
+
+    // TODO(joon) not supported
+    obj_vertex_type_v_vt,
+    obj_vertex_type_v_vt_vn,
 };
 
-struct ObjMtl
+struct PreParseObjResult
 {
-    v3 Kd;
-    v3 Ns;
-    v3 d;
-    v3 illum;
-    v3 Ka;
-    v3 Ks;
-
-    char name[64];
-};
-
-struct ObjPreParseResult
-{
-    // NOTE(joon) One obj file might contain more than one 'object',
-    // and this is the total amount inside one obj file(not the object!).
-    u32 total_position_count;
-    u32 total_normal_count;
-    u32 total_texcoord_count;
-
-    u32 total_position_index_count;
-    u32 total_normal_index_count;
-    u32 total_texcoord_index_count;
-
-    u32 total_object_count;
-
-    u32 total_mtl_info_count;
-};
-
-struct ObjMtlInfo
-{
-    u32 mtl_index; // index to the ObjMtl
-
-    // index to the vertex index
-    u32 first_index_index;
-    u32 one_past_last_index_index;
-};
-
-// NOTE(gyuhyun) This only represents one object in the obj file
-// Also, one object might use different mtls - 
-// in this case we will treat this as different objects
-struct LoadedObjObject
-{
-    char name[64];
-
-    v3 *positions;
-    v3 *normals;
-    v2 *texcoords;
-
     u32 position_count;
     u32 normal_count;
     u32 texcoord_count;
+    u32 index_count;
 
-    u32 *position_indices;
-    u32 *normal_indices;
-    u32 *texcoord_indices;
+    ObjVertexType vertex_type;
 
-    u32 position_index_count;
-    u32 normal_index_count;
-    u32 texcoord_index_count;
-
-    u32 mtl_info_count;
-    ObjMtlInfo *mtl_infos;
+    u32 property_count;
 };
 
-// NOTE(gyuhyun) user needs to provide these pointers,
-// and should be big enough to hold the values that are specified in objpre parse result
-struct ObjParseMemory
+enum PlyTokenType
 {
-    LoadedObjObject *loaded_objects; // should have at least object_count in preparse
+    ply_token_type_null, 
+    ply_token_type_ply,  
 
-    v3 *positions;
-    v3 *normals;
-    v2 *texcoords;
+    ply_token_type_format,
+    ply_token_type_ascii,
 
-    u32 *position_indices;
-    u32 *normal_indices;
-    u32 *texcoord_indices;
+    // skip to next newline
+    ply_token_type_comment,
+    
+    ply_token_type_element,
+    ply_token_type_vertex,
 
-    ObjMtlInfo *mtl_infos;
+    ply_token_type_property,
+    ply_token_type_confidence,
+    ply_token_type_intensity,
+
+    ply_token_type_face,
+    ply_token_type_list,
+
+    // NOTE(joon) either one have the same meaning, just differnet syntax
+    ply_token_type_vertex_index,
+    ply_token_type_vertex_indices,
+
+    ply_token_type_end_header,
+
+    // types that can be written inside the header
+    ply_token_type_float,
+    ply_token_type_float32,
+    ply_token_type_uint8,
+    ply_token_type_uchar,
+    ply_token_type_uint16,
+    ply_token_type_int16,
+    ply_token_type_int,
+    ply_token_type_int32,
+
+    // values
+    ply_token_type_f32,
+    ply_token_type_i32,
 };
 
+struct PlyToken
+{
+    PlyTokenType type;
+    b32 is_float;
+    union
+    {
+        f32 value_f32;
+        i32 value_i32;
+    };
+};
 
+struct ParsePlyHeaderResult
+{
+    u32 vertex_count;
+    u32 vertex_property_count;
 
+    u32 index_count;
+};
 
+struct Tokenizer
+{
+    u8 *at;
+    u8 *one_past_end;
+};
 
+#if 0
+enum SceneTokenType
+{
+    scene_token_type_null, 
 
+    scene_token_type_screen,
+    scene_token_type_camera,
+    scene_token_type_ambient,
+    scene_token_type_light,
+    scene_token_type_sphere,
+    scene_token_type_brdf,
+    scene_token_type_box,
+    scene_token_type_cylinder,
+    scene_token_type_mesh,
 
+    scene_token_type_f32,
+    scene_token_type_i32,
+    //scene_token_type_hyphen, // TODO(joon) we can combine this to the numeric value parse routine
+    scene_token_type_string,
 
+    scene_token_type_b,
+    scene_token_type_q,
+    scene_token_type_z,
+};
 
+struct SceneToken
+{
+    SceneTokenType type;
 
+    u8 *start;
+    union
+    {
+        f32 value_f32;
+        i32 value_i32;
+    };
+};
 
+struct MeshInfo
+{
+    // TODO(joon) If we don't want any memory allocation inside the parser,
+    // we can just get the file_path_start & file_path_end
+    char *file_path;
 
+    u32 mat_index;
+};
 
+struct ParseSceneResult
+{
+    i32 output_width;
+    i32 output_height;
 
+    v3 camera_p;
+    f32 camera_height_ratio;
+    v4 camera_quarternion;
 
+    v3 ambient;
 
+    // TODO(joon) pass world instead?
+    Sphere spheres[100]; // TODO(joon) better way??
+    u32 sphere_count;
 
+    Box boxes[100];
+    u32 box_count;
 
+    Cylinder cylinders[100];
+    u32 cylinder_count;
 
+    Material materials[100];
+    u32 mat_count;
 
-
+    MeshInfo mesh_infos[100];
+    u32 mesh_count;
+};
+#endif
 
 
 #endif
