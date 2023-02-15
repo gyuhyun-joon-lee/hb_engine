@@ -139,20 +139,20 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
 #if 1
         add_pbd_soft_body_tetrahedron_entity(game_state, &pbd_arena, 
-                                             V3(0, 2, 14),
-                                             V3(-4, 0, 5), V3(4, 0, 12), V3(0, 4, 8),
+                                             V3d(0, 2, 14),
+                                             V3d(-4, 0, 5), V3d(4, 0, 12), V3d(0, 4, 8),
                                              0.0f, 1/10.0f, V3(0, 0.8f, 0.2f), EntityFlag_Movable|EntityFlag_Collides);
 
         add_pbd_soft_body_bipyramid_entity(game_state, &pbd_arena, 
-                                             V3(12, 10, 14),
-                                             V3(6, 10, 10), V3(13, 9, 10), V3(10, 14, 10),
-                                             V3(10, 12, 6),
+                                             V3d(12, 10, 14),
+                                             V3d(6, 10, 10), V3d(13, 9, 10), V3d(10, 14, 10),
+                                             V3d(10, 12, 6),
                                              0.0006f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
         add_pbd_soft_body_bipyramid_entity(game_state, &pbd_arena, 
-                                             V3(-10, -8, 14),
-                                             V3(-14, -10, 7), V3(-6, -10, 9), V3(-10, -6, 10),
-                                             V3(-11, -9, 6),
+                                             V3d(-10, -8, 14),
+                                             V3d(-14, -10, 7), V3d(-6, -10, 9), V3d(-10, -6, 10),
+                                             V3d(-11, -9, 6),
                                               0.01f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 #endif
 
@@ -232,7 +232,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                   0.5f*Quat(0, camera_rotation)*render_camera->orientation);
 
 #if 1
-
     f32 camera_speed = 30.0f * platform_input->dt_per_frame;
     if(platform_input->move_up)
     {
@@ -274,7 +273,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                    Dividing the time step can possibly mean the increased amount of collision detection per frame.
                    We can negate this by doing the collision handling once at the start and hope for the best.
 
-                   Problem 2. Precision
+                   Problem 2. Precision ('Solved' using the double precision)
                    In XPBD, a lot of the equations include square(sub_step), which means that f32 might not be
                    sufficient for calculation. For example, if the sub step gets higher than 100, the gravity will stop
                    working due to lost precision. We can limit the number of sub steps(15~20), or use double, which 
@@ -301,8 +300,13 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                    Plugging eq(2) to it, we get s * sum(gradient(C(pi))), which is 0 due to translation invariance(Need to dig into this later).
                    (What about the angular momentum?)
                 */
+
+                /*
+                   TODO(gh) One thing to note here is that 
+                   due to 
+                */
                 u32 substep_count = 20;
-                f32 sub_dt = platform_input->dt_per_frame/substep_count;
+                f64 sub_dt = (f64)platform_input->dt_per_frame/(f64)substep_count;
                 
 #if 1
                 for(u32 substep_index = 0;
@@ -317,10 +321,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         PBDParticle *particle = group->particles + particle_index;
                         if(particle->inv_mass > 0.0f)
                         {
-                            particle->v += sub_dt * V3(0, 0, -9.8f);
-                            // TODO(gh) This damping is wrong,
+                            particle->v += sub_dt * V3d(0, 0, -9.8);
+                            // TODO(gh) This damping is wrong, as it is dependent
+                            // on the substep count
                             // use the formula from XPBD which involves modified lagrange multiplier
-                            particle->v *= 0.999f;
+                            // particle->v *= 0.999;
 
                             particle->prev_p = particle->p;
 
@@ -331,8 +336,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                 // Revert to the previous position,
                                 // and set the z value to 0
                                 particle->p = particle->prev_p;
-                                particle->p.z = 0.0f;
-                                particle->v.z = 0.0f;
+                                particle->p.z = 0.0;
+                                particle->v.z = 0.0;
                             }
                         }
                     }
@@ -348,31 +353,31 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                         if(particle0->inv_mass + particle1->inv_mass != 0.0f)
                         {
-                            v3 delta = particle0->p - particle1->p;
-                            f32 delta_length = length(delta);
-                            if(delta_length != 0.0f)
+                            v3d delta = particle0->p - particle1->p;
+                            f64 delta_length = length(delta);
+                            if(delta_length != 0.0)
                             {
-                                f32 C = delta_length - c->rest_length;
+                                f64 C = delta_length - c->rest_length;
 
-                                if(C != 0.0f)
+                                if(C != 0.0)
                                 {
                                     // Gradient of the constraint for each particles that were invovled in the constraint
                                     // So this is actually gradient(C(xi))
-                                    v3 gradient0 = normalize(delta);
-                                    v3 gradient1 = -gradient0;
+                                    v3d gradient0 = normalize(delta);
+                                    v3d gradient1 = -gradient0;
 
                                     // TODO(gh) inv_stiffness stuff seems like it's causing a problem..
                                     // NOTE(gh) inv_mass of the particles are involved
                                     // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
-                                    f32 a = group->inv_distance_stiffness/square(sub_dt);
-                                    f32 lagrange_multiplier = 
+                                    f64 a = (f64)group->inv_distance_stiffness/square(sub_dt);
+                                    f64 lagrange_multiplier = 
                                         -C / (particle0->inv_mass + particle1->inv_mass + a);
 
                                     if(lagrange_multiplier != 0)
                                     {
                                         // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
-                                        particle0->p += lagrange_multiplier*particle0->inv_mass*gradient0;
-                                        particle1->p += lagrange_multiplier*particle1->inv_mass*gradient1;
+                                        particle0->p += lagrange_multiplier*(f64)particle0->inv_mass*gradient0;
+                                        particle1->p += lagrange_multiplier*(f64)particle1->inv_mass*gradient1;
                                     }
                                 }
                             }
@@ -391,24 +396,24 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         PBDParticle *particle2 = group->particles + c->index2;
                         PBDParticle *particle3 = group->particles + c->index3;
 
-                        f32 one_over_6 = 1/6.0f;
-                        v3 gradient1 = one_over_6*cross(particle0->p - particle2->p, particle3->p - particle2->p);
-                        v3 gradient2 = one_over_6*cross(particle3->p - particle1->p, particle0->p - particle1->p);
-                        v3 gradient3 = one_over_6*cross(particle1->p - particle2->p, particle0->p - particle2->p);
+                        f64 one_over_6 = 1/6.0;
+                        v3d gradient1 = one_over_6*cross(particle0->p - particle2->p, particle3->p - particle2->p);
+                        v3d gradient2 = one_over_6*cross(particle3->p - particle1->p, particle0->p - particle1->p);
+                        v3d gradient3 = one_over_6*cross(particle1->p - particle2->p, particle0->p - particle2->p);
                         // NOTE(gh) Due to translation invariance, the sum of all the gradient should be 0
-                        v3 gradient0 = -(gradient1+gradient2+gradient3);
+                        v3d gradient0 = -(gradient1+gradient2+gradient3);
 
-                        f32 volume = get_tetrahedron_volume(particle0->p, particle1->p, particle2->p, particle3->p);
-                        f32 C = (volume - c->rest_volume);
+                        f64 volume = get_tetrahedron_volume(particle0->p, particle1->p, particle2->p, particle3->p);
+                        f64 C = (volume - c->rest_volume);
 
-                        if(C != 0.0f)
+                        if(C != 0.0)
                         {
-                            f32 sum_of_all_gradients = particle0->inv_mass*length_square(gradient0) + 
+                            f64 sum_of_all_gradients = particle0->inv_mass*length_square(gradient0) + 
                                                        particle1->inv_mass*length_square(gradient1) + 
                                                        particle2->inv_mass*length_square(gradient2) + 
                                                        particle3->inv_mass*length_square(gradient3);
 
-                            f32 lagrange_multiplier = 
+                            f64 lagrange_multiplier = 
                                 -C / (sum_of_all_gradients);
 
                             particle0->p += lagrange_multiplier*particle0->inv_mass*gradient0;
@@ -429,13 +434,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         if(particle->inv_mass > 0.0f)
                         {
                             particle->v = (particle->p - particle->prev_p) / sub_dt;
-
-                            v3 temp_v = particle->v + sub_dt * V3(0, 0, -150.8f);
-                            v3 next_frame_p = particle->p + sub_dt * temp_v;
-                            if(next_frame_p.x > 20)
-                            {
-                                int a = 1;
-                            }
                         }
                     }
                 }
@@ -571,11 +569,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     {
                         scale = 0.4f;
                     }
-                    v3 center = 0.25f * (part0->p + part1->p + part2->p + part3->p);
-                    v3 p0 = scale*(part0->p - center) + center;
-                    v3 p1 = scale*(part1->p - center) + center;
-                    v3 p2 = scale*(part2->p - center) + center;
-                    v3 p3 = scale*(part3->p - center) + center;
+                    v3d center = 0.25 * (part0->p + part1->p + part2->p + part3->p);
+                    v3 p0 = V3(scale*(part0->p - center) + center);
+                    v3 p1 = V3(scale*(part1->p - center) + center);
+                    v3 p2 = V3(scale*(part2->p - center) + center);
+                    v3 p3 = V3(scale*(part3->p - center) + center);
 
                     v3 n013 = normalize(cross(p0 - p1, p3 - p1));
                     v3 n123 = normalize(cross(p2 - p1, p3 - p1));

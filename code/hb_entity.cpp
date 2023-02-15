@@ -111,7 +111,7 @@ add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v
 }
 
 internal Entity *
-add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 color, f32 inv_mass, u32 flags)
+add_pbd_rigid_body_cube_entity(GameState *game_state, v3d center, v3 dim, v3 color, f32 inv_mass, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_Cube, flags);
 
@@ -132,10 +132,10 @@ add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 colo
 
     // NOTE(gh) This complicated equation comes from the fact that the 'center' should be different 
     // based on whether the particle count was even or odd.
-    v3 left_bottom_particle_center = 
-        center - particle_diameter * V3((particle_x_count-1)/2.0f,
-                                      (particle_y_count-1)/2.0f,
-                                      (particle_z_count-1)/2.0f);
+    v3d left_bottom_particle_center = 
+        center - ((f64)particle_diameter * V3d((particle_x_count-1)/2.0,
+                                      (particle_y_count-1)/2.0,
+                                      (particle_z_count-1)/2.0));
     u32 z_index = 0;
     for(u32 z = 0;
             z < particle_z_count;
@@ -151,7 +151,7 @@ add_pbd_rigid_body_cube_entity(GameState *game_state, v3 center, v3 dim, v3 colo
                     ++x)
             {
                 allocate_particle_from_pool(&game_state->particle_pool, 
-                                            left_bottom_particle_center + particle_diameter*V3(x, y, z),
+                                            left_bottom_particle_center + particle_diameter*V3d(x, y, z),
                                             particle_radius,
                                             inv_particle_mass);
             }
@@ -220,8 +220,8 @@ add_volume_constraint(PBDParticleGroup *group,
 internal Entity *
 add_pbd_soft_body_tetrahedron_entity(GameState *game_state, 
                                 MemoryArena *arena,
-                                v3 top,
-                                v3 bottom_p0, v3 bottom_p1, v3 bottom_p2, 
+                                v3d top,
+                                v3d bottom_p0, v3d bottom_p1, v3d bottom_p2, 
                                 f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
@@ -277,9 +277,9 @@ add_pbd_soft_body_tetrahedron_entity(GameState *game_state,
 internal Entity *
 add_pbd_soft_body_bipyramid_entity(GameState *game_state, 
                                 MemoryArena *arena,
-                                v3 top_p0, 
-                                v3 bottom_p0, v3 bottom_p1, v3 bottom_p2,
-                                v3 top_p1,
+                                v3d top_p0, 
+                                v3d bottom_p0, v3d bottom_p1, v3d bottom_p2,
+                                v3d top_p1,
                                 f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
@@ -392,6 +392,7 @@ push_tetrahedron(u32 top,
     return result;
 }
 
+#if 0
 internal Entity *
 add_pbd_mesh_entity(GameState *game_state, 
                     MemoryArena *arena, MemoryArena *temp_arena, 
@@ -401,7 +402,7 @@ add_pbd_mesh_entity(GameState *game_state,
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
     result->color = color;
 
-    v3 center = {};
+    v3d center = {};
     f32 max_distance_square = flt_min;
     if(vertex_count > 1)
     {
@@ -584,6 +585,7 @@ add_pbd_mesh_entity(GameState *game_state,
 
     return result;
 }
+#endif
 
 
 

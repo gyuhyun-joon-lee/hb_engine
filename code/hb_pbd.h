@@ -9,14 +9,14 @@
 // TODO(gh) Instead of this AOS, use SOA
 struct PBDParticle
 {
-    v3 p;
-    v3 v;
+    v3d p;
+    v3d v;
 
     //  TODO(gh) For now, all particles have identical size(radius) to avoid clipping,
     // but there might be workaround for this!
     f32 r;
 
-    f32 inv_mass;
+    f64 inv_mass;
 
     // NOTE(gh) Used for grouping particles. i.e particles in the same object would have the same phase, 
     // preventing them from colliding each other
@@ -26,7 +26,7 @@ struct PBDParticle
         NOTE(gh) Temporary varaibles, should be cleared to 0 each frame
     */
     // TODO(gh) Might not be necessary(i.e don't store velocity, and get it implicitly each frame?)
-    v3 prev_p;
+    v3d prev_p;
     v3 d_p_sum;
     u32 constraint_hit_count;
 };

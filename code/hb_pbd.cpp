@@ -17,18 +17,18 @@ end_particle_allocation_from_pool(PBDParticlePool *pool, PBDParticleGroup *group
 
 internal void
 allocate_particle_from_pool(PBDParticlePool *pool, 
-                            v3 p, f32 r, f32 inv_mass, i32 phase = 0)
+                            v3d p, f32 r, f32 inv_mass, i32 phase = 0)
 {
     PBDParticle *particle = pool->particles + pool->count++;
     assert(pool->count <= array_count(pool->particles));
 
     particle->p = p;
-    particle->v = V3(0, 0, 0);
+    particle->v = V3d(0, 0, 0);
     particle->r = r;
     particle->inv_mass = inv_mass;
 
     // Intializing temp variables
-    particle->prev_p = V3(0, 0, 0); 
+    particle->prev_p = V3d(0, 0, 0); 
     particle->d_p_sum = V3(0, 0, 0);
     particle->constraint_hit_count = 0;
 }
@@ -58,4 +58,15 @@ get_environment_constraint_value()
     if(dot(floor_normal, particle->proposed_p) - floor_d - particle->r < 0)
 }
 #endif
+
+
+
+
+
+
+
+
+
+
+
 

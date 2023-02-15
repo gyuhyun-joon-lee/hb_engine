@@ -23,7 +23,7 @@ typedef uintptr_t uintptr;
 
 typedef float r32;
 typedef float f32;
-typedef float f64;
+typedef double f64;
 
 #define Flt_Min FLT_MIN
 #define Flt_Max FLT_MAX
@@ -85,14 +85,20 @@ typedef float f64;
 #define euler_contant 2.7182818284590452353602874713526624977572470936999595749f
 #define degree_to_radian(degree) ((degree / 180.0f)*pi_32)
 
-// NOTE(joon) As you may have noticed, structs that are in this file start with lower case,
-// compared to other structs in the codebase.
+// NOTE(joon) Structs that are in this file start with lower case
+// as they are easier to type imo.
 
 typedef struct v2
 {
     r32 x;
     r32 y;
 }v2;
+
+typedef struct v2d
+{
+    f64 x;
+    f64 y;
+}v2d;
 
 typedef struct v2u
 {
@@ -125,6 +131,32 @@ typedef struct v3
         r32 e[3];
     };
 }v3;
+
+typedef struct v3d
+{
+    union
+    {
+        struct 
+        {
+            f64 x;
+            f64 y;
+            f64 z;
+        };
+        struct 
+        {
+            f64 r;
+            f64 g;
+            f64 b;
+        };
+        struct 
+        {
+            v2d xy;
+            f64 ignored;
+        };
+
+        f64 e[3];
+    };
+}v3d;
 
 struct v3u
 {
@@ -191,6 +223,29 @@ struct quat
     };
 };
 
+struct quatd
+{
+    union
+    {
+        struct
+        {
+            // NOTE(joon) ordered pair representation of the quaternion
+            // q = [s, v] = S + Vx*i + Vy*j + Vz*k
+            f64 s; // scalar
+            v3d v; // vector
+        };
+
+        struct 
+        {
+            f64 w;
+            f64 x;
+            f64 y;
+            f64 z;
+        };
+    };
+};
+
+
 struct m4
 {
     union
@@ -219,6 +274,24 @@ struct m3x3
 
         // [row][column]
         f32 e[3][3];
+    };
+};
+
+// row major
+// e[0][0] e[0][1] e[0][2]
+// e[1][0] e[1][1] e[1][2]
+// e[2][0] e[2][1] e[2][2]
+struct m3x3d
+{
+    union
+    {
+        struct
+        {
+            v3d rows[3];
+        };
+
+        // [row][column]
+        f64 e[3][3];
     };
 };
 
@@ -263,3 +336,5 @@ struct m4x4
 
 
 #endif
+
+

@@ -5,6 +5,8 @@
 #ifndef HB_MATH_H
 #define HB_MATH_H
 
+#include <math.h>
+
 // NOTE(gh) : This file contains functions that requires math.h
 // TODO(gh) : Someday we will get remove of math.h, too :)
 #include <math.h>
@@ -48,6 +50,12 @@ square(f32 value)
 
 inline f32
 lerp(f32 min, f32 t, f32 max)
+{
+    return min + t*(max-min);
+}
+
+inline f64
+lerp(f64 min, f64 t, f64 max)
 {
     return min + t*(max-min);
 }
@@ -225,6 +233,15 @@ V3(f32 x, f32 y, f32 z)
     result.x = x;
     result.y = y;
     result.z = z;
+
+    return result;
+}
+
+// TODO(gh) This conversion seems like a waste...
+inline v3
+V3(v3d v)
+{
+    v3 result = V3((f32)v.x, (f32)v.y, (f32)v.z);
 
     return result;
 }
@@ -476,6 +493,204 @@ gather_max_elements(v3 a, v3 b)
     result.x = maximum(a.x, b.x);
     result.y = maximum(a.y, b.y);
     result.z = maximum(a.z, b.z);
+
+    return result;
+}
+ 
+inline v3d
+V3d()
+{
+    v3d result = {};
+
+    return result;
+}
+
+inline v3d
+V3d(f64 x, f64 y, f64 z)
+{
+    v3d result = {};
+
+    result.x = x;
+    result.y = y;
+    result.z = z;
+
+    return result;
+}
+
+inline v3d
+V3d(v2d xy, f64 z)
+{
+    v3d result = {};
+
+    result.xy = xy;
+    result.z = z;
+
+    return result;
+}
+
+inline f64
+length(v3d a)
+{
+    return sqrt(a.x*a.x + a.y*a.y + a.z*a.z);
+}
+
+inline v3d
+abs(v3d a)
+{
+    v3d result = {};
+
+    result.x = abs(a.x);
+    result.y = abs(a.y);
+    result.z = abs(a.z);
+
+    return result; 
+}
+
+inline v3d&
+operator+=(v3d &v, v3d a)
+{
+    v.x += a.x;
+    v.y += a.y;
+    v.z += a.z;
+
+    return v;
+}
+
+inline v3d&
+operator-=(v3d &v, v3d a)
+{
+    v.x -= a.x;
+    v.y -= a.y;
+    v.z -= a.z;
+
+    return v;
+}
+
+inline v3d
+operator-(v3d a)
+{
+    v3d result = {};
+
+    result.x = -a.x;
+    result.y = -a.y;
+    result.z = -a.z;
+
+    return result;
+}
+
+inline v3d
+operator+(v3d a, v3d b)
+{
+    v3d result = {};
+
+    result.x = a.x+b.x;
+    result.y = a.y+b.y;
+    result.z = a.z+b.z;
+
+    return result;
+}
+
+inline v3d
+operator-(v3d a, v3d b)
+{
+    v3d result = {};
+
+    result.x = a.x-b.x;
+    result.y = a.y-b.y;
+    result.z = a.z-b.z;
+
+    return result;
+}
+inline v3d
+operator/(v3d a, f64 value)
+{
+    v3d result = {};
+
+    result.x = a.x/value;
+    result.y = a.y/value;
+    result.z = a.z/value;
+
+    return result;
+}
+
+inline v3d&
+operator/=(v3d &a, f64 value)
+{
+    a.x /= value;
+    a.y /= value;
+    a.z /= value;
+
+    return a;
+}
+
+inline v3d&
+operator*=(v3d &a, f64 value)
+{
+    a.x *= value;
+    a.y *= value;
+    a.z *= value;
+
+    return a;
+}
+
+inline v3d
+operator*(f64 value, v3d a)
+{
+    v3d result = {};
+
+    result.x = value*a.x;
+    result.y = value*a.y;
+    result.z = value*a.z;
+
+    return result;
+}
+
+// RHS!!!!
+// NOTE(gh) : This assumes the vectors ordered counter clockwisely
+inline v3d
+cross(v3d a, v3d b)
+{
+    v3d result = {};
+
+    result.x = a.y*b.z - b.y*a.z;
+    result.y = b.x*a.z - a.x*b.z;
+    result.z = a.x*b.y - b.x*a.y;
+
+    return result;
+}
+
+inline f64
+length_square(v3d a)
+{
+    return a.x*a.x + a.y*a.y + a.z*a.z;
+}
+
+inline v3d
+normalize(v3d a)
+{
+    return a/length(a);
+}
+
+inline f64
+dot(v3d a, v3d b)
+{
+    return a.x*b.x + a.y*b.y + a.z*b.z;
+}
+
+inline v3d
+hadamard(v3d a, v3d b)
+{
+    return V3d(a.x*b.x, a.y*b.y, a.z*b.z);
+}
+
+inline v3d
+lerp(v3d min, f64 t, v3d max)
+{
+    v3d result = {};
+
+    result.x = lerp(min.x, t, max.x);
+    result.y = lerp(min.y, t, max.y);
+    result.z = lerp(min.z, t, max.z);
 
     return result;
 }
@@ -1316,38 +1531,223 @@ is_pure_quat(quat q)
     return result;
 }
 
+inline quatd
+Quatd(f64 s, v3d v)
+{
+    quatd result = {};
+    result.s = s;
+    result.v = v;
+
+    return result;
+}
+
+inline quatd
+Quatd(f64 s, f64 v0, f64 v1, f64 v2)
+{
+    return Quatd(s, V3d(v0, v1, v2));
+}
+
+// NOTE(gh) returns rotation quaternion
+inline quatd
+Quatd(v3d axis, f64 rad)
+{
+    quatd result = {};
+    result.s = cosf(rad);
+    result.v = sinf(rad) * axis;
+
+    return result;
+}
+
+inline quatd
+get_quatd_with_axis_angle_cos(v3d axis, f64 cos)
+{
+    quatd result = {};
+    result.s = cos;
+    result.v = sqrt(1 - cos*cos)*axis;
+    return result;
+}
+
+inline quatd
+get_quatd_with_axis_angle(v3d axis, f64 rad)
+{
+    quatd result = {};
+    result.s = cos(rad);
+    result.v = sin(rad)*axis;
+    return result;
+}
+
+inline quatd
+operator +(quatd a, quatd b)
+{
+    quatd result = {};
+
+    result.s = a.s + b.s;
+    result.v = a.v + b.v;
+
+    return result;
+}
+
+inline quatd
+operator *(quatd a, quatd b)
+{
+    quatd result = {};
+
+    result.s = a.s*b.s - dot(a.v, b.v);
+    result.v = a.s*b.v + b.s*a.v + cross(a.v, b.v);
+
+    return result;
+}
+
+inline quatd
+operator *(f64 value, quatd q)
+{
+    quatd result = q;
+    result.s *= value;
+    result.v *= value;
+
+    return result;
+}
+
+inline quatd
+operator /(quatd q, f64 value)
+{
+    quatd result = {};
+    result.s = q.s/value;
+    result.v = q.v/value;
+
+    return result;
+}
+
+inline quatd &
+operator +=(quatd &a, quatd b)
+{
+    a.s += b.s;
+    a.v += b.v;
+
+    return a;
+}
+
+inline quatd &
+operator *=(quatd &q, f64 value)
+{
+    q.s *= value;
+    q.v *= value;
+
+    return q;
+}
+
+inline quatd &
+operator /=(quatd &q, f64 value)
+{
+    q.s /= value;
+    q.v /= value;
+
+    return q;
+}
+
+// TODO(gh) make quatdernion based on the orientation
+
+inline f64
+length_square(quatd q)
+{
+    f64 result = length_square(q.v) + q.s*q.s;
+
+    return result;
+}
+
+inline f64
+length(quatd q)
+{
+    f64 result = sqrt(length_square(q));
+
+    return result;
+}
+
+inline quatd
+normalize(quatd q)
+{
+    quatd result = Quatd(1, 0, 0, 0);
+    f64 l = length(q);
+
+    if(!compare_with_epsilon(l, 0.0))
+    {
+        result = q/l;
+    }
+
+    return result;
+}
+
+inline quatd
+conjugate(quatd q)
+{
+    quatd result = q;
+    result.v *= -1.0;
+
+    return result;
+}
+
+inline quatd
+inverse(quatd q)
+{
+    quatd result = conjugate(q) / length_square(q);
+
+    return result;
+}
+
+inline b32
+is_pure_quatd(quatd q)
+{
+    b32 result = false;
+
+    if(compare_with_epsilon(q.s, 0.0))
+    {
+        result = true;
+    }
+
+    return result;
+}
+
+// NOTE(gh) This matrix is an orthogonal matrix, so inverse == transpose
+inline m3x3d
+orientation_quatd_to_m3x3(quatd q)
+{
+    // NOTE(gh) q is a unit-norm quatderion
+    m3x3d result = {};
+    result.e[0][0] = 1 - 2.0*(q.y*q.y + q.z*q.z);
+    result.e[0][1] = 2.0*(q.x*q.y - q.s*q.z);
+    result.e[0][2] = 2.0*(q.x*q.z + q.s*q.y);
+
+    result.e[1][0] = 2.0*(q.x*q.y + q.s*q.z);
+    result.e[1][1] = 1 - 2.0*(q.x*q.x + q.z*q.z);
+    result.e[1][2] = 2.0*(q.y*q.z - q.s*q.x);
+
+    result.e[2][0] = 2.0*(q.x*q.z - q.s*q.y);
+    result.e[2][1] = 2.0*(q.y*q.z + q.x*q.s);
+    result.e[2][2] = 1 - 2.0*(q.x*q.x + q.y*q.y);
+
+    return result;
+}
+
 // NOTE(gh) This matrix is an orthogonal matrix, so inverse == transpose
 inline m3x3
 orientation_quat_to_m3x3(quat q)
 {
     // NOTE(gh) q is a unit-norm quaterion
     m3x3 result = {};
-    result.e[0][0] = 1 - 2.0f*(q.y*q.y + q.z*q.z);
+    result.e[0][0] = 1.0f - 2.0f*(q.y*q.y + q.z*q.z);
     result.e[0][1] = 2.0f*(q.x*q.y - q.s*q.z);
     result.e[0][2] = 2.0f*(q.x*q.z + q.s*q.y);
 
     result.e[1][0] = 2.0f*(q.x*q.y + q.s*q.z);
-    result.e[1][1] = 1 - 2.0f*(q.x*q.x + q.z*q.z);
+    result.e[1][1] = 1.0f - 2.0f*(q.x*q.x + q.z*q.z);
     result.e[1][2] = 2.0f*(q.y*q.z - q.s*q.x);
 
     result.e[2][0] = 2.0f*(q.x*q.z - q.s*q.y);
     result.e[2][1] = 2.0f*(q.y*q.z + q.x*q.s);
-    result.e[2][2] = 1 - 2.0f*(q.x*q.x + q.y*q.y);
+    result.e[2][2] = 1.0f - 2.0f*(q.x*q.x + q.y*q.y);
 
     return result;
 }
-
-#if 0
-// NOTE(gh) Given the orientation quaternion(which is _not_ pure),  
-// rotate it using the scaled-axis-angle representation.
-inline quat
-rotate(quat orientation, v3 saa) // saa = scaled-axis-angle
-{
-    quat result = orientation + 0.5f*Quat(0, saa)*orientation; 
-
-    return result;
-}
-#endif
 
 inline m3x3
 scale_m3x3(f32 x, f32 y, f32 z)
@@ -1452,6 +1852,98 @@ get_tetrahedron_volume(v3 top,
     f32 result = (1/6.0f) * dot(cross(bottom1 - bottom0, bottom2 - bottom0), top - bottom0);
 
     return result;
+}
+
+internal f64
+get_tetrahedron_volume(v3d top, 
+                       v3d bottom0, v3d bottom1, v3d bottom2)
+{
+    f32 result = (1/6.0) * dot(cross(bottom1 - bottom0, bottom2 - bottom0), top - bottom0);
+
+    return result;
+}
+
+/*
+   For any rigid body general deformation(including rotation, sheer...) matrix, 
+   it can be decomposed into
+   A = R * S,
+   where R is the rotation(orthonormal) matrix, 
+   and the S is the symmetric matrix(symmetric in a diagonal direction)
+
+   Then, transpose(A)*A = transpose(R*S) * (R*S) = transpose(S)*transpose(R)*R*S.
+   Because S is an orthonormal matrix, transpose(R) = inverse(R),
+   which means that transpose(A)*A = transpose(S)*S = S^2.
+   S^2 is the standard notation for transpose(S)*S.
+
+   The standard way to find R is to first finding S using eigenvectors.
+   Given three eigenvectors(column) and eigenvalues, S can be determined as 
+   [ev0 ev1 ev2]*[sqrt(e0) 0           0]*[ev0 ev1 ev2]-1
+                 [0       sqrt(e1)     0]
+                 [0        0    sqrt(e2)]
+
+    However, getting the eigen values requires solving three linear equations,
+    which can be solved using Gauss-Seidel(or Jacobi) relaxation.
+
+    Instead, we can use the method proposed in 
+    https://matthias-research.github.io/pages/publications/stablePolarDecomp.pdf
+
+    The basic idea behind this is to find the rotation matrix exp(w) incrementally, 
+    where
+    R <- exp(w)*R. (R is typically represented in a quaternion)
+
+    Here are some important properties of exp(w).
+    1. exp(w) is the rotation matrix with axis w/|w| and angle |w|.
+        This is also known as the exponential map.
+    2. Due to being a exponential map, it is guaranteed to be a proper rotation matrixk,
+       which is an orthonomal matrix with determinant 1. (Even when w = 0)
+
+    Therefore, exp(w)*R is also guaranteed to be a rotation matrix.
+
+    TODO(gh) Add more explanation about how to get w!
+
+    So given A, we can use the shape matching algorithm so that the particles
+    that were forming the object can return to their 'correct' positions where
+    the result matches the original shape.
+*/
+internal void
+extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
+{
+    // TODO(gh) The original algorithm uses Quat(A) / |Quat(A)|,
+    // which is very confusing because A is a 3x3 matrix, 
+    // and even if A implies an object and not a matrix, 
+    // we aren't storing the orientation.
+    quatd q = Quatd(1, 0, 0, 0);
+    f64 epsilon = 1.0e-9;
+
+    v3d A_column0 = V3d(A->e[0][0], A->e[1][0], A->e[2][0]);
+    v3d A_column1 = V3d(A->e[0][1], A->e[1][1], A->e[2][1]);
+    v3d A_column2 = V3d(A->e[0][2], A->e[1][2], A->e[2][2]);
+    for(u32 i = 0;
+            i < max_iter;
+            ++i)
+    {
+        m3x3d R = orientation_quatd_to_m3x3(q);
+        v3d R_column0 = V3d(R.e[0][0], R.e[1][0], R.e[2][0]);
+        v3d R_column1 = V3d(R.e[0][1], R.e[1][1], R.e[2][1]);
+        v3d R_column2 = V3d(R.e[0][2], R.e[1][2], R.e[2][2]);
+
+        // TODO(gh) Double check if the column here means actual column, not the row
+        v3d a = cross(R_column0, A_column0) + cross(R_column1, A_column1) + 
+                cross(R_column2, A_column2);
+        f64 b = (1.0/fabs(dot(R_column0, A_column0)) + 
+                dot(R_column1, A_column1) + dot(R_column2, A_column2) + epsilon);
+        v3d w = b * a;
+
+        if(length(w) >= epsilon)
+        {
+            q = normalize(Quatd(0, w) * q);
+            
+        }
+        else
+        {
+            break;
+        }
+    }
 }
 
 
