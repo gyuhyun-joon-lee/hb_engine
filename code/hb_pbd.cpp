@@ -61,30 +61,79 @@ get_com_of_particle_group(PBDParticleGroup *group)
     return result;
 }
 
+struct CollisionSolution
+{
+    v3d offset0;
+    v3d offset1;
+};
+
 // stiffness_epsilon = inv_stiffness/square(sub_dt);
 internal void
-solve_distance_constraint(PBDParticle *particle0, PBDParticle *particle1,
-                          v3d delta, f64 C, f64 stiffness_epsilon)
+solve_collision_constraint(CollisionSolution *solution,
+                            CollisionConstraint *c,
+                            v3d *p0, v3d *p1) 
 {
-    // Gradient of the constraint for each particles that were invovled in the constraint
-    // So this is actually gradient(C(xi))
-    v3d gradient0 = normalize(delta);
-    v3d gradient1 = -gradient0;
+    PBDParticle *particle0 = c->particle0;
+    PBDParticle *particle1 = c->particle1;
 
-    f64 lagrange_multiplier = 
-        -C / (particle0->inv_mass + particle1->inv_mass + stiffness_epsilon);
-
-    if(lagrange_multiplier != 0)
+    // TODO(gh) Since this constraint is only generated when 
+    // at least one of them as finite mass anyway, maybe there's no reason
+    // for this checking?
+    if(particle0->inv_mass + particle1->inv_mass != 0.0f)
     {
-        // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
-        // inv_mass of the particles are involved
-        // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
-        v3d offset0 = lagrange_multiplier*(f64)particle0->inv_mass*gradient0;
-        v3d offset1 = lagrange_multiplier*(f64)particle1->inv_mass*gradient1;
-        particle0->p += offset0;
-        particle1->p += offset1;
+        v3d delta = *p0 - *p1;
+        f64 delta_length = length(delta);
+
+        f64 rest_length = (f64)(particle0->r + particle1->r);
+        f64 C = delta_length - rest_length;
+        if(C < 0.0)
+        {
+            // Gradient of the constraint for each particles that were invovled in the constraint
+            // So this is actually gradient(C(xi))
+            v3d gradient0 = normalize(delta);
+            v3d gradient1 = -gradient0;
+
+            f64 lagrange_multiplier = 
+                -C / (particle0->inv_mass + particle1->inv_mass);
+
+            // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
+            // inv_mass of the particles are involved
+            // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
+            solution->offset0 = lagrange_multiplier*(f64)particle0->inv_mass*gradient0;
+            solution->offset1 = lagrange_multiplier*(f64)particle1->inv_mass*gradient1;
+        }
     }
 }
+
+struct EnvironmentSolution
+{
+    v3d offset;
+};
+
+internal void
+solve_environment_constraint(EnvironmentSolution *solution,
+                             EnvironmentConstraint *c,
+                             v3d *p)
+{
+    // TODO(gh) Since this constraint is only generated when 
+    // the particle has finite mass anyway, maybe there's no reason
+    // for this checking?
+    if(c->particle->inv_mass != 0.0f)
+    {
+        f64 d = dot(c->n, *p);
+        f64 C = d - c->d - c->particle->r;
+        if(C < 0.0)
+        {
+            // NOTE(gh) For environmental collision, we don't need the inv_mass thing
+            f64 lagrange_multiplier = -C;
+
+            // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
+            solution->offset = lagrange_multiplier*(c->n);
+        }
+    }
+}
+
+
 
 
 

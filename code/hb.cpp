@@ -163,24 +163,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #endif
 
         add_pbd_cube_entity(game_state, &pbd_arena, 
-                            V3d(0, 0, 15), V3u(1, 1, 1),
-                            0.f, 1/20.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
-
-#if 0
-        v3 cube_p[] = 
-        {
-            V3(0, 0, 60), 
-            V3(-2, -2, 50), V3(2, -2, 50), V3(0, 2, 50),
-            // top
-            V3(-2, -2, 60), V3(2, -2, 60), V3(2, 2, 60), V3(-2, 2, 60),
-            // bottom
-            V3(-2, -2, 50), V3(2, -2, 50), V3(2, 2, 50), V3(-2, 2, 50)
-        };
-        add_pbd_mesh_entity(game_state, 
-                                     &pbd_arena, &game_state->transient_arena, 
-                                     cube_p, array_count(cube_p),
-                                     0.0006f, 1/10.0f, V3(0.7f, 0.2f, 0), EntityFlag_Movable|EntityFlag_Collides);
-#endif
+                            // V3d(.5f, .5f, 10), V3u(1, 1, 1),
+                            V3d(0, 0, 10), V3u(1, 1, 1),
+                            0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
@@ -301,7 +286,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
        Plugging eq(2) to it, we get s * sum(gradient(C(pi))), which is 0 due to translation invariance(Need to dig into this later).
        (What about the angular momentum?)
     */
-    u32 substep_count = 20;
+    u32 substep_count = 64;
     f64 sub_dt = (f64)platform_input->dt_per_frame/(f64)substep_count;
     f64 sub_dt_square = square(sub_dt);
     for(u32 substep_index = 0;
@@ -389,56 +374,19 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             {
                                 PBDParticle *test_particle = test_group->particles + test_particle_index;
 
-                                f64 distance_between = length(particle->p - test_particle->p);
-                                if(distance_between < particle->r + test_particle->r)
+                                if(particle->inv_mass + test_particle->inv_mass != 0.0f)
                                 {
-                                    CollisionConstraint *c = collision_constraints + collision_constraint_count++;
-                                    c->particle0 = particle;
-                                    c->particle1 = test_particle;
+                                    f64 distance_between = length(particle->p - test_particle->p);
+                                    if(distance_between < particle->r + test_particle->r)
+                                    {
+                                        CollisionConstraint *c = collision_constraints + collision_constraint_count++;
+                                        c->particle0 = particle;
+                                        c->particle1 = test_particle;
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            }
-        }
-
-        f64 collision_epsilon = -0.0000001;
-
-        // Pre-stabilize collision constraints
-        for(u32 constraint_index = 0;
-                constraint_index < collision_constraint_count;
-                ++constraint_index)
-        {
-            CollisionConstraint *c = collision_constraints + constraint_index;
-
-            if(c->particle0->inv_mass + c->particle1->inv_mass != 0.0f)
-            {
-                v3d delta = c->particle0->prev_p - c->particle1->prev_p;
-                f64 delta_length = length(delta);
-
-                f64 rest_length = (f64)(c->particle0->r + c->particle1->r);
-                f64 C = delta_length - rest_length;
-                if(C < collision_epsilon)
-                {
-                    // Gradient of the constraint for each particles that were invovled in the constraint
-                    // So this is actually gradient(C(xi))
-                    v3d gradient0 = normalize(delta);
-                    v3d gradient1 = -gradient0;
-
-                    f64 lagrange_multiplier = 
-                        -C / (c->particle0->inv_mass + c->particle1->inv_mass);
-
-                    // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
-                    // inv_mass of the particles are involved
-                    // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
-                    v3d offset0 = lagrange_multiplier*(f64)c->particle0->inv_mass*gradient0;
-                    c->particle0->p += offset0;
-                    c->particle0->prev_p += offset0;
-
-                    v3d offset1 = lagrange_multiplier*(f64)c->particle1->inv_mass*gradient1;
-                    c->particle1->p += offset1;
-                    c->particle1->prev_p += offset1;
                 }
             }
         }
@@ -449,30 +397,50 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 ++constraint_index)
         {
             EnvironmentConstraint *c = environment_constraints + constraint_index;
+            EnvironmentSolution solution = {};
+            solve_environment_constraint(&solution, c, &c->particle->prev_p);
 
-            if(c->particle->inv_mass != 0.0f)
-            {
-                f64 d = dot(c->n, c->particle->prev_p);
-                f64 C = d - c->d - c->particle->r;
-                if(C < collision_epsilon)
-                {
-                    // NOTE(gh) For environmental collision, we don't need the inv_mass thing
-                    f64 lagrange_multiplier = -C;
-
-                    // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
-                    v3d delta = lagrange_multiplier*(c->n);
-                    c->particle->p += delta;
-                    c->particle->prev_p += delta;
-
-                    int a = 1;
-                }
-            }
+            c->particle->p += solution.offset;
+            c->particle->prev_p += solution.offset;
         }
 
+        // Pre-stabilize collision constraints
+        for(u32 constraint_index = 0;
+                constraint_index < collision_constraint_count;
+                ++constraint_index)
+        {
+            CollisionConstraint *c = collision_constraints + constraint_index;
+
+            CollisionSolution solution = {};
+            solve_collision_constraint(&solution, c,
+                                       &c->particle0->prev_p, &c->particle1->prev_p);
+
+            c->particle0->p += solution.offset0;
+            c->particle0->prev_p += solution.offset0;
+
+            c->particle1->p += solution.offset1;
+            c->particle1->prev_p += solution.offset1;
+        }
+
+
         /*
+           TODO(gh) Find out in what precise order we should solve the constraints,
+           especially with the environment and collision
            Solve every constraints, in specific order.
-           collision -> distance -> shape matching
+           environment -> collision -> distance -> shape matching
            */
+
+        // Solve environment constraints
+        for(u32 constraint_index = 0;
+                constraint_index < environment_constraint_count;
+                ++constraint_index)
+        {
+            EnvironmentConstraint *c = environment_constraints + constraint_index;
+            EnvironmentSolution solution = {};
+            solve_environment_constraint(&solution, c, &c->particle->p);
+
+            c->particle->p += solution.offset;
+        }
 
         // Solve collision constraints
         for(u32 constraint_index = 0;
@@ -481,48 +449,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         {
             CollisionConstraint *c = collision_constraints + constraint_index;
 
-            if(c->particle0->inv_mass + c->particle1->inv_mass != 0.0f)
-            {
-                v3d delta = c->particle0->p - c->particle1->p;
-                f64 delta_length = length(delta);
+            CollisionSolution solution = {};
+            solve_collision_constraint(&solution, c,
+                                       &c->particle0->p, &c->particle1->p);
 
-                f64 rest_length = (f64)(c->particle0->r + c->particle1->r);
-                f64 C = delta_length - rest_length;
-                if(C < collision_epsilon)
-                {
-                    // Collision constraint and distance constraint is basically the same thing,
-                    // except the fact that Collision constraint is inequality constraint 
-                    // and distance constraint is equality constraint
-                    // TODO(gh) This seems odd, don't we need to use both inv_distance_stiffness from both particles?
-                    f64 stiffness_epsilon = 0.0; // (f64)group->inv_distance_stiffness/square(sub_dt);
-                    solve_distance_constraint(c->particle0, c->particle1, delta, C, 0);
-                }
-            }
+            c->particle0->p += solution.offset0;
+            c->particle1->p += solution.offset1;
         }
 
-        // Solve environment constraints
-        for(u32 constraint_index = 0;
-                constraint_index < environment_constraint_count;
-                ++constraint_index)
-        {
-            EnvironmentConstraint *c = environment_constraints + constraint_index;
 
-            if(c->particle->inv_mass != 0.0f)
-            {
-                f64 d = dot(c->n, c->particle->p);
-                f64 C = d - c->d - c->particle->r;
-                if(C < collision_epsilon)
-                {
-                    f64 lagrange_multiplier = 
-                        -C / (c->particle->inv_mass);
-
-                    // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
-                    v3d delta = lagrange_multiplier*(c->n);
-                    c->particle->p += delta;
-                }
-            }
-        }
-
+#if 0
         // NOTE(gh) Solve distance constraint
         for(u32 entity_index = 0;
                 entity_index < game_state->entity_count;
@@ -555,6 +491,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 }
             }
         }
+#endif
 
 #if 1
         /*
@@ -622,8 +559,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 if(particle->inv_mass != 0.0f)
                 {
                     v3d delta = (particle->p - particle->prev_p);
-                    f64 epsilon = 0.00000001;
-                    if(length(delta) > epsilon)
+                    f64 sleep_epsilon = 0.00000001;
+                    if(length(delta) > sleep_epsilon)
                     {
                         particle->v = delta / sub_dt;
                     }
