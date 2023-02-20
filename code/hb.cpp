@@ -140,13 +140,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
 #if 0
-        Entity *entity = add_pbd_cube_entity(game_state, &game_state->pbd_arena, 
-                            // V3d(.5f, .5f, 10), V3u(2, 2, 2),
-                            V3d(10, 11, 2), V3u(2, 2, 2),
-                            V3d(-2, -2, 0),
-                            0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
-#endif
-
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
         i32 fluid_cell_count_y = 16;
@@ -157,7 +150,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, gpu_work_queue,
                                     fluid_cell_left_bottom_p, V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 
                                     fluid_cell_dim);
-
+#endif
 
         game_state->is_initialized = true;
     }
@@ -234,7 +227,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     if(platform_input->space.is_down && can_shoot)
     {
         add_pbd_cube_entity(game_state, &game_state->pbd_arena, 
-                            V3d(render_camera->p), V3u(1, 1, 1),
+                            V3d(render_camera->p), V3u(2, 2, 2),
                             V3d(50.0f*camera_dir),
                             0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
@@ -284,7 +277,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
        Plugging eq(2) to it, we get s * sum(gradient(C(pi))), which is 0 due to translation invariance(Need to dig into this later).
        (What about the angular momentum?)
     */
-    u32 substep_count = 64;
+    u32 substep_count = 32;
     f64 sub_dt = (f64)platform_input->dt_per_frame/(f64)substep_count;
     f64 sub_dt_square = square(sub_dt);
     for(u32 substep_index = 0;
@@ -437,7 +430,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             EnvironmentSolution solution = {};
             solve_environment_constraint(&solution, c, &c->particle->p);
 
-            c->particle->p += solution.offset;
+           c->particle->p += solution.offset;
         }
 
         // Solve collision constraints
@@ -490,7 +483,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
         }
 #endif
-
+    
 #if 1
         /*
            NOTE(gh) Solve shape matching constraints.
@@ -522,7 +515,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
 
             quatd shape_match_rotation_quat = 
-                extract_rotation_from_polar_decomposition(&A, 100);
+                extract_rotation_from_polar_decomposition(&A, 128);
             m3x3d shape_match_rotation_matrix = 
                 orientation_quatd_to_m3x3d(shape_match_rotation_quat);
 
@@ -535,10 +528,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 v3d shape_match_delta = 
                     (shape_match_rotation_matrix*particle->initial_offset_from_com + com) - particle->p;
 
+                if(length(shape_match_delta) > 1.0f)
+                {
+                    int a = 1;
+                }
+
                 particle->p += shape_match_delta;
             }
         }
 #endif
+
 
         // Post solve
         for(u32 entity_index = 0;
@@ -574,6 +573,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         end_temp_memory(&collision_constraint_memory);
         end_temp_memory(&environment_constraint_memory);
     }
+
 
     FluidCubeMAC *fluid_cube = &game_state->fluid_cube_mac;
     // TODO(gh) Only a temporary thing, remove this when we move the whole fluid simluation to the GPU

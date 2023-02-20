@@ -1986,14 +1986,13 @@ extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
         // TODO(gh) Double check if the column here means actual column, not the row
         v3d a = cross(R_column0, A_column0) + cross(R_column1, A_column1) + 
                 cross(R_column2, A_column2);
-        f64 b = (1.0/fabs(dot(R_column0, A_column0)) + 
-                dot(R_column1, A_column1) + dot(R_column2, A_column2) + epsilon);
-        v3d w = b * a;
+        f64 b = 1.0/fabs(dot(R_column0, A_column0) + dot(R_column1, A_column1) + dot(R_column2, A_column2)) + epsilon;
+        v3d w = b*a;
+        f64 length_w = length(w);
 
-        if(length(w) >= epsilon)
+        if(length_w >= epsilon)
         {
-            q = normalize(Quatd(0, w) * q);
-            
+            q = normalize(Quatd(w/length_w, length_w) * q);
         }
         else
         {
