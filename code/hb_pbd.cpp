@@ -86,32 +86,6 @@ solve_distance_constraint(PBDParticle *particle0, PBDParticle *particle1,
     }
 }
 
-                    // TODO(gh) Using the shape matching constraint instead of distance constraint,
-                    // can we just remove distance constraint at all?
-#if 0
-                    for(u32 constraint_index = 0;
-                            constraint_index < group->distance_constraint_count;
-                            ++constraint_index)
-                    {
-                        DistanceConstraint *c = group->distance_constraints + constraint_index;
-                        PBDParticle *particle0 = group->particles + c->index0;
-                        PBDParticle *particle1 = group->particles + c->index1;
-
-                        if(particle0->inv_mass + particle1->inv_mass != 0.0f)
-                        {
-                            v3d delta = particle0->p - particle1->p;
-                            f64 delta_length = length(delta);
-
-                            f64 C = delta_length - c->rest_length;
-
-                            if(C < 0.0)
-                            {
-                                f64 stiffness_epsilon = (f64)group->inv_distance_stiffness/sub_dt_square;
-                                solve_distance_constraint(particle0, particle1, delta, C, stiffness_epsilon);
-                            }
-                        }
-                    }
-#endif
 
 
 
