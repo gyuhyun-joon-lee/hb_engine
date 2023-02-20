@@ -17,13 +17,13 @@ end_particle_allocation_from_pool(PBDParticlePool *pool, PBDParticleGroup *group
 
 internal void
 allocate_particle_from_pool(PBDParticlePool *pool, 
-                            v3d p, f32 r, f32 inv_mass, i32 phase = 0)
+                            v3d p, v3d v, f32 r, f32 inv_mass, i32 phase = 0)
 {
     PBDParticle *particle = pool->particles + pool->count++;
     assert(pool->count <= array_count(pool->particles));
 
     particle->p = p;
-    particle->v = V3d(0, 0, 0);
+    particle->v = v;
     particle->r = r;
     particle->inv_mass = inv_mass;
 

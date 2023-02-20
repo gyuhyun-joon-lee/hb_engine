@@ -42,19 +42,25 @@ struct PlatformAPI
     // platform_atomic_compare_and_exchange64() *atomic_compare_and_exchange64;
 };
 
+struct PlatformKey
+{
+    b32 is_down;
+    b32 was_down;
+};
+
 struct PlatformInput
 {
-    b32 move_up;
-    b32 move_down;
-    b32 move_left;
-    b32 move_right;
+    PlatformKey move_up;
+    PlatformKey move_down;
+    PlatformKey move_left;
+    PlatformKey move_right;
 
-    b32 action_up;
-    b32 action_down;
-    b32 action_left;
-    b32 action_right;
+    PlatformKey action_up;
+    PlatformKey action_down;
+    PlatformKey action_left;
+    PlatformKey action_right;
 
-    b32 space;
+    PlatformKey space;
 
     f32 dt_per_frame;
     f32 time_elasped_from_start;

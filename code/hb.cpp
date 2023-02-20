@@ -54,11 +54,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->entities = push_array(&game_state->transient_arena, Entity, game_state->max_entity_count);
 
         // NOTE(gh) Initialize the arenas
-        game_state->render_arena = start_memory_arena((u8 *)platform_memory->transient_memory + 
-                game_state->transient_arena.total_size + 
-                game_state->mass_agg_arena.total_size,
-                megabytes(16));
-        MemoryArena pbd_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));
+        game_state->render_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));        
+        game_state->pbd_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));
 
         game_state->game_camera = init_fps_camera(V3(0, -10, 22), 1.0f, 135, 1.0f, 1000.0f);
         game_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
@@ -134,38 +131,21 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
 #endif
 
-        add_floor_entity(game_state, &game_state->transient_arena, V3(), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
+        add_floor_entity(game_state, &game_state->transient_arena, V3(), V2(1000, 1000), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
+
+        add_pbd_cube_entity(game_state, &game_state->pbd_arena, 
+                            V3d(0, 0, 2), V3u(2, 2, 2),
+                            V3d(0, 0, 0),
+                            0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
 #if 0
-        add_pbd_soft_body_tetrahedron_entity(game_state, &pbd_arena, 
-                                             V3d(0, 2, 14),
-                                             V3d(-4, 0, 5), V3d(4, 0, 12), V3d(0, 4, 8),
-                                             0.0f, 1/10.0f, V3(0, 0.8f, 0.2f), EntityFlag_Movable|EntityFlag_Collides);
-
-        add_pbd_soft_body_bipyramid_entity(game_state, &pbd_arena, 
-                                             V3d(12, 10, 14),
-                                             V3d(6, 10, 10), V3d(13, 9, 10), V3d(10, 14, 10),
-                                             V3d(10, 12, 6),
-                                             0.0006f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
-
-        add_pbd_soft_body_bipyramid_entity(game_state, &pbd_arena, 
-                                             V3d(-10, -8, 14),
-                                             V3d(-14, -10, 7), V3d(-6, -10, 9), V3d(-10, -6, 10),
-                                             V3d(-11, -9, 6),
-                                              0.01f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
-#endif
-
-#if 1
-        add_pbd_cube_entity(game_state, &pbd_arena, 
-                            V3d(0, 0, 2), V3u(1, 1, 1),
+        Entity *entity = add_pbd_cube_entity(game_state, &game_state->pbd_arena, 
+                            // V3d(.5f, .5f, 10), V3u(2, 2, 2),
+                            V3d(10, 11, 2), V3u(2, 2, 2),
+                            V3d(-2, -2, 0),
                             0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 #endif
-
-        add_pbd_cube_entity(game_state, &pbd_arena, 
-                            // V3d(.5f, .5f, 10), V3u(1, 1, 1),
-                            V3d(0, 0, 10), V3u(1, 1, 1),
-                            0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
         i32 fluid_cell_count_x = 16;
@@ -204,19 +184,19 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     v3 camera_up = normalize(cross(camera_right, camera_dir)); 
 
     f32 camera_rotation_speed = 3.0f * platform_input->dt_per_frame;
-    if(platform_input->action_up)
+    if(platform_input->action_up.is_down)
     {
         camera_rotation += camera_rotation_speed * camera_right;
     }
-    if(platform_input->action_down)
+    if(platform_input->action_down.is_down)
     {
         camera_rotation -= camera_rotation_speed * camera_right;
     }
-    if(platform_input->action_left)
+    if(platform_input->action_left.is_down)
     {
         camera_rotation += camera_rotation_speed * V3(0, 0, 1);
     }
-    if(platform_input->action_right)
+    if(platform_input->action_right.is_down)
     {
         camera_rotation -= camera_rotation_speed * V3(0, 0, 1);
     }
@@ -230,23 +210,41 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
 #if 1
     f32 camera_speed = 30.0f * platform_input->dt_per_frame;
-    if(platform_input->move_up)
+    if(platform_input->move_up.is_down)
     {
         render_camera->p += camera_speed*camera_dir;
     }
-    if(platform_input->move_down)
+    if(platform_input->move_down.is_down)
     {
         render_camera->p -= camera_speed*camera_dir;
     }
-    if(platform_input->move_right)
+    if(platform_input->move_right.is_down)
     {
         render_camera->p += camera_speed*camera_right;
     }
-    if(platform_input->move_left)
+    if(platform_input->move_left.is_down)
     {
         render_camera->p += -camera_speed*camera_right;
     }
 #endif
+
+    // TODO(gh) Remove this!
+    local_persist b32 can_shoot = true;
+
+    if(platform_input->space.is_down && can_shoot)
+    {
+        add_pbd_cube_entity(game_state, &game_state->pbd_arena, 
+                            V3d(render_camera->p), V3u(1, 1, 1),
+                            V3d(50.0f*camera_dir),
+                            0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
+
+        can_shoot = false;
+    }
+
+    if(!platform_input->space.is_down)
+    {
+        can_shoot = true;
+    }
 
     /*
        NOTE(gh) A little bit about how PBD works

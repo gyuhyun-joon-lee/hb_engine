@@ -505,6 +505,7 @@ V3d()
     return result;
 }
 
+
 inline v3d
 V3d(f64 x, f64 y, f64 z)
 {
@@ -513,6 +514,15 @@ V3d(f64 x, f64 y, f64 z)
     result.x = x;
     result.y = y;
     result.z = z;
+
+    return result;
+}
+
+// TODO(gh) This conversion seems like a waste...
+inline v3d
+V3d(v3 v)
+{
+    v3d result = V3d((f64)v.x, (f64)v.y, (f64)v.z);
 
     return result;
 }

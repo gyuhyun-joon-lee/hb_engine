@@ -173,6 +173,13 @@ display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_t
 }
 
 internal void
+register_platform_key_input(PlatformKey *key, b32 is_down, b32 was_down)
+{
+    key->is_down = is_down;
+    key->was_down = was_down;
+}
+
+internal void
 macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform_input)
 {
     NSPoint mouse_location = [NSEvent mouseLocation];
@@ -245,66 +252,67 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
 
                     if((is_down != was_down) || !is_down)
                     {
-                        //printf("isDown : %d, WasDown : %d", is_down, was_down);
                         u16 key_code = [event keyCode];
+                        // printf("%d, isDown : %d, WasDown : %d\n", key_code, is_down, was_down);
                         if(key_code == kVK_Escape)
                         {
                             is_game_running = false;
                         }
                         else if(key_code == kVK_ANSI_W)
                         {
-                            platform_input->move_up = is_down;
+                            register_platform_key_input(&platform_input->move_up, is_down, was_down);
                         }
                         else if(key_code == kVK_ANSI_A)
                         {
-                            platform_input->move_left = is_down;
+                            register_platform_key_input(&platform_input->move_left, is_down, was_down);
                         }
                         else if(key_code == kVK_ANSI_S)
                         {
-                            platform_input->move_down = is_down;
+                            register_platform_key_input(&platform_input->move_down, is_down, was_down);
                         }
                         else if(key_code == kVK_ANSI_D)
                         {
-                            platform_input->move_right = is_down;
+                            register_platform_key_input(&platform_input->move_right, is_down, was_down);
                         }
 
                         else if(key_code == kVK_ANSI_I)
                         {
-                            platform_input->action_up = is_down;
+                            register_platform_key_input(&platform_input->action_up, is_down, was_down);
                         }
                         else if(key_code == kVK_ANSI_J)
                         {
-                            platform_input->action_left = is_down;
+                            register_platform_key_input(&platform_input->action_left, is_down, was_down);
                         }
                         else if(key_code == kVK_ANSI_K)
                         {
-                            platform_input->action_down = is_down;
+                            register_platform_key_input(&platform_input->action_down, is_down, was_down);
                         }
                         else if(key_code == kVK_ANSI_L)
                         {
-                            platform_input->action_right = is_down;
+                            register_platform_key_input(&platform_input->action_right, is_down, was_down);
                         }
 
                         else if(key_code == kVK_LeftArrow)
                         {
-                            platform_input->action_left = is_down;
+                            register_platform_key_input(&platform_input->action_left, is_down, was_down);
                         }
                         else if(key_code == kVK_RightArrow)
                         {
-                            platform_input->action_right = is_down;
+                            register_platform_key_input(&platform_input->action_right, is_down, was_down);
                         }
                         else if(key_code == kVK_UpArrow)
                         {
-                            platform_input->action_up = is_down;
+                            register_platform_key_input(&platform_input->action_up, is_down, was_down);
                         }
                         else if(key_code == kVK_DownArrow)
                         {
-                            platform_input->action_down = is_down;
+                            register_platform_key_input(&platform_input->action_down, is_down, was_down);
                         }
 
                         else if(key_code == kVK_Space)
                         {
-                            platform_input->space = is_down;
+                            register_platform_key_input(&platform_input->space, is_down, was_down);
+                            printf("%d, isDown : %d, WasDown : %d\n", key_code, platform_input->space.is_down, platform_input->space.was_down);
                         }
 
                         else if(key_code == kVK_Return)
