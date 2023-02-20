@@ -15,8 +15,8 @@ struct PBDParticle
     //  TODO(gh) For now, all particles have identical size(radius) to avoid clipping,
     // but there might be workaround for this!
     f32 r;
-
     f64 inv_mass;
+    v3d initial_offset_from_com; // This is the initial offset
 
     // NOTE(gh) Used for grouping particles. i.e particles in the same object would have the same phase, 
     // preventing them from colliding each other
@@ -52,9 +52,8 @@ struct FixedPositionConstraint
 */
 struct CollisionConstraint
 {
-    u32 index0;
-    u32 index1;
-    // r0 and r1 can be retrieved from the particle directly
+    PBDParticle *particle0;
+    PBDParticle *particle1;
 };
 
 /*
@@ -63,10 +62,11 @@ struct CollisionConstraint
 */
 struct EnvironmentConstraint
 {
-    u32 index;
+    PBDParticle *particle;
 
     // environment info
-    v3 n;
+    v3d n; // should be normalized
+    // Should also include the radius of the particle, too
     f32 d;
 };
 

@@ -1075,6 +1075,26 @@ z_rotate(f32 rad)
     return result;
 }
 
+inline m3x3d
+M3x3d()
+{
+    m3x3d result = {};
+
+    return result;
+}
+
+inline v3d
+operator *(m3x3d a, v3d b)
+{
+    v3d result = {};
+
+    result.x = dot(a.rows[0], b);
+    result.y = dot(a.rows[1], b);
+    result.z = dot(a.rows[2], b);
+
+    return result;
+}
+
 inline m3x4
 M3x4(f32 e00, f32 e01, f32 e02, f32 e03,
      f32 e10, f32 e11, f32 e12, f32 e13,
@@ -1709,7 +1729,7 @@ is_pure_quatd(quatd q)
 
 // NOTE(gh) This matrix is an orthogonal matrix, so inverse == transpose
 inline m3x3d
-orientation_quatd_to_m3x3(quatd q)
+orientation_quatd_to_m3x3d(quatd q)
 {
     // NOTE(gh) q is a unit-norm quatderion
     m3x3d result = {};
@@ -1880,7 +1900,6 @@ get_tetrahedron_volume(v3d top,
    [ev0 ev1 ev2]*[sqrt(e0) 0           0]*[ev0 ev1 ev2]-1
                  [0       sqrt(e1)     0]
                  [0        0    sqrt(e2)]
-
     However, getting the eigen values requires solving three linear equations,
     which can be solved using Gauss-Seidel(or Jacobi) relaxation.
 
@@ -1899,13 +1918,38 @@ get_tetrahedron_volume(v3d top,
 
     Therefore, exp(w)*R is also guaranteed to be a rotation matrix.
 
-    TODO(gh) Add more explanation about how to get w!
+    Getting w, we first think of A and R to be 2 sets of 3 axes, 
+    where we want to move the tips of R towards A.
+    Then, we can get the potential energy as 
+    0.5f * Sum((ri - ai)^2)
 
+    Then, by the definition of force, the forces acting at the tips of the axes of R are
+    Fi = -gradient(Ef) = ai - ri
+
+    Then, net torque is 
+    T = Sum(ri x ai))
+
+    Therefore, we can choose w to be 
+    w = a * T, where a is a scalar value that should be determined.
+
+    To determine a, we can simply the problem by considering only one axis.
+    We want w so that when applied to a single axis of R, it becomes the axis of A, which means that
+    Aq = Wq * Rq * inverse(Wq), where
+    Wq = [cos(0.5*theta), sin(0.5*theta)norm(T)], where theta is the angle between A and R
+    This means that as an angle-axis representation, length(W) should be theta.
+
+    So if we say that
+    w = (aixri) / (ai*ri), 
+    due to the definition of cross and dot product, length of w becomes
+    length(w) = sin(theta)/cos(theta) = tan(theta) = theta, when theta is small enough.
+
+    Due to the condition that theta should be small, we use iterative method.
+ 
     So given A, we can use the shape matching algorithm so that the particles
     that were forming the object can return to their 'correct' positions where
     the result matches the original shape.
 */
-internal void
+internal quatd
 extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
 {
     // TODO(gh) The original algorithm uses Quat(A) / |Quat(A)|,
@@ -1915,6 +1959,8 @@ extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
     quatd q = Quatd(1, 0, 0, 0);
     f64 epsilon = 1.0e-9;
 
+    // NOTE(gh) Using the column vector here, as those 
+    // represent the axes.
     v3d A_column0 = V3d(A->e[0][0], A->e[1][0], A->e[2][0]);
     v3d A_column1 = V3d(A->e[0][1], A->e[1][1], A->e[2][1]);
     v3d A_column2 = V3d(A->e[0][2], A->e[1][2], A->e[2][2]);
@@ -1922,7 +1968,7 @@ extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
             i < max_iter;
             ++i)
     {
-        m3x3d R = orientation_quatd_to_m3x3(q);
+        m3x3d R = orientation_quatd_to_m3x3d(q);
         v3d R_column0 = V3d(R.e[0][0], R.e[1][0], R.e[2][0]);
         v3d R_column1 = V3d(R.e[0][1], R.e[1][1], R.e[2][1]);
         v3d R_column2 = V3d(R.e[0][2], R.e[1][2], R.e[2][2]);
@@ -1944,6 +1990,8 @@ extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
             break;
         }
     }
+
+    return q;
 }
 
 

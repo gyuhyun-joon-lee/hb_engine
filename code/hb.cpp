@@ -28,7 +28,7 @@
 #include "hb_fluid.cpp"
 #include "hb_obj.cpp"
 
-// TODO(gh) not a great idea
+// TODO(gh) Remove this dependency
 #include <time.h>
 
 internal void 
@@ -137,7 +137,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         add_floor_entity(game_state, &game_state->transient_arena, V3(), V2(100, 100), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
 
-#if 1
+#if 0
         add_pbd_soft_body_tetrahedron_entity(game_state, &pbd_arena, 
                                              V3d(0, 2, 14),
                                              V3d(-4, 0, 5), V3d(4, 0, 12), V3d(0, 4, 8),
@@ -155,6 +155,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                              V3d(-11, -9, 6),
                                               0.01f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 #endif
+
+#if 1
+        add_pbd_cube_entity(game_state, &pbd_arena, 
+                            V3d(0, 0, 2), V3u(1, 1, 1),
+                            0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
+#endif
+
+        add_pbd_cube_entity(game_state, &pbd_arena, 
+                            V3d(0, 0, 15), V3u(1, 1, 1),
+                            0.f, 1/20.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
 #if 0
         v3 cube_p[] = 
@@ -201,6 +211,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         // game_camera->roll += 0.8f * platform_input->dt_per_frame;
     }
+    quat temp = Quat(cosf(pi_32/6.0f), V3(sinf(pi_32/6.0f), 0, 0));
+    m3x3 temp0 = orientation_quat_to_m3x3(temp);
 
     v3 camera_dir = get_camera_lookat(render_camera);
     v3 camera_right = get_camera_right(render_camera);
@@ -256,7 +268,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             ++entity_index)
     {
         Entity *entity = game_state->entities + entity_index;
-        PBDParticleGroup *group = &entity->particle_group;
 
         switch(entity->type)
         {
@@ -277,7 +288,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                    In XPBD, a lot of the equations include square(sub_step), which means that f32 might not be
                    sufficient for calculation. For example, if the sub step gets higher than 100, the gravity will stop
                    working due to lost precision. We can limit the number of sub steps(15~20), or use double, which 
-                   if fine for the CPU, but bad for the GPU.
+                   if fine for the CPU(not considering the cache), but bad for the GPU.
 
                    All PBD starts with the linearization using the taylor expansion(gradient == partial differtiation).
                    C(p + dp) (approx)= C(p) + gradient(C) * dp = 0 ...eq(1)
@@ -300,19 +311,24 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                    Plugging eq(2) to it, we get s * sum(gradient(C(pi))), which is 0 due to translation invariance(Need to dig into this later).
                    (What about the angular momentum?)
                 */
-
-                /*
-                   TODO(gh) One thing to note here is that 
-                   due to 
-                */
+                PBDParticleGroup *group = &entity->particle_group;
                 u32 substep_count = 20;
                 f64 sub_dt = (f64)platform_input->dt_per_frame/(f64)substep_count;
-                
+                f64 sub_dt_square = square(sub_dt);
+
 #if 1
                 for(u32 substep_index = 0;
                         substep_index < substep_count;
                         ++substep_index)
                 {
+                    u32 max_environment_constraint_count = 2048;
+                    TempMemory environment_constraint_memory = 
+                        start_temp_memory(&game_state->transient_arena, 
+                                sizeof(EnvironmentConstraint)*max_environment_constraint_count);
+                    EnvironmentConstraint *environment_constraints = 
+                        push_array(&environment_constraint_memory, EnvironmentConstraint, max_environment_constraint_count);
+                    u32 environment_constraint_count = 0;
+
                     // Pre solve
                     for(u32 particle_index = 0;
                             particle_index < group->count;
@@ -322,105 +338,223 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         if(particle->inv_mass > 0.0f)
                         {
                             particle->v += sub_dt * V3d(0, 0, -9.8);
-                            // TODO(gh) This damping is wrong, as it is dependent
-                            // on the substep count
-                            // use the formula from XPBD which involves modified lagrange multiplier
-                            // particle->v *= 0.999;
 
+                            // TODO(gh) For damping, use the formula from XPBD which involves modified lagrange multiplier
                             particle->prev_p = particle->p;
 
                             particle->p += sub_dt * particle->v;
 
-                            if(particle->p.z <= 0.0f)
+                            if(particle->p.z < particle->r)
                             {
-                                // Revert to the previous position,
-                                // and set the z value to 0
-                                particle->p = particle->prev_p;
-                                particle->p.z = 0.0;
-                                particle->v.z = 0.0;
+                                EnvironmentConstraint *c = environment_constraints + environment_constraint_count++;
+                                c->particle = particle;
+                                c->n = V3d(0, 0, 1);
+                                c->d = 0;
                             }
                         }
                     }
 
-                    // Solve every constraints
-                    for(u32 constraint_index = 0;
-                            constraint_index < group->distance_constraint_count;
-                            ++constraint_index)
+                    u32 max_collision_constraint_count = 2048;
+                    TempMemory collision_constraint_memory = 
+                        start_temp_memory(&game_state->transient_arena, 
+                                        sizeof(CollisionConstraint)*max_collision_constraint_count);
+                    CollisionConstraint *collision_constraints = 
+                        push_array(&collision_constraint_memory, CollisionConstraint, max_collision_constraint_count);
+                    u32 collision_constraint_count = 0;
+
+                    // TODO(gh) Generating collision constraint every substep is very expensive,
+                    // refer to some XPBD papers to find the way that only requires one collision test
+                    // before the substep
+                    // TODO(gh) Make this check analogous about entities?
+                    for(u32 test_entity_index = 0;
+                            test_entity_index < game_state->entity_count;
+                            ++test_entity_index)
                     {
-                        DistanceConstraint *c = group->distance_constraints + constraint_index;
-                        PBDParticle *particle0 = group->particles + c->index0;
-                        PBDParticle *particle1 = group->particles + c->index1;
-
-                        if(particle0->inv_mass + particle1->inv_mass != 0.0f)
+                        Entity *test_entity = game_state->entities + test_entity_index;
+                        if(test_entity > entity)
                         {
-                            v3d delta = particle0->p - particle1->p;
-                            f64 delta_length = length(delta);
-                            if(delta_length != 0.0)
+                            PBDParticleGroup *test_group = &test_entity->particle_group;
+                            for(u32 test_particle_index = 0;
+                                    test_particle_index < test_group->count;
+                                    ++test_particle_index)
                             {
-                                f64 C = delta_length - c->rest_length;
+                                PBDParticle *test_particle = test_group->particles + test_particle_index;
 
-                                if(C != 0.0)
+                                for(u32 particle_index = 0;
+                                        particle_index < group->count;
+                                        ++particle_index)
                                 {
-                                    // Gradient of the constraint for each particles that were invovled in the constraint
-                                    // So this is actually gradient(C(xi))
-                                    v3d gradient0 = normalize(delta);
-                                    v3d gradient1 = -gradient0;
-
-                                    // TODO(gh) inv_stiffness stuff seems like it's causing a problem..
-                                    // NOTE(gh) inv_mass of the particles are involved
-                                    // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
-                                    f64 a = (f64)group->inv_distance_stiffness/square(sub_dt);
-                                    f64 lagrange_multiplier = 
-                                        -C / (particle0->inv_mass + particle1->inv_mass + a);
-
-                                    if(lagrange_multiplier != 0)
+                                    PBDParticle *particle = group->particles + particle_index;
+                                    f64 distance_between = length(particle->p - test_particle->p);
+                                    if(distance_between < particle->r + test_particle->r)
                                     {
-                                        // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
-                                        particle0->p += lagrange_multiplier*(f64)particle0->inv_mass*gradient0;
-                                        particle1->p += lagrange_multiplier*(f64)particle1->inv_mass*gradient1;
+                                        CollisionConstraint *c = collision_constraints + collision_constraint_count++;
+                                        c->particle0 = particle;
+                                        c->particle1 = test_particle;
                                     }
                                 }
                             }
                         }
                     }
 
-#if 1
-                    // TODO: Solve every volume constraints
+                    f64 collision_epsilon = 0.0;
+
+                    // Pre-stabilize environment constraints
                     for(u32 constraint_index = 0;
-                            constraint_index < group->volume_constraint_count;
+                            constraint_index < environment_constraint_count;
                             ++constraint_index)
                     {
-                        VolumeConstraint *c = group->volume_constraints + constraint_index;
-                        PBDParticle *particle0 = group->particles + c->index0;
-                        PBDParticle *particle1 = group->particles + c->index1;
-                        PBDParticle *particle2 = group->particles + c->index2;
-                        PBDParticle *particle3 = group->particles + c->index3;
+                        EnvironmentConstraint *c = environment_constraints + constraint_index;
 
-                        f64 one_over_6 = 1/6.0;
-                        v3d gradient1 = one_over_6*cross(particle0->p - particle2->p, particle3->p - particle2->p);
-                        v3d gradient2 = one_over_6*cross(particle3->p - particle1->p, particle0->p - particle1->p);
-                        v3d gradient3 = one_over_6*cross(particle1->p - particle2->p, particle0->p - particle2->p);
-                        // NOTE(gh) Due to translation invariance, the sum of all the gradient should be 0
-                        v3d gradient0 = -(gradient1+gradient2+gradient3);
-
-                        f64 volume = get_tetrahedron_volume(particle0->p, particle1->p, particle2->p, particle3->p);
-                        f64 C = (volume - c->rest_volume);
-
-                        if(C != 0.0)
+                        if(c->particle->inv_mass != 0.0f)
                         {
-                            f64 sum_of_all_gradients = particle0->inv_mass*length_square(gradient0) + 
-                                                       particle1->inv_mass*length_square(gradient1) + 
-                                                       particle2->inv_mass*length_square(gradient2) + 
-                                                       particle3->inv_mass*length_square(gradient3);
-
-                            f64 lagrange_multiplier = 
-                                -C / (sum_of_all_gradients);
-
-                            particle0->p += lagrange_multiplier*particle0->inv_mass*gradient0;
-                            particle1->p += lagrange_multiplier*particle1->inv_mass*gradient1;
-                            particle2->p += lagrange_multiplier*particle2->inv_mass*gradient2;
-                            particle3->p += lagrange_multiplier*particle3->inv_mass*gradient3;
+                            f64 d = dot(c->n, c->particle->prev_p);
+                            f64 C = d - c->d - c->particle->r;
+                            if(C < collision_epsilon)
+                            {
+                                f64 lagrange_multiplier = 
+                                    -C / (c->particle->inv_mass);
+                                
+                                // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
+                                v3d delta = lagrange_multiplier*(c->n);
+                                c->particle->p += delta;
+                                c->particle->prev_p += delta;
+                            }
                         }
+                    }
+
+                    // Pre-stabilize collision constraints
+                    for(u32 constraint_index = 0;
+                            constraint_index < collision_constraint_count;
+                            ++constraint_index)
+                    {
+                        CollisionConstraint *c = collision_constraints + constraint_index;
+
+                        if(c->particle0->inv_mass + c->particle1->inv_mass != 0.0f)
+                        {
+                            v3d delta = c->particle0->prev_p - c->particle1->prev_p;
+                            f64 delta_length = length(delta);
+
+                            f64 rest_length = (f64)(c->particle0->r + c->particle1->r);
+                            f64 C = delta_length - rest_length;
+                            if(C < collision_epsilon)
+                            {
+                                // Gradient of the constraint for each particles that were invovled in the constraint
+                                // So this is actually gradient(C(xi))
+                                v3d gradient0 = normalize(delta);
+                                v3d gradient1 = -gradient0;
+
+                                f64 lagrange_multiplier = 
+                                    -C / (c->particle0->inv_mass + c->particle1->inv_mass);
+
+                                // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
+                                // inv_mass of the particles are involved
+                                // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
+                                v3d offset0 = lagrange_multiplier*(f64)c->particle0->inv_mass*gradient0;
+                                c->particle0->p += offset0;
+                                c->particle0->prev_p += offset0;
+
+                                v3d offset1 = lagrange_multiplier*(f64)c->particle1->inv_mass*gradient1;
+                                c->particle1->p += offset1;
+                                c->particle1->prev_p += offset1;
+                            }
+                        }
+                    }
+
+
+                    /*
+                        Solve every constraints, in specific order.
+                        environment -> collision -> shape matching
+                    */
+
+#if 0
+                    // Solve collision constraints
+                    for(u32 constraint_index = 0;
+                            constraint_index < collision_constraint_count;
+                            ++constraint_index)
+                    {
+                        CollisionConstraint *c = collision_constraints + constraint_index;
+
+                        if(c->particle0->inv_mass + c->particle1->inv_mass != 0.0f)
+                        {
+                            v3d delta = c->particle0->p - c->particle1->p;
+                            f64 delta_length = length(delta);
+
+                            f64 rest_length = (f64)(c->particle0->r + c->particle1->r);
+                            f64 C = delta_length - rest_length;
+                            if(C < collision_epsilon)
+                            {
+                                // Collision constraint and distance constraint is basically the same thing,
+                                // except the fact that Collision constraint is inequality constraint 
+                                // and distance constraint is equality constraint
+                                // TODO(gh) This seems odd, don't we need to use both inv_distance_stiffness from both particles?
+                                f64 stiffness_epsilon = 0.0; // (f64)group->inv_distance_stiffness/square(sub_dt);
+                                solve_distance_constraint(c->particle0, c->particle1, delta, C, 0);
+                            }
+                        }
+                    }
+#endif
+                    // Solve environment constraints
+                    for(u32 constraint_index = 0;
+                            constraint_index < environment_constraint_count;
+                            ++constraint_index)
+                    {
+                        EnvironmentConstraint *c = environment_constraints + constraint_index;
+
+                        if(c->particle->inv_mass != 0.0f)
+                        {
+                            f64 d = dot(c->n, c->particle->p);
+                            f64 C = d - c->d - c->particle->r;
+                            if(C < collision_epsilon)
+                            {
+                                f64 lagrange_multiplier = 
+                                    -C / (c->particle->inv_mass);
+                                
+                                // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
+                                v3d delta = lagrange_multiplier*(c->n);
+                                c->particle->p += delta;
+                            }
+                        }
+                    }
+
+#if 1
+                    /*
+                       NOTE(gh) Solve shape matching constraints.
+                       This _must_ be the last step, especially for the rigid bodies.
+                       For the rigid bodies,
+                       m3x3d A = sum((xi - com) * transpose(ri)),
+                       where xi is the position, and ri is the offset from the COM when resting.
+                    */
+                    // TODO/IMPORTANT(gh) Make sure the polar decomposition math checks out!
+                    v3d com = get_com_of_particle_group(group);
+
+                    m3x3d A = M3x3d();
+                    for(u32 particle_index = 0;
+                            particle_index < group->count;
+                            ++particle_index)
+                    {
+                        PBDParticle *particle = group->particles + particle_index;
+                        v3d offset = particle->p - com;
+                        A.rows[0] += offset.x * particle->initial_offset_from_com;
+                        A.rows[1] += offset.y * particle->initial_offset_from_com;
+                        A.rows[2] += offset.z * particle->initial_offset_from_com;
+                    }
+
+                    quatd shape_match_rotation_quat = 
+                        extract_rotation_from_polar_decomposition(&A, 100);
+                    m3x3d shape_match_rotation_matrix = 
+                        orientation_quatd_to_m3x3d(shape_match_rotation_quat);
+
+                    // Apply the shape matching rotation
+                    for(u32 particle_index = 0;
+                            particle_index < group->count;
+                            ++particle_index)
+                    {
+                        PBDParticle *particle = group->particles + particle_index;
+                        v3d shape_match_delta = 
+                            (shape_match_rotation_matrix*particle->initial_offset_from_com + com) - particle->p;
+
+                        particle->p += shape_match_delta;
                     }
 #endif
 
@@ -431,11 +565,24 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     {
                         PBDParticle *particle = group->particles + particle_index;
 
-                        if(particle->inv_mass > 0.0f)
+                        if(particle->inv_mass != 0.0f)
                         {
-                            particle->v = (particle->p - particle->prev_p) / sub_dt;
+                            v3d delta = (particle->p - particle->prev_p);
+                            f64 epsilon = 0.000001;
+                            if(length(delta) > epsilon)
+                            {
+                                particle->v = (particle->p - particle->prev_p) / sub_dt;
+                            }
+                            else
+                            {
+                                // Particle sleeping
+                                particle->p = particle->prev_p;
+                            }
                         }
                     }
+
+                    end_temp_memory(&collision_constraint_memory);
+                    end_temp_memory(&environment_constraint_memory);
                 }
 #endif
             }break;
@@ -549,79 +696,98 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             {
                 PBDParticleGroup *group = &entity->particle_group;
 
-                // TODO(gh) This is rendering all the tetradrons, 
-                // but we would wanna 'skin' it by rendering only the surfaces
-                // and maybe toggle between those
-                for(u32 c_index = 0;
-                        c_index < group->volume_constraint_count;
-                        ++c_index)
+                // TODO(gh) This should go away, when we are finished with voxel-particle based simulation
+                if(group->volume_constraint_count)
                 {
-                    // TODO(gh) Use push_mesh_pn, but by updating the gpu side buffer
-                    // every frame?
-                    VolumeConstraint *c = group->volume_constraints + c_index;
-                    PBDParticle *part0 = group->particles + c->index0;
-                    PBDParticle *part1 = group->particles + c->index1;
-                    PBDParticle *part2 = group->particles + c->index2;
-                    PBDParticle *part3 = group->particles + c->index3;
-
-                    f32 scale = 1.0f;
-                    if(group->volume_constraint_count >= 4)
+                    // TODO(gh) This is rendering all the tetradrons, 
+                    // but we would wanna 'skin' it by rendering only the surfaces
+                    // and maybe toggle between those
+                    for(u32 c_index = 0;
+                            c_index < group->volume_constraint_count;
+                            ++c_index)
                     {
-                        scale = 0.4f;
+                        // TODO(gh) Use push_mesh_pn, but by updating the gpu side buffer
+                        // every frame?
+                        VolumeConstraint *c = group->volume_constraints + c_index;
+                        PBDParticle *part0 = group->particles + c->index0;
+                        PBDParticle *part1 = group->particles + c->index1;
+                        PBDParticle *part2 = group->particles + c->index2;
+                        PBDParticle *part3 = group->particles + c->index3;
+
+                        f32 scale = 1.0f;
+                        if(group->volume_constraint_count >= 4)
+                        {
+                            scale = 0.4f;
+                        }
+                        v3d center = 0.25 * (part0->p + part1->p + part2->p + part3->p);
+                        v3 p0 = V3(scale*(part0->p - center) + center);
+                        v3 p1 = V3(scale*(part1->p - center) + center);
+                        v3 p2 = V3(scale*(part2->p - center) + center);
+                        v3 p3 = V3(scale*(part3->p - center) + center);
+
+                        v3 n013 = normalize(cross(p0 - p1, p3 - p1));
+                        v3 n123 = normalize(cross(p2 - p1, p3 - p1));
+                        v3 n320 = normalize(cross(p3 - p2, p0 - p2));
+                        v3 n102 = normalize(cross(p2 - p1, p0 - p1));
+
+                        VertexPN vertices[] = 
+                        {
+                            // 0, 3, 1, 
+                            {p0, n013},
+                            {p3, n013},
+                            {p1, n013},
+                            // 1, 3, 2, 
+                            {p1, n123},
+                            {p3, n123},
+                            {p2, n123},
+                            // 3, 0, 2,
+                            {p3, n320},
+                            {p0, n320},
+                            {p2, n320},
+                            // 1, 2, 0,
+                            {p1, n102},
+                            {p2, n102},
+                            {p0, n102},
+                        };
+                        u32 vertex_count = array_count(vertices);
+
+                        u32 indices[] = 
+                        {
+                            0, 1, 2, 
+                            3, 4, 5, 
+                            6, 7, 8, 
+                            9, 10, 11
+                        };
+                        u32 index_count = array_count(indices);
+
+                        push_arbitrary_mesh(platform_render_push_buffer, 
+                                            entity->color, 
+                                            vertices, vertex_count, 
+                                            indices, index_count);
+
+                        push_line(platform_render_push_buffer, p0, p1, entity->color);
+                        push_line(platform_render_push_buffer, p1, p2, entity->color);
+                        push_line(platform_render_push_buffer, p2, p0, entity->color);
+
+                        push_line(platform_render_push_buffer, p3, p0, entity->color);
+                        push_line(platform_render_push_buffer, p3, p1, entity->color);
+                        push_line(platform_render_push_buffer, p3, p2, entity->color);
                     }
-                    v3d center = 0.25 * (part0->p + part1->p + part2->p + part3->p);
-                    v3 p0 = V3(scale*(part0->p - center) + center);
-                    v3 p1 = V3(scale*(part1->p - center) + center);
-                    v3 p2 = V3(scale*(part2->p - center) + center);
-                    v3 p3 = V3(scale*(part3->p - center) + center);
-
-                    v3 n013 = normalize(cross(p0 - p1, p3 - p1));
-                    v3 n123 = normalize(cross(p2 - p1, p3 - p1));
-                    v3 n320 = normalize(cross(p3 - p2, p0 - p2));
-                    v3 n102 = normalize(cross(p2 - p1, p0 - p1));
-
-                    VertexPN vertices[] = 
+                }
+                else
+                {
+                    for(u32 particle_index = 0;
+                            particle_index < group->count;
+                            ++particle_index)
                     {
-                        // 0, 3, 1, 
-                        {p0, n013},
-                        {p3, n013},
-                        {p1, n013},
-                        // 1, 3, 2, 
-                        {p1, n123},
-                        {p3, n123},
-                        {p2, n123},
-                        // 3, 0, 2,
-                        {p3, n320},
-                        {p0, n320},
-                        {p2, n320},
-                        // 1, 2, 0,
-                        {p1, n102},
-                        {p2, n102},
-                        {p0, n102},
-                    };
-                    u32 vertex_count = array_count(vertices);
+                        PBDParticle *particle = group->particles + particle_index;
 
-                    u32 indices[] = 
-                    {
-                        0, 1, 2, 
-                        3, 4, 5, 
-                        6, 7, 8, 
-                        9, 10, 11
-                    };
-                    u32 index_count = array_count(indices);
-
-                    push_arbitrary_mesh(platform_render_push_buffer, 
-                                        entity->color, 
-                                        vertices, vertex_count, 
-                                        indices, index_count);
-
-                    push_line(platform_render_push_buffer, p0, p1, entity->color);
-                    push_line(platform_render_push_buffer, p1, p2, entity->color);
-                    push_line(platform_render_push_buffer, p2, p0, entity->color);
-
-                    push_line(platform_render_push_buffer, p3, p0, entity->color);
-                    push_line(platform_render_push_buffer, p3, p1, entity->color);
-                    push_line(platform_render_push_buffer, p3, p2, entity->color);
+                        push_mesh_pn(platform_render_push_buffer, 
+                                     V3(particle->p), V3(1, 1, 1), V3(1, 0.2f, 0.2f), 
+                                     0,
+                                     AssetTag_SphereMesh,
+                                     &game_state->assets);
+                    }
                 }
             }break;
         }

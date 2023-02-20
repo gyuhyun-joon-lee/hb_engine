@@ -291,32 +291,32 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
     PBDParticleGroup *group = &result->particle_group;
 
     start_particle_allocation_from_pool(&game_state->particle_pool, group);
+    {
+        allocate_particle_from_pool(&game_state->particle_pool,
+                                    top_p0,
+                                    particle_radius,
+                                    inv_particle_mass);
 
-    allocate_particle_from_pool(&game_state->particle_pool,
-                                top_p0,
-                                particle_radius,
-                                inv_particle_mass);
+        allocate_particle_from_pool(&game_state->particle_pool, 
+                                    bottom_p0,
+                                    particle_radius,
+                                    inv_particle_mass);
 
-    allocate_particle_from_pool(&game_state->particle_pool, 
-                                bottom_p0,
-                                particle_radius,
-                                inv_particle_mass);
+        allocate_particle_from_pool(&game_state->particle_pool, 
+                                    bottom_p1,
+                                    particle_radius,
+                                    inv_particle_mass);
 
-    allocate_particle_from_pool(&game_state->particle_pool, 
-                                bottom_p1,
-                                particle_radius,
-                                inv_particle_mass);
+        allocate_particle_from_pool(&game_state->particle_pool, 
+                                    bottom_p2,
+                                    particle_radius,
+                                    inv_particle_mass);
 
-    allocate_particle_from_pool(&game_state->particle_pool, 
-                                bottom_p2,
-                                particle_radius,
-                                inv_particle_mass);
-
-    allocate_particle_from_pool(&game_state->particle_pool, 
-                                top_p1,
-                                particle_radius,
-                                inv_particle_mass);
-
+        allocate_particle_from_pool(&game_state->particle_pool, 
+                                    top_p1,
+                                    particle_radius,
+                                    inv_particle_mass);
+    }
     end_particle_allocation_from_pool(&game_state->particle_pool, group);
 
     group->distance_constraints = push_array(arena, DistanceConstraint, 9);
@@ -342,6 +342,77 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
     add_volume_constraint(group, 1, 2, 3, 4);
 
     return result;
+}
+
+// TODO(gh) Later, we would want this is voxelize any mesh
+// we throw in
+internal void
+add_pbd_cube_entity(GameState *game_state, 
+                    MemoryArena *arena,
+                    v3d left_bottom_corner, v3u particle_count, 
+                    f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
+{
+    Entity *result = add_entity(game_state, EntityType_PBD, flags);
+    result->color = color;
+
+    u32 vertex_count = 8;
+    f32 inv_particle_mass = vertex_count * inv_mass;
+
+    PBDParticleGroup *group = &result->particle_group;
+    start_particle_allocation_from_pool(&game_state->particle_pool, group);
+    {
+        for(i32 z = 0;
+                z < particle_count.z;
+                ++z)
+        {
+            for(i32 y = 0;
+                    y < particle_count.y;
+                    ++y)
+            {
+                for(i32 x = 0;
+                        x < particle_count.x;
+                        ++x)
+                {
+                    // TODO(gh) This assumes that the radius is 1
+                    v3d p = left_bottom_corner + 2.0f*V3d(x, y, z);
+                    allocate_particle_from_pool(&game_state->particle_pool,
+                                                p,
+                                                particle_radius,
+                                                inv_particle_mass);
+                }
+            }
+        }
+    }
+    end_particle_allocation_from_pool(&game_state->particle_pool, group);
+
+    // Get COM to initialize initial_offset_from_com
+    v3d com = get_com_of_particle_group(group);
+    for(u32 particle_index = 0;
+            particle_index < group->count;
+            ++particle_index)
+    {
+        PBDParticle *particle = group->particles + particle_index;
+        particle->initial_offset_from_com = particle->p - com;
+    }
+
+    group->inv_distance_stiffness = inv_edge_stiffness;
+
+    u32 max_constraint_count = 7+6+5+4+3+2+1;
+    group->distance_constraints = push_array(arena, DistanceConstraint, max_constraint_count);
+    group->distance_constraint_count = 0;
+    for(u32 i = 0;
+            i < vertex_count;
+            ++i)
+    {
+        for(u32 j = i+1;
+                j < vertex_count;
+                ++j)
+        {
+            add_distance_constraint(group, i, j);
+        }
+    }
+
+    assert(max_constraint_count == group->distance_constraint_count);
 }
 
 struct Tetrahedron

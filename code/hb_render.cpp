@@ -584,9 +584,3 @@ end_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer)
 
 
 
-
-
-
-
-
-

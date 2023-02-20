@@ -108,7 +108,7 @@ get_mesh_asset(GameAssets *asset, u32 *mesh_assetID, AssetTag tag)
 {
     MeshAsset *result = 0;
 
-    if(*mesh_assetID != 0)
+    if(mesh_assetID && *mesh_assetID != 0)
     {
         // There is already a populated assetID.
         // This is possible if the entity was a softbody which needs seperate

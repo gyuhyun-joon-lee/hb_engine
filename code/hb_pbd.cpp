@@ -33,30 +33,84 @@ allocate_particle_from_pool(PBDParticlePool *pool,
     particle->constraint_hit_count = 0;
 }
 
-// NOTE(gh) Projecting based on position 0,
-// which means the result(d_position) will be added to the 0th particle position
-// and subtracted to the 1th particle position
-internal v3
-project_collision_constraint(v3 delta, f32 distance_between, f32 constraint_value)
+// TODO(gh) Is there any way to get the COM without any division,
+// maybe cleverly using the inverse mass?
+/*
+   NOTE(gh)
+   COM = m0*x0 + m1*x1 ... mn*xn / (m0 + m1 + ... mn)
+*/
+internal v3d
+get_com_of_particle_group(PBDParticleGroup *group)
+
 {
-    // NOTE(gh) -1*delta makes sense here, because collision constraint should only be projected
-    // when it's a negative value, which means that 0th particle will move in (0th - 1th) direction
-    v3 result = (constraint_value/(-2.0f*distance_between)) * delta;
+    v3d result = V3d();
+    f64 total_mass = 0.0;
+    for(u32 particle_index = 0;
+            particle_index < group->count;
+            ++particle_index)
+    {
+        PBDParticle *particle = group->particles + particle_index;
+        f64 mass = 1/particle->inv_mass;
+        total_mass += mass;
+        assert(particle->inv_mass != 0.0);
+
+        result += mass * particle->p;
+    }
+    result /= total_mass;
 
     return result;
 }
 
-#if 0
-internal f32
-get_collision_constraint_value(CollisionConstraint *constraint)
+// stiffness_epsilon = inv_stiffness/square(sub_dt);
+internal void
+solve_distance_constraint(PBDParticle *particle0, PBDParticle *particle1,
+                          v3d delta, f64 C, f64 stiffness_epsilon)
 {
+    // Gradient of the constraint for each particles that were invovled in the constraint
+    // So this is actually gradient(C(xi))
+    v3d gradient0 = normalize(delta);
+    v3d gradient1 = -gradient0;
+
+    f64 lagrange_multiplier = 
+        -C / (particle0->inv_mass + particle1->inv_mass + stiffness_epsilon);
+
+    if(lagrange_multiplier != 0)
+    {
+        // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
+        // inv_mass of the particles are involved
+        // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
+        v3d offset0 = lagrange_multiplier*(f64)particle0->inv_mass*gradient0;
+        v3d offset1 = lagrange_multiplier*(f64)particle1->inv_mass*gradient1;
+        particle0->p += offset0;
+        particle1->p += offset1;
+    }
 }
 
-internal f32
-get_environment_constraint_value()
-{
-    if(dot(floor_normal, particle->proposed_p) - floor_d - particle->r < 0)
-}
+                    // TODO(gh) Using the shape matching constraint instead of distance constraint,
+                    // can we just remove distance constraint at all?
+#if 0
+                    for(u32 constraint_index = 0;
+                            constraint_index < group->distance_constraint_count;
+                            ++constraint_index)
+                    {
+                        DistanceConstraint *c = group->distance_constraints + constraint_index;
+                        PBDParticle *particle0 = group->particles + c->index0;
+                        PBDParticle *particle1 = group->particles + c->index1;
+
+                        if(particle0->inv_mass + particle1->inv_mass != 0.0f)
+                        {
+                            v3d delta = particle0->p - particle1->p;
+                            f64 delta_length = length(delta);
+
+                            f64 C = delta_length - c->rest_length;
+
+                            if(C < 0.0)
+                            {
+                                f64 stiffness_epsilon = (f64)group->inv_distance_stiffness/sub_dt_square;
+                                solve_distance_constraint(particle0, particle1, delta, C, stiffness_epsilon);
+                            }
+                        }
+                    }
 #endif
 
 
