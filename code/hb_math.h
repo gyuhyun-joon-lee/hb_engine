@@ -1949,7 +1949,7 @@ get_tetrahedron_volume(v3d top,
     This means that as an angle-axis representation, length(W) should be theta.
 
     So if we say that
-    w = (aixri) / (ai*ri), 
+    w = (ri x ai) / (ai * ri), 
     due to the definition of cross and dot product, length of w becomes
     length(w) = sin(theta)/cos(theta) = tan(theta) = theta, when theta is small enough.
 
@@ -1958,6 +1958,9 @@ get_tetrahedron_volume(v3d top,
     So given A, we can use the shape matching algorithm so that the particles
     that were forming the object can return to their 'correct' positions where
     the result matches the original shape.
+
+    Combining all three axes, we get the result of
+    w = Sum(ri x ai) / (Sum(ai*ri) + epsilon)
 */
 internal quatd
 extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)

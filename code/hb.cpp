@@ -310,12 +310,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     PBDParticle *particle = group->particles + particle_index;
                     if(particle->inv_mass > 0.0f)
                     {
-                        particle->v += sub_dt * V3d(0, 0, -9.8);
-
                         // TODO(gh) For damping, use the formula from XPBD which involves modified lagrange multiplier
                         particle->prev_p = particle->p;
 
-                        particle->p += sub_dt * particle->v;
+                        // NOTE(gh) We no longer modify the velocity with external forces,
+                        // but directly modify the position with second order
+                        particle->p += sub_dt * particle->v + sub_dt_square*V3d(0, 0, -9.8);
 
                         if(particle->p.z < particle->r)
                         {
@@ -537,7 +537,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
         }
 #endif
-
 
         // Post solve
         for(u32 entity_index = 0;
