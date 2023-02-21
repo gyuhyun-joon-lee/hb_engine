@@ -730,7 +730,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
     // TODO(gh) These are totally made up near, far, width values 
     // m4x4 light_proj = perspective_projection(degree_to_radian(120), 0.01f, 100.0f, (f32)render_context->directional_light_shadowmap_depth_texture_width / (f32)render_context->directional_light_shadowmap_depth_texture_height);
-    m4x4 light_proj = orthogonal_projection(0.01f, 10000.0f, 50.0f, render_context->directional_light_shadowmap_depth_texture.width / (f32)render_context->directional_light_shadowmap_depth_texture.height);
+    m4x4 light_proj = orthogonal_projection(0.01f, 10000.0f, 200.0f, render_context->directional_light_shadowmap_depth_texture.width / (f32)render_context->directional_light_shadowmap_depth_texture.height);
     v3 directional_light_z_axis = -directional_light_direction;
     v3 directional_light_x_axis = normalize(cross(V3(0, 0, 1), directional_light_z_axis));
     v3 directional_light_y_axis = normalize(cross(directional_light_z_axis, directional_light_x_axis));
