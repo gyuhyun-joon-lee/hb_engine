@@ -47,6 +47,7 @@ struct Entity
     u32 mesh_assetID;
 
     GenericEntityInfo generic_entity_info;
+    v3 render_dim;
 
     v3 color;
 

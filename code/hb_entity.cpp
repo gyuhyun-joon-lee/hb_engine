@@ -5,7 +5,7 @@
 #include "hb_entity.h"
 
 // TODO(gh) Fixed particle radius, make this dynamic(might sacrifice stability)
-#define particle_radius 1.0f
+#define particle_radius 0.25f
 
 internal b32
 is_entity_flag_set(u32 flags, EntityFlag flag)
@@ -294,7 +294,7 @@ add_pbd_soft_body_bipyramid_entity(GameState *game_state,
 internal Entity *
 add_pbd_cube_entity(GameState *game_state, 
                     MemoryArena *arena,
-                    v3d left_bottom_corner, v3u particle_count, 
+                    v3d center, v3d dim, 
                     v3d v,
                     f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
 {
@@ -304,23 +304,27 @@ add_pbd_cube_entity(GameState *game_state,
     u32 vertex_count = 8;
     f32 inv_particle_mass = vertex_count * inv_mass;
 
+    v3d left_bottom_corner = center - 0.5*dim + particle_radius*V3d(1, 1, 1);
+    u32 particle_count_x = round_f64_to_u32(dim.x / particle_radius);
+    u32 particle_count_y = round_f64_to_u32(dim.y / particle_radius);
+    u32 particle_count_z = round_f64_to_u32(dim.z / particle_radius);
+
     PBDParticleGroup *group = &result->particle_group;
     start_particle_allocation_from_pool(&game_state->particle_pool, group);
     {
         for(i32 z = 0;
-                z < particle_count.z;
+                z < particle_count_z;
                 ++z)
         {
             for(i32 y = 0;
-                    y < particle_count.y;
+                    y < particle_count_y;
                     ++y)
             {
                 for(i32 x = 0;
-                        x < particle_count.x;
+                        x < particle_count_x;
                         ++x)
                 {
-                    // TODO(gh) This assumes that the radius is 1
-                    v3d p = left_bottom_corner + 2.0f*V3d(x, y, z);
+                    v3d p = left_bottom_corner + 2.0*particle_radius*V3d(x, y, z);
                     allocate_particle_from_pool(&game_state->particle_pool,
                                                 p, v,
                                                 particle_radius,
@@ -345,6 +349,93 @@ add_pbd_cube_entity(GameState *game_state,
 
     return result;
 }
+
+internal Entity *
+add_pbd_vox_entity(GameState *game_state, 
+                    MemoryArena *arena,
+                    LoadedVOXResult *loaded_vox,
+                    v3d left_bottom_corner, 
+                    v3d v,
+                    f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
+{
+    Entity *result = add_entity(game_state, EntityType_PBD, flags);
+    result->color = color;
+
+    f32 inv_particle_mass = loaded_vox->voxel_count * inv_mass;
+
+    PBDParticleGroup *group = &result->particle_group;
+    start_particle_allocation_from_pool(&game_state->particle_pool, group);
+    {
+        for(u32 voxel_index = 0;
+                voxel_index < loaded_vox->voxel_count;
+                ++voxel_index)
+        {
+            v3d p = left_bottom_corner + 2.0f*particle_radius*
+                        V3d(loaded_vox->xs[voxel_index], 
+                            loaded_vox->ys[voxel_index], 
+                            loaded_vox->zs[voxel_index]);
+            allocate_particle_from_pool(&game_state->particle_pool,
+                                        p, v,
+                                        particle_radius,
+                                        inv_particle_mass);
+        }
+    }
+    end_particle_allocation_from_pool(&game_state->particle_pool, group);
+
+    // Get COM to initialize initial_offset_from_com
+    v3d com = get_com_of_particle_group(group);
+    for(u32 particle_index = 0;
+            particle_index < group->count;
+            ++particle_index)
+    {
+        PBDParticle *particle = group->particles + particle_index;
+        particle->initial_offset_from_com = particle->p - com;
+    }
+
+    group->inv_distance_stiffness = inv_edge_stiffness;
+
+    return result;
+}
+
+internal Entity *
+add_pbd_single_particle_entity(GameState *game_state, 
+                                MemoryArena *arena,
+                                v3d p, 
+                                v3d v,
+                                f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
+{
+    Entity *result = add_entity(game_state, EntityType_PBD, flags);
+    result->color = color;
+
+    f32 inv_particle_mass = inv_mass;
+
+    PBDParticleGroup *group = &result->particle_group;
+    start_particle_allocation_from_pool(&game_state->particle_pool, group);
+    {
+        allocate_particle_from_pool(&game_state->particle_pool,
+                                    p, v,
+                                    particle_radius,
+                                    inv_particle_mass);
+    }
+    end_particle_allocation_from_pool(&game_state->particle_pool, group);
+
+    // Get COM to initialize initial_offset_from_com
+    v3d com = get_com_of_particle_group(group);
+    for(u32 particle_index = 0;
+            particle_index < group->count;
+            ++particle_index)
+    {
+        PBDParticle *particle = group->particles + particle_index;
+        particle->initial_offset_from_com = particle->p - com;
+    }
+
+    group->inv_distance_stiffness = inv_edge_stiffness;
+
+    return result;
+}
+
+
+
 
 
 

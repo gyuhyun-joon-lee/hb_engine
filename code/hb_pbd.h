@@ -142,6 +142,9 @@ struct PBDParticleGroup
     PBDParticle *particles;
     u32 count;
 
+    // Used as an initial value of shape match rotation matrix extraction quaternion
+    quatd shape_match_quat;
+
     DistanceConstraint *distance_constraints;
     u32 distance_constraint_count;
     f32 inv_distance_stiffness;

@@ -3,6 +3,11 @@
 internal void
 start_particle_allocation_from_pool(PBDParticlePool *pool, PBDParticleGroup *group)
 {
+    // TODO(gh) The original algorithm uses Quat(A) / |Quat(A)|,
+    // which is very confusing because A is a 3x3 matrix, 
+    // and even if A implies an object and not a matrix, 
+    // we aren't storing the orientation.
+    group->shape_match_quat = Quatd(1, 0, 0, 0);
     group->particles = pool->particles + pool->count;
     // Temporary store the pool count
     group->count = pool->count;
@@ -111,7 +116,7 @@ solve_collision_constraint(CollisionSolution *solution,
 
             solution->contact_normal = gradient0;
             // TODO(gh) C or -C
-            solution->penetration_depth = -C;
+            solution->penetration_depth = abs(C);
         }
     }
 }

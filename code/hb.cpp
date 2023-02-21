@@ -15,6 +15,7 @@
 #include "hb_asset.h"
 #include "hb_platform.h"
 #include "hb_debug.h"
+#include "hb_vox.h"
 #include "hb.h"
 
 #include "hb_ray.cpp"
@@ -27,6 +28,7 @@
 #include "hb_image_loader.cpp"
 #include "hb_fluid.cpp"
 #include "hb_obj.cpp"
+#include "hb_vox.cpp"
 
 // TODO(gh) Remove this dependency
 #include <time.h>
@@ -101,14 +103,108 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
         }
 #endif
+        game_state->random_series = start_random_series(12312);
 
         add_floor_entity(game_state, &game_state->transient_arena, V3(), V2(1000, 1000), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
-
+#if 0
         add_pbd_cube_entity(game_state, &game_state->pbd_arena, 
-                            V3d(0, 0, 2), V3u(2, 2, 2),
+                            V3d(0, 0, 2), V3d(1, 1, 1), 
                             V3d(0, 0, 0),
                             0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
+#endif
+#if 0
+        {
+            PlatformReadFileResult vox_file = platform_api->read_file("../data/chr_knight.vox");
+            game_state->loaded_voxs[game_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
+        }
+        {
+            PlatformReadFileResult vox_file = platform_api->read_file("../data/chr_sword.vox");
+            game_state->loaded_voxs[game_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
+        }
+#endif
+        {
+            PlatformReadFileResult vox_file = platform_api->read_file("../data/3x3x3.vox");
+            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
+
+            v3 color = V3(random_between_0_1(&game_state->random_series), 
+                           random_between_0_1(&game_state->random_series),
+                           random_between_0_1(&game_state->random_series));
+            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                            V3d(1, 1, 3), V3d(0, 0, 0),
+                            0.f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides);
+
+            game_state->loaded_vox_count++;
+        }
+#if 1
+        {
+            PlatformReadFileResult vox_file = platform_api->read_file("../data/4x4x4.vox");
+            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
+
+            v3 color = V3(random_between_0_1(&game_state->random_series), 
+                           random_between_0_1(&game_state->random_series),
+                           random_between_0_1(&game_state->random_series));
+            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                            V3d(-9, -9, 5), V3d(0, 0, 0),
+                            0.f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides);
+
+            game_state->loaded_vox_count++;
+        }
+#endif
+#if 1
+        {
+            PlatformReadFileResult vox_file = platform_api->read_file("../data/5x5x5.vox");
+            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
+
+            v3 color = V3(random_between_0_1(&game_state->random_series), 
+                           random_between_0_1(&game_state->random_series),
+                           random_between_0_1(&game_state->random_series));
+            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                            V3d(3, 3, 12), V3d(0, 0, 0),
+                            0.f, 1.0f/(random_between(&game_state->random_series, 50, 200)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides);
+
+            game_state->loaded_vox_count++;
+        }
+#endif
+#if 1
+        {
+            PlatformReadFileResult vox_file = platform_api->read_file("../data/6x6x6.vox");
+            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
+
+            v3 color = V3(random_between_0_1(&game_state->random_series), 
+                           random_between_0_1(&game_state->random_series),
+                           random_between_0_1(&game_state->random_series));
+            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                            V3d(7, 7, 5), V3d(0, 0, 0),
+                            0.f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides);
+
+            game_state->loaded_vox_count++;
+        }
+#endif
+        {
+            PlatformReadFileResult vox_file = platform_api->read_file("../data/8x8x8.vox");
+            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
+
+            v3 color = V3(random_between_0_1(&game_state->random_series), 
+                           random_between_0_1(&game_state->random_series),
+                           random_between_0_1(&game_state->random_series));
+            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                            V3d(-15, -15, 5), V3d(0, 0, 0),
+                            0.f, 1.0f/(random_between(&game_state->random_series, 50, 100)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides);
+            
+            game_state->loaded_vox_count++;
+        }
+
 
 #if 0
         // TODO(gh) This means we have one vector per every 10m, which is not ideal.
@@ -122,7 +218,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                     fluid_cell_left_bottom_p, V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 
                                     fluid_cell_dim);
 #endif
-        game_state->random_series = start_random_series(12312);
         load_game_assets(&game_state->assets, &game_state->transient_arena, platform_api, gpu_work_queue);
 
         game_state->is_initialized = true;
@@ -175,7 +270,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                   0.5f*Quat(0, camera_rotation)*render_camera->orientation);
 
 #if 1
-    f32 camera_speed = 30.0f * platform_input->dt_per_frame;
+    f32 camera_speed = 15.0f * platform_input->dt_per_frame;
     if(platform_input->move_up.is_down)
     {
         render_camera->p += camera_speed*camera_dir;
@@ -199,13 +294,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     if(platform_input->space.is_down && can_shoot)
     {
-        u32 x_count = random_between_u32(&game_state->random_series, 2, 5);
-        u32 y_count = random_between_u32(&game_state->random_series, 2, 5);
-        u32 z_count = random_between_u32(&game_state->random_series, 2, 5);
-        add_pbd_cube_entity(game_state, &game_state->pbd_arena, 
-                            V3d(render_camera->p), V3u(x_count, y_count, z_count),
-                            V3d(50.0f*camera_dir),
-                            0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
+        add_pbd_single_particle_entity(game_state, &game_state->pbd_arena, 
+                                        V3d(render_camera->p), V3d(50*camera_dir), 
+                                        0.0f, 1.0f/10.0f, V3(0, 1, 0), EntityFlag_Movable|EntityFlag_Collides);
 
         can_shoot = false;
     }
@@ -360,37 +451,42 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
         }
 
-        // Pre-stabilize environment constraints
-        for(u32 constraint_index = 0;
-                constraint_index < environment_constraint_count;
-                ++constraint_index)
+        u32 pre_stabilization_iter_count = 2;
+        for(u32 iter = 0;
+                iter < pre_stabilization_iter_count;
+                ++iter)
         {
-            EnvironmentConstraint *c = environment_constraints + constraint_index;
-            EnvironmentSolution solution = {};
-            solve_environment_constraint(&solution, c, &c->particle->prev_p);
+            // Pre-stabilize environment constraints
+            for(u32 constraint_index = 0;
+                    constraint_index < environment_constraint_count;
+                    ++constraint_index)
+            {
+                EnvironmentConstraint *c = environment_constraints + constraint_index;
+                EnvironmentSolution solution = {};
+                solve_environment_constraint(&solution, c, &c->particle->prev_p);
 
-            c->particle->p += solution.offset;
-            c->particle->prev_p += solution.offset;
+                c->particle->p += solution.offset;
+                c->particle->prev_p += solution.offset;
+            }
+
+            // Pre-stabilize collision constraints
+            for(u32 constraint_index = 0;
+                    constraint_index < collision_constraint_count;
+                    ++constraint_index)
+            {
+                CollisionConstraint *c = collision_constraints + constraint_index;
+
+                CollisionSolution solution = {};
+                solve_collision_constraint(&solution, c,
+                                           &c->particle0->prev_p, &c->particle1->prev_p);
+
+                c->particle0->p += solution.offset0;
+                c->particle0->prev_p += solution.offset0;
+
+                c->particle1->p += solution.offset1;
+                c->particle1->prev_p += solution.offset1;
+            }
         }
-
-        // Pre-stabilize collision constraints
-        for(u32 constraint_index = 0;
-                constraint_index < collision_constraint_count;
-                ++constraint_index)
-        {
-            CollisionConstraint *c = collision_constraints + constraint_index;
-
-            CollisionSolution solution = {};
-            solve_collision_constraint(&solution, c,
-                                       &c->particle0->prev_p, &c->particle1->prev_p);
-
-            c->particle0->p += solution.offset0;
-            c->particle0->prev_p += solution.offset0;
-
-            c->particle1->p += solution.offset1;
-            c->particle1->prev_p += solution.offset1;
-        }
-
 
         /*
            TODO(gh) Find out in what precise order we should solve the constraints,
@@ -425,7 +521,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             c->particle0->p += solution.offset0;
             c->particle1->p += solution.offset1;
 
-            // TODO(gh) Friction seems busted...
+            // TODO(gh) Friction seems busted...,
+            // come back when we have SDF
 #if 0
             if(solution.collided)
             {
@@ -521,10 +618,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 A.rows[2] += offset.z * particle->initial_offset_from_com;
             }
 
-            quatd shape_match_rotation_quat = 
-                extract_rotation_from_polar_decomposition(&A, 128);
+            group->shape_match_quat = 
+                extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);
             m3x3d shape_match_rotation_matrix = 
-                orientation_quatd_to_m3x3d(shape_match_rotation_quat);
+                orientation_quatd_to_m3x3d(group->shape_match_quat);
 
             // Apply the shape matching rotation
             for(u32 particle_index = 0;
@@ -535,7 +632,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 v3d shape_match_delta = 
                     (shape_match_rotation_matrix*particle->initial_offset_from_com + com) - particle->p;
 
-                if(length(shape_match_delta) > 1.0f)
+                if(length(shape_match_delta) > 10.0f)
                 {
                     int a = 1;
                 }
@@ -665,6 +762,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     0, 0, 0, V3(), false);
     }
 
+    b32 draw_particles = true;
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;
         ++entity_index)
@@ -688,85 +786,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             {
                 PBDParticleGroup *group = &entity->particle_group;
 
-                // TODO(gh) This should go away, when we are finished with voxel-particle based simulation
-                if(group->volume_constraint_count)
-                {
-                    // TODO(gh) This is rendering all the tetradrons, 
-                    // but we would wanna 'skin' it by rendering only the surfaces
-                    // and maybe toggle between those
-                    for(u32 c_index = 0;
-                            c_index < group->volume_constraint_count;
-                            ++c_index)
-                    {
-                        // TODO(gh) Use push_mesh_pn, but by updating the gpu side buffer
-                        // every frame?
-                        VolumeConstraint *c = group->volume_constraints + c_index;
-                        PBDParticle *part0 = group->particles + c->index0;
-                        PBDParticle *part1 = group->particles + c->index1;
-                        PBDParticle *part2 = group->particles + c->index2;
-                        PBDParticle *part3 = group->particles + c->index3;
-
-                        f32 scale = 1.0f;
-                        if(group->volume_constraint_count >= 4)
-                        {
-                            scale = 0.4f;
-                        }
-                        v3d center = 0.25 * (part0->p + part1->p + part2->p + part3->p);
-                        v3 p0 = V3(scale*(part0->p - center) + center);
-                        v3 p1 = V3(scale*(part1->p - center) + center);
-                        v3 p2 = V3(scale*(part2->p - center) + center);
-                        v3 p3 = V3(scale*(part3->p - center) + center);
-
-                        v3 n013 = normalize(cross(p0 - p1, p3 - p1));
-                        v3 n123 = normalize(cross(p2 - p1, p3 - p1));
-                        v3 n320 = normalize(cross(p3 - p2, p0 - p2));
-                        v3 n102 = normalize(cross(p2 - p1, p0 - p1));
-
-                        VertexPN vertices[] = 
-                        {
-                            // 0, 3, 1, 
-                            {p0, n013},
-                            {p3, n013},
-                            {p1, n013},
-                            // 1, 3, 2, 
-                            {p1, n123},
-                            {p3, n123},
-                            {p2, n123},
-                            // 3, 0, 2,
-                            {p3, n320},
-                            {p0, n320},
-                            {p2, n320},
-                            // 1, 2, 0,
-                            {p1, n102},
-                            {p2, n102},
-                            {p0, n102},
-                        };
-                        u32 vertex_count = array_count(vertices);
-
-                        u32 indices[] = 
-                        {
-                            0, 1, 2, 
-                            3, 4, 5, 
-                            6, 7, 8, 
-                            9, 10, 11
-                        };
-                        u32 index_count = array_count(indices);
-
-                        push_arbitrary_mesh(platform_render_push_buffer, 
-                                            entity->color, 
-                                            vertices, vertex_count, 
-                                            indices, index_count);
-
-                        push_line(platform_render_push_buffer, p0, p1, entity->color);
-                        push_line(platform_render_push_buffer, p1, p2, entity->color);
-                        push_line(platform_render_push_buffer, p2, p0, entity->color);
-
-                        push_line(platform_render_push_buffer, p3, p0, entity->color);
-                        push_line(platform_render_push_buffer, p3, p1, entity->color);
-                        push_line(platform_render_push_buffer, p3, p2, entity->color);
-                    }
-                }
-                else
+                if(draw_particles)
                 {
                     for(u32 particle_index = 0;
                             particle_index < group->count;
@@ -775,11 +795,17 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         PBDParticle *particle = group->particles + particle_index;
 
                         push_mesh_pn(platform_render_push_buffer, 
-                                     V3(particle->p), V3(1, 1, 1), V3(1, 0.2f, 0.2f), 
-                                     0,
-                                     AssetTag_SphereMesh,
-                                     &game_state->assets);
+                                V3(particle->p), particle->r*V3(1, 1, 1), entity->color, 
+                                0,
+                                AssetTag_SphereMesh,
+                                &game_state->assets);
                     }
+                }
+                else
+                {
+                    // TODO(gh) Instead of arbitrary mesh, push mesh pn 
+                    // using the rotation matrix(or quaternion) which can be extracted from
+                    // the polar decomposition
                 }
             }break;
         }

@@ -123,6 +123,12 @@ round_f32_to_u32(f32 value)
 }
 
 inline u32
+round_f64_to_u32(f64 value)
+{
+    return (u32)round(value);
+}
+
+inline u32
 ceil_f32_to_u32(f32 value)
 {
     return (u32)ceilf(value);

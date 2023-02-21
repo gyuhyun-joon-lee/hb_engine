@@ -63,7 +63,7 @@ render_to_g_buffer_frag(GBufferVertexOutput vertex_output [[stage_in]],
 
     // NOTE(gh) 0 means complete black, 1 means no shadow
     float shadow_factor = 0.0f;
-    constexpr sampler shadowmap_sampler = sampler(coord::normalized, address::clamp_to_edge, filter::linear);
+    constexpr sampler shadowmap_sampler = sampler(coord::normalized, address::clamp_to_zero, filter::linear);
 
     // multisampling shadow
     float one_over_shadowmap_texture_width = 1.0f / shadowmap.get_width();

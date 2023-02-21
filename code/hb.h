@@ -9,6 +9,10 @@ struct GameState
 {
     b32 is_initialized;
 
+    // TODO(gh) Temp thing
+    LoadedVOXResult loaded_voxs[256];
+    u32 loaded_vox_count;
+
     Entity *entities;
     u32 entity_count;
     u32 max_entity_count;

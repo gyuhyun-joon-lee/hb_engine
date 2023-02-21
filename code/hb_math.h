@@ -1963,13 +1963,9 @@ get_tetrahedron_volume(v3d top,
     w = Sum(ri x ai) / (Sum(ai*ri) + epsilon)
 */
 internal quatd
-extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
+extract_rotation_from_polar_decomposition(m3x3d *A, quatd *initial_q, u32 max_iter = 100)
 {
-    // TODO(gh) The original algorithm uses Quat(A) / |Quat(A)|,
-    // which is very confusing because A is a 3x3 matrix, 
-    // and even if A implies an object and not a matrix, 
-    // we aren't storing the orientation.
-    quatd q = Quatd(1, 0, 0, 0);
+    quatd result = *initial_q;
     f64 epsilon = 1.0e-9;
 
     // NOTE(gh) Using the column vector here, as those 
@@ -1981,7 +1977,7 @@ extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
             i < max_iter;
             ++i)
     {
-        m3x3d R = orientation_quatd_to_m3x3d(q);
+        m3x3d R = orientation_quatd_to_m3x3d(result);
         v3d R_column0 = V3d(R.e[0][0], R.e[1][0], R.e[2][0]);
         v3d R_column1 = V3d(R.e[0][1], R.e[1][1], R.e[2][1]);
         v3d R_column2 = V3d(R.e[0][2], R.e[1][2], R.e[2][2]);
@@ -1995,7 +1991,7 @@ extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
 
         if(length_w >= epsilon)
         {
-            q = normalize(Quatd(w/length_w, length_w) * q);
+            result = normalize(Quatd(w/length_w, length_w) * result);
         }
         else
         {
@@ -2003,7 +1999,7 @@ extract_rotation_from_polar_decomposition(m3x3d *A, u32 max_iter = 100)
         }
     }
 
-    return q;
+    return result;
 }
 
 
