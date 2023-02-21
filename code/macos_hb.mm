@@ -773,7 +773,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
 
             switch(header->type)
             {
-#if 0
+#if 1
                 case RenderEntryType_MeshPN:
                 {
                     RenderEntryMeshPN *entry = (RenderEntryMeshPN *)((u8 *)render_push_buffer->base + consumed);

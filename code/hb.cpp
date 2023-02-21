@@ -66,35 +66,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         // Really far away camera
         // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(), 50.0f, 135, 0.01f, 10000.0f);
 
-        load_game_assets(&game_state->assets, &game_state->transient_arena, platform_api, gpu_work_queue);
-        PlatformReadFileResult bunny_file = platform_api->read_file("/Volumes/meka/HB_engine/data/teapot.obj");
-        PreParseObjResult bunny_pre_parse_result = pre_parse_obj(bunny_file.memory, bunny_file.size);
-        v3 *positions = push_array(&game_state->transient_arena, v3, bunny_pre_parse_result.position_count);
-        u32 *indices = push_array(&game_state->transient_arena, u32, bunny_pre_parse_result.index_count);
-        parse_obj(&bunny_pre_parse_result, bunny_file.memory, bunny_file.size, 
-                    positions, 0, 0, indices);
-
-#if 0
-        VertexPN *vertices = push_array(&game_state->transient_arena, VertexPN, bunny_pre_parse_result.position_count);
-        for(u32 vertex_index = 0;
-                vertex_index < bunny_pre_parse_result.position_count;
-                ++vertex_index)
-        {
-            vertices[vertex_index].p = positions[vertex_index];
-            vertices[vertex_index].n = V3();
-        }
-
-        add_pbd_mesh_entity(game_state, 
-                            &pbd_arena, &game_state->transient_arena, 
-                            positions, bunny_pre_parse_result.position_count,
-                            0.0006f, 1/10.0f, V3(0.7f, 0.2f, 0), EntityFlag_Movable|EntityFlag_Collides);
-#endif
-#if 0
-        load_mesh_asset(GameAssets *assets, ThreadWorkQueue *gpu_work_queue, 
-                        AssetTag_BunnyMesh, 
-                        vertices, bunny_pre_parse_result.position_count,
-                        u32 *indices, bunny_pre_parse_result.index_count);
-#endif
 #if 0
         v2 grid_dim = V2(80, 80); // TODO(gh) just temporary, need to 'gather' the floors later
         game_state->grass_grid_count_x = 2;
@@ -151,6 +122,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                     fluid_cell_left_bottom_p, V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 
                                     fluid_cell_dim);
 #endif
+        game_state->random_series = start_random_series(12312);
+        load_game_assets(&game_state->assets, &game_state->transient_arena, platform_api, gpu_work_queue);
 
         game_state->is_initialized = true;
     }
@@ -226,8 +199,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     if(platform_input->space.is_down && can_shoot)
     {
+        u32 x_count = random_between_u32(&game_state->random_series, 2, 5);
+        u32 y_count = random_between_u32(&game_state->random_series, 2, 5);
+        u32 z_count = random_between_u32(&game_state->random_series, 2, 5);
         add_pbd_cube_entity(game_state, &game_state->pbd_arena, 
-                            V3d(render_camera->p), V3u(2, 2, 2),
+                            V3d(render_camera->p), V3u(x_count, y_count, z_count),
                             V3d(50.0f*camera_dir),
                             0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
 
@@ -277,7 +253,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
        Plugging eq(2) to it, we get s * sum(gradient(C(pi))), which is 0 due to translation invariance(Need to dig into this later).
        (What about the angular momentum?)
     */
-    u32 substep_count = 32;
+
+    // TODO(gh) Need to think about how many sub step we need!
+    u32 substep_count = 64;
     f64 sub_dt = (f64)platform_input->dt_per_frame/(f64)substep_count;
     f64 sub_dt_square = square(sub_dt);
     for(u32 substep_index = 0;
@@ -433,7 +411,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
            c->particle->p += solution.offset;
         }
 
-        // Solve collision constraints
+        // Solve collision constraints & friction
         for(u32 constraint_index = 0;
                 constraint_index < collision_constraint_count;
                 ++constraint_index)
@@ -446,13 +424,42 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             c->particle0->p += solution.offset0;
             c->particle1->p += solution.offset1;
+
+            // TODO(gh) Friction seems busted...
+#if 0
+            if(solution.collided)
+            {
+                v3d d = (c->particle0->p - c->particle0->prev_p) - (c->particle1->p - c->particle1->prev_p);
+
+                v3d tangential_displacement = d - dot(d, solution.contact_normal) * solution.contact_normal;
+                f64 length_tangential_displacement = length(tangential_displacement);
+
+                f64 static_coeff = 0.7;
+                f64 kinetic_coeff = 0.4;
+                v3d offset = V3d();
+                if(length_tangential_displacement < static_coeff)
+                {
+                    offset =  tangential_displacement;
+                }
+                else
+                {
+                    offset = minimum(kinetic_coeff*solution.penetration_depth / length_tangential_displacement, 1.0) * 
+                             tangential_displacement;
+                }
+
+                offset *= (c->particle0->inv_mass/(c->particle0->inv_mass + c->particle1->inv_mass));
+                c->particle0->p += offset;
+                c->particle1->p += (c->particle1->inv_mass/(c->particle0->inv_mass + c->particle1->inv_mass)) * (-offset);
+            }
+#endif
+
         }
 
 
 #if 0
         // NOTE(gh) Solve distance constraint
         for(u32 entity_index = 0;
-                entity_index < game_state->entity_count;
+                entity_index < game_state->entity_countddddddddf;
                 ++entity_index)
         {
             Entity *entity = game_state->entities + entity_index;

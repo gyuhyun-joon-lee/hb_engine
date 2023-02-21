@@ -57,6 +57,34 @@ struct CollisionConstraint
 };
 
 /*
+    NOTE(gh) Friction Constraint between two particles
+    tangential displacement(tanD) = 
+        perpendicular part of (p0 - prev_p0) - (p1 - prev_p1) with the contact normal, 
+    which means that the displacement should not occur in a direction of contact normal.
+
+    Then, the offset for particle 0 should be
+    if(length(tanD) < static friction coefficient)
+    {
+        offset = (w1/(w1+w2)) * tanD
+    }
+    else
+    {
+        offset = (w1/(w1+w2)) * tanD * 
+                  min(kinetic friction coefficient*penetration distance/length(tanD), 1);
+    }
+
+    For particle 1, w2 instead of w1 and -tanD instead of tanD should be used.
+*/
+struct FrictionConstraint
+{
+    PBDParticle *particle0;
+    PBDParticle *particle1;
+
+    v3d tangent_displacement;
+    f64 penetration_depth;
+};
+
+/*
     NOTE(gh) Environment collision constraint between one particle and the environment
     C(x) = dot(plane_normal, particle_position) − plane_d - radius ≥ 0
 */

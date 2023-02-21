@@ -61,10 +61,16 @@ get_com_of_particle_group(PBDParticleGroup *group)
     return result;
 }
 
+#define collision_epsilon -1.0e-6
+
 struct CollisionSolution
 {
+    b32 collided;
     v3d offset0;
     v3d offset1;
+
+    v3d contact_normal;
+    f64 penetration_depth;
 };
 
 // stiffness_epsilon = inv_stiffness/square(sub_dt);
@@ -86,7 +92,7 @@ solve_collision_constraint(CollisionSolution *solution,
 
         f64 rest_length = (f64)(particle0->r + particle1->r);
         f64 C = delta_length - rest_length;
-        if(C < 0.0)
+        if(C < collision_epsilon)
         {
             // Gradient of the constraint for each particles that were invovled in the constraint
             // So this is actually gradient(C(xi))
@@ -99,8 +105,13 @@ solve_collision_constraint(CollisionSolution *solution,
             // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
             // inv_mass of the particles are involved
             // so that the linear momentum is conserved(otherwise, it might produce the 'ghost force')
+            solution->collided = true;
             solution->offset0 = lagrange_multiplier*(f64)particle0->inv_mass*gradient0;
             solution->offset1 = lagrange_multiplier*(f64)particle1->inv_mass*gradient1;
+
+            solution->contact_normal = gradient0;
+            // TODO(gh) C or -C
+            solution->penetration_depth = -C;
         }
     }
 }
@@ -122,7 +133,7 @@ solve_environment_constraint(EnvironmentSolution *solution,
     {
         f64 d = dot(c->n, *p);
         f64 C = d - c->d - c->particle->r;
-        if(C < 0.0)
+        if(C < collision_epsilon)
         {
             // NOTE(gh) For environmental collision, we don't need the inv_mass thing
             f64 lagrange_multiplier = -C;
