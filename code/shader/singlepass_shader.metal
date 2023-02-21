@@ -4,8 +4,6 @@
 
 #include "shader_common.h"
 
-
-
 // IMPORTANT(gh) vertex always should be PN
 vertex GBufferVertexOutput
 render_to_g_buffer_vert(uint vertexID [[vertex_id]],

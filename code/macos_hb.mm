@@ -1490,7 +1490,7 @@ int main(void)
     // TODO(gh) : Put the metallib file inside the app
     char metallib_path[256] = {};
     unsafe_string_append(metallib_path, base_path);
-    unsafe_string_append(metallib_path, "code/shader/compiled_shaders/shader.metallib");
+    unsafe_string_append(metallib_path, "code/shader/build_shader/shader.metallib");
 
     // TODO(gh) : maybe just use newDefaultLibrary?
     id<MTLLibrary> shader_library = [device newLibraryWithFile:[NSString stringWithUTF8String:metallib_path] 
