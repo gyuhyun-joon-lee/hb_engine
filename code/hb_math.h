@@ -867,7 +867,7 @@ M3x3(f32 e00, f32 e01, f32 e02,
 
 // NOTE(gh) returns identity matrix
 inline m3x3
-M3x3(void)
+identity_m3x3(void)
 {
     m3x3 result = {};
 
@@ -990,38 +990,59 @@ operator *=(m3x3 &m, f32 value)
     return m;
 }
 
-inline m3x3
-inverse(m3x3 m)
+inline f32
+get_determinant(m3x3 *m)
 {
-    m3x3 result = {};
-    f32 det = m.e[0][0]*m.e[1][1]*m.e[2][2] + 
-              m.e[1][0]*m.e[2][1]*m.e[0][2] + 
-              m.e[2][0]*m.e[0][1]*m.e[1][2] - 
-              m.e[0][0]*m.e[2][1]*m.e[1][2] - 
-              m.e[2][0]*m.e[1][1]*m.e[0][2] - 
-              m.e[1][0]*m.e[0][1]*m.e[2][2];
+    f32 result = m->e[0][0]*m->e[1][1]*m->e[2][2] + 
+              m->e[1][0]*m->e[2][1]*m->e[0][2] + 
+              m->e[2][0]*m->e[0][1]*m->e[1][2] - 
+              m->e[0][0]*m->e[2][1]*m->e[1][2] - 
+              m->e[2][0]*m->e[1][1]*m->e[0][2] - 
+              m->e[1][0]*m->e[0][1]*m->e[2][2];
 
-    if(!compare_with_epsilon(det, 0.0f))
+    return result;
+}
+
+inline b32
+is_inversable(m3x3 *m)
+{
+    b32 result = true;
+
+    if(compare_with_epsilon(get_determinant(m), 0.0f))
     {
-        result.e[0][0] = m.e[1][1]*m.e[2][2] - m.e[1][2]*m.e[2][1];
-        result.e[0][1] = m.e[0][2]*m.e[2][1] - m.e[0][1]*m.e[2][2];
-        result.e[0][2] = m.e[0][1]*m.e[1][2] - m.e[0][2]*m.e[1][1];
-
-        result.e[1][0] = m.e[1][2]*m.e[2][0] - m.e[1][0]*m.e[2][2];
-        result.e[1][1] = m.e[0][0]*m.e[2][2] - m.e[0][2]*m.e[2][0];
-        result.e[1][2] = m.e[0][2]*m.e[1][0] - m.e[0][0]*m.e[1][2];
-
-        result.e[2][0] = m.e[1][0]*m.e[2][1] - m.e[1][1]*m.e[2][0];
-        result.e[2][1] = m.e[0][1]*m.e[2][0] - m.e[0][0]*m.e[2][1];
-        result.e[2][2] = m.e[0][0]*m.e[1][1] - m.e[0][1]*m.e[1][0];
-
-        result *= (1.0f/det);
+        result = false;
     }
 
     return result;
 }
 
+// TODO(gh) Because we _have to_ check whether it is invertable or not
+// by checking the determinant, maybe we can just pass that in?
+inline m3x3
+inverse(m3x3 *m)
+{
+    m3x3 result = {};
 
+    f32 det = get_determinant(m);
+
+    assert(!compare_with_epsilon(det, 0.0f));
+
+    result.e[0][0] = m->e[1][1]*m->e[2][2] - m->e[1][2]*m->e[2][1];
+    result.e[0][1] = m->e[0][2]*m->e[2][1] - m->e[0][1]*m->e[2][2];
+    result.e[0][2] = m->e[0][1]*m->e[1][2] - m->e[0][2]*m->e[1][1];
+
+    result.e[1][0] = m->e[1][2]*m->e[2][0] - m->e[1][0]*m->e[2][2];
+    result.e[1][1] = m->e[0][0]*m->e[2][2] - m->e[0][2]*m->e[2][0];
+    result.e[1][2] = m->e[0][2]*m->e[1][0] - m->e[0][0]*m->e[1][2];
+
+    result.e[2][0] = m->e[1][0]*m->e[2][1] - m->e[1][1]*m->e[2][0];
+    result.e[2][1] = m->e[0][1]*m->e[2][0] - m->e[0][0]*m->e[2][1];
+    result.e[2][2] = m->e[0][0]*m->e[1][1] - m->e[0][1]*m->e[1][0];
+
+    result *= (1.0f/det);
+
+    return result;
+}
 
 // NOTE(gh) rotate along x axis
 inline m3x3
@@ -1033,7 +1054,7 @@ x_rotate(f32 rad)
     f32 cos = cosf(rad);
     f32 sin = sinf(rad);
 
-    m3x3 result = M3x3();
+    m3x3 result = identity_m3x3();
     result.e[1][1] = cos;
     result.e[1][2] = -sin;
 
@@ -1075,7 +1096,7 @@ z_rotate(f32 rad)
     f32 cos = cosf(rad);
     f32 sin = sinf(rad);
 
-    m3x3 result = M3x3();
+    m3x3 result = identity_m3x3();
     result.e[0][0] = cos;
     result.e[0][1] = -sin;
 
@@ -1093,6 +1114,18 @@ M3x3d()
     return result;
 }
 
+inline m3x3d
+identity_m3x3d()
+{
+    m3x3d result = M3x3d();
+
+    result.e[0][0] = 1.0;
+    result.e[1][1] = 1.0;
+    result.e[2][2] = 1.0;
+
+    return result;
+}
+
 inline v3d
 operator *(m3x3d a, v3d b)
 {
@@ -1104,6 +1137,151 @@ operator *(m3x3d a, v3d b)
 
     return result;
 }
+
+inline m3x3d
+operator *(m3x3d a, m3x3d b)
+{
+    m3x3d result = {}; 
+    result.e[0][0] = a.e[0][0]*b.e[0][0] + a.e[0][1]*b.e[1][0] + a.e[0][2]*b.e[2][0];
+    result.e[0][1] = a.e[0][0]*b.e[0][1] + a.e[0][1]*b.e[1][1] + a.e[0][2]*b.e[2][1];
+    result.e[0][2] = a.e[0][0]*b.e[0][2] + a.e[0][1]*b.e[1][2] + a.e[0][2]*b.e[2][2];
+
+    result.e[1][0] = a.e[1][0]*b.e[0][0] + a.e[1][1]*b.e[1][0] + a.e[1][2]*b.e[2][0];
+    result.e[1][1] = a.e[1][0]*b.e[0][1] + a.e[1][1]*b.e[1][1] + a.e[1][2]*b.e[2][1];
+    result.e[1][2] = a.e[1][0]*b.e[0][2] + a.e[1][1]*b.e[1][2] + a.e[1][2]*b.e[2][2];
+
+    result.e[2][0] = a.e[2][0]*b.e[0][0] + a.e[2][1]*b.e[1][0] + a.e[2][2]*b.e[2][0];
+    result.e[2][1] = a.e[2][0]*b.e[0][1] + a.e[2][1]*b.e[1][1] + a.e[2][2]*b.e[2][1];
+    result.e[2][2] = a.e[2][0]*b.e[0][2] + a.e[2][1]*b.e[1][2] + a.e[2][2]*b.e[2][2];
+
+    return result;
+}
+
+inline m3x3d
+operator *(f64 value, m3x3d m)
+{
+    m3x3d result = m;
+    for(u32 i = 0;
+            i < 3;
+            ++i)
+    {
+        result.rows[i] *= value;
+    }
+
+    return result;
+}
+
+inline m3x3d
+operator +(m3x3d a, m3x3d b)
+{
+    m3x3d result = {};
+
+    result.rows[0] = a.rows[0] + b.rows[0];
+    result.rows[1] = a.rows[1] + b.rows[1];
+    result.rows[2] = a.rows[2] + b.rows[2];
+
+    return result;
+}
+
+inline m3x3d
+operator -(m3x3d a, m3x3d b)
+{
+    m3x3d result = {};
+
+    result.rows[0] = a.rows[0] - b.rows[0];
+    result.rows[1] = a.rows[1] - b.rows[1];
+    result.rows[2] = a.rows[2] - b.rows[2];
+
+    return result;
+}
+
+// NOTE(gh) Can also work as inverse matrix, only if the matrix is orthogonal.
+// In fact, the definition of orthogonal matrix is tranpose == inverse
+inline m3x3d
+transpose(m3x3d m)
+{
+    m3x3d result = {};
+
+    for(u32 column = 0;
+            column < 3;
+            ++column)
+    {
+        for(u32 row = 0;
+                row < 3;
+                ++row)
+        {
+            result.e[row][column] = m.e[column][row];
+        }
+    }
+
+    return result;
+}
+
+inline m3x3d&
+operator *=(m3x3d &m, f64 value)
+{
+    m.rows[0] *= value;
+    m.rows[1] *= value;
+    m.rows[2] *= value;
+
+    return m;
+}
+
+inline f64
+get_determinant(m3x3d *m)
+{
+    f64 result = m->e[0][0]*m->e[1][1]*m->e[2][2] + 
+              m->e[1][0]*m->e[2][1]*m->e[0][2] + 
+              m->e[2][0]*m->e[0][1]*m->e[1][2] - 
+              m->e[0][0]*m->e[2][1]*m->e[1][2] - 
+              m->e[2][0]*m->e[1][1]*m->e[0][2] - 
+              m->e[1][0]*m->e[0][1]*m->e[2][2];
+
+    return result;
+}
+
+inline b32
+is_inversable(m3x3d *m)
+{
+    b32 result = true;
+
+    if(compare_with_epsilon(get_determinant(m), 0.0f))
+    {
+        result = false;
+    }
+
+    return result;
+}
+
+// TODO(gh) Because we _have to_ check whether it is invertable or not
+// by checking the determinant, maybe we can just pass that in?
+inline m3x3d
+inverse(m3x3d *m)
+{
+    m3x3d result = {};
+
+    f64 det = get_determinant(m);
+
+    assert(!compare_with_epsilon(det, 0.0f));
+
+    result.e[0][0] = m->e[1][1]*m->e[2][2] - m->e[1][2]*m->e[2][1];
+    result.e[0][1] = m->e[0][2]*m->e[2][1] - m->e[0][1]*m->e[2][2];
+    result.e[0][2] = m->e[0][1]*m->e[1][2] - m->e[0][2]*m->e[1][1];
+
+    result.e[1][0] = m->e[1][2]*m->e[2][0] - m->e[1][0]*m->e[2][2];
+    result.e[1][1] = m->e[0][0]*m->e[2][2] - m->e[0][2]*m->e[2][0];
+    result.e[1][2] = m->e[0][2]*m->e[1][0] - m->e[0][0]*m->e[1][2];
+
+    result.e[2][0] = m->e[1][0]*m->e[2][1] - m->e[1][1]*m->e[2][0];
+    result.e[2][1] = m->e[0][1]*m->e[2][0] - m->e[0][0]*m->e[2][1];
+    result.e[2][2] = m->e[0][0]*m->e[1][1] - m->e[0][1]*m->e[1][0];
+
+    result *= (1.0f/det);
+
+    return result;
+}
+
+
 
 inline m3x4
 M3x4(f32 e00, f32 e01, f32 e02, f32 e03,

@@ -102,7 +102,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         assert(platform_render_push_buffer->transient_buffer);
 
-
 #if 0
         v2 grid_dim = V2(80, 80); // TODO(gh) just temporary, need to 'gather' the floors later
         game_state->grass_grid_count_x = 2;
@@ -149,8 +148,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state, 
                              tran_state->loaded_voxs + 0,
                             V3d(1, 1, 3), V3d(0, 0, 0),
-                            0.f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides);
+                            0.5f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
@@ -159,8 +158,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state,  
                              tran_state->loaded_voxs + 1,
                             V3d(-9, -9, 5), V3d(0, 0, 0),
-                            0.f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides);
+                            0.5f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
         {
 
@@ -171,8 +170,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state, 
                              tran_state->loaded_voxs + 2,
                             V3d(3, 3, 12), V3d(0, 0, 0),
-                            0.f, 1.0f/(random_between(&game_state->random_series, 50, 200)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides);
+                            0.3f, 1.0f/(random_between(&game_state->random_series, 50, 200)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
@@ -181,8 +180,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state,  
                              tran_state->loaded_voxs + 3,
                             V3d(7, 7, 5), V3d(0, 0, 0),
-                            0.f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides);
+                            0.2f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
@@ -191,8 +190,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state, 
                              tran_state->loaded_voxs + 4,
                             V3d(-15, -15, 5), V3d(0, 0, 0),
-                            0.f, 1.0f/(random_between(&game_state->random_series, 800, 1000)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides);
+                            0.3f, 1.0f/(random_between(&game_state->random_series, 800, 1000)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
 
 
@@ -488,28 +487,32 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         ++test_entity_index)
                 {
                     Entity *test_entity = game_state->entities + test_entity_index;
-                    PBDParticleGroup *test_group = &test_entity->particle_group;
-                    if(test_entity > entity && test_group->count)
+                    if(is_entity_flag_set(test_entity, EntityFlag_Collides) &&
+                       is_entity_flag_set(test_entity, EntityFlag_Movable))
                     {
-                        for(u32 particle_index = 0;
-                                particle_index < group->count;
-                                ++particle_index)
+                        PBDParticleGroup *test_group = &test_entity->particle_group;
+                        if(test_entity > entity && test_group->count)
                         {
-                            PBDParticle *particle = group->particles + particle_index;
-                            for(u32 test_particle_index = 0;
-                                    test_particle_index < test_group->count;
-                                    ++test_particle_index)
+                            for(u32 particle_index = 0;
+                                    particle_index < group->count;
+                                    ++particle_index)
                             {
-                                PBDParticle *test_particle = test_group->particles + test_particle_index;
-
-                                if(particle->inv_mass + test_particle->inv_mass != 0.0f)
+                                PBDParticle *particle = group->particles + particle_index;
+                                for(u32 test_particle_index = 0;
+                                        test_particle_index < test_group->count;
+                                        ++test_particle_index)
                                 {
-                                    f64 distance_between = length(particle->p - test_particle->p);
-                                    if(distance_between < particle->r + test_particle->r)
+                                    PBDParticle *test_particle = test_group->particles + test_particle_index;
+
+                                    if(particle->inv_mass + test_particle->inv_mass != 0.0f)
                                     {
-                                        CollisionConstraint *c = collision_constraints + collision_constraint_count++;
-                                        c->particle0 = particle;
-                                        c->particle1 = test_particle;
+                                        f64 distance_between = length(particle->p - test_particle->p);
+                                        if(distance_between < particle->r + test_particle->r)
+                                        {
+                                            CollisionConstraint *c = collision_constraints + collision_constraint_count++;
+                                            c->particle0 = particle;
+                                            c->particle1 = test_particle;
+                                        }
                                     }
                                 }
                             }
@@ -674,22 +677,54 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             v3d com = get_com_of_particle_group(group);
 
-            m3x3d A = M3x3d();
-            for(u32 particle_index = 0;
-                    particle_index < group->count;
-                    ++particle_index)
+            m3x3d shape_match_rotation_matrix = M3x3d();
+            if(is_entity_flag_set(entity, EntityFlag_RigidBody))
             {
-                PBDParticle *particle = group->particles + particle_index;
-                v3d offset = particle->p - com;
-                A.rows[0] += offset.x * particle->initial_offset_from_com;
-                A.rows[1] += offset.y * particle->initial_offset_from_com;
-                A.rows[2] += offset.z * particle->initial_offset_from_com;
-            }
+                m3x3d A = M3x3d();
 
-            group->shape_match_quat = 
-                extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);
-            m3x3d shape_match_rotation_matrix = 
-                orientation_quatd_to_m3x3d(group->shape_match_quat);
+                for(u32 particle_index = 0;
+                        particle_index < group->count;
+                        ++particle_index)
+                {
+                    PBDParticle *particle = group->particles + particle_index;
+                    v3d offset = particle->p - com;
+                    A.rows[0] += offset.x * particle->initial_offset_from_com;
+                    A.rows[1] += offset.y * particle->initial_offset_from_com;
+                    A.rows[2] += offset.z * particle->initial_offset_from_com;
+                }
+
+                group->shape_match_quat = 
+                    extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);
+                shape_match_rotation_matrix = 
+                    orientation_quatd_to_m3x3d(group->shape_match_quat);
+            }
+            else if(is_entity_flag_set(entity, EntityFlag_Linear))
+            {
+                m3x3d Apq = M3x3d(); 
+                for(u32 particle_index = 0;
+                        particle_index < group->count;
+                        ++particle_index)
+                {
+                    PBDParticle *particle = group->particles + particle_index;
+                    v3d offset = particle->p - com;
+                    Apq.rows[0] += offset.x * particle->initial_offset_from_com;
+                    Apq.rows[1] += offset.y * particle->initial_offset_from_com;
+                    Apq.rows[2] += offset.z * particle->initial_offset_from_com;
+                }
+                m3x3d A = Apq * group->inv_Aqq;
+
+                group->shape_match_quat = 
+                    extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);
+                m3x3d Q = 
+                    orientation_quatd_to_m3x3d(group->shape_match_quat);
+
+                shape_match_rotation_matrix = 
+                    group->linear_shape_matching_coefficient*A + 
+                    (1-group->linear_shape_matching_coefficient)*Q;
+            }
+            else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
+            {
+            }
 
             // Apply the shape matching rotation
             for(u32 particle_index = 0;
@@ -699,11 +734,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 PBDParticle *particle = group->particles + particle_index;
                 v3d shape_match_delta = 
                     (shape_match_rotation_matrix*particle->initial_offset_from_com + com) - particle->p;
-
-                if(length(shape_match_delta) > 10.0f)
-                {
-                    int a = 1;
-                }
 
                 particle->p += shape_match_delta;
             }

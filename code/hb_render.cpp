@@ -631,7 +631,7 @@ render_all_entities(PlatformRenderPushBuffer *render_push_buffer,
                                 game_assets);
 
                         v3 normalized_v = normalize(v);
-                        f32 line_length = 1.0f;
+                        f32 line_length = 0.4f;
                         v3 line_start = p + particle->r*normalized_v;
                         v3 line_end = line_start + line_length * v;
                         push_line(render_push_buffer, line_start, line_end, V3(0.8f, 0.2f, 0.5f));

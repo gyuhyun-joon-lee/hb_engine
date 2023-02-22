@@ -19,9 +19,14 @@ enum EntityType
 
 enum EntityFlag
 {
-    EntityFlag_Null = 0,
-    EntityFlag_Movable = 2,
-    EntityFlag_Collides = 4,
+    EntityFlag_Null = (1<<0),
+    EntityFlag_Movable = (1<<1),
+    EntityFlag_Collides = (1<<2),
+    // NOTE(gh) Shape matching properties,
+    // these flags will produce different rigid body deformation matrices
+    EntityFlag_RigidBody = (1<<3),
+    EntityFlag_Linear = (1<<4),
+    EntityFlag_Quadratic = (1<<4),
 };
 
 // TODO(gh) For some entities such as rigid body or pbd based entities

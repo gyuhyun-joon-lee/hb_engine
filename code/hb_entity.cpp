@@ -8,10 +8,10 @@
 #define particle_radius 0.25f
 
 internal b32
-is_entity_flag_set(u32 flags, EntityFlag flag)
+is_entity_flag_set(Entity *entity, EntityFlag flag)
 {
     b32 result = false;
-    if(flags & flag)
+    if(entity->flags & flag)
     {
         result = true;
     }
@@ -159,13 +159,52 @@ add_volume_constraint(PBDParticleGroup *group,
     c->rest_volume = get_tetrahedron_volume(particle0->p, particle1->p, particle2->p, particle3->p);
 }
 
+// NOTE(gh) This has to happen after the particle allocation is done!!!
+internal void
+populate_pbd_shape_matching_info(Entity *entity, 
+                                PBDParticleGroup *group,
+                                f32 linear_shape_matching_coefficient)
+{
+    // Get COM to initialize initial_offset_from_com
+    v3d com = get_com_of_particle_group(group);
+    for(u32 particle_index = 0;
+            particle_index < group->count;
+            ++particle_index)
+    {
+        PBDParticle *particle = group->particles + particle_index;
+        particle->initial_offset_from_com = particle->p - com;
+    }
+
+    if(is_entity_flag_set(entity, EntityFlag_Linear))
+    {
+        m3x3d Aqq = M3x3d();
+        for(u32 particle_index = 0;
+                particle_index < group->count;
+                ++particle_index)
+        {
+            PBDParticle *particle = group->particles + particle_index;
+
+            Aqq.rows[0] += particle->initial_offset_from_com.x * particle->initial_offset_from_com;
+            Aqq.rows[1] += particle->initial_offset_from_com.y * particle->initial_offset_from_com;
+            Aqq.rows[2] += particle->initial_offset_from_com.z * particle->initial_offset_from_com;
+        }
+
+        // TODO(gh) Is this even possible?
+
+        group->linear_shape_matching_coefficient = linear_shape_matching_coefficient;
+        assert(is_inversable(&Aqq));
+        group->inv_Aqq = inverse(&Aqq);
+    }
+}
+
 // TODO(gh) Later, we would want this is voxelize any mesh
 // we throw in
 internal Entity *
 add_pbd_cube_entity(GameState *game_state, 
                     v3d center, v3d dim, 
                     v3d v,
-                    f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
+                    f32 linear_shape_matching_coefficient, 
+                    f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
     result->color = color;
@@ -204,17 +243,9 @@ add_pbd_cube_entity(GameState *game_state,
     }
     end_particle_allocation_from_pool(&game_state->particle_pool, group);
 
-    // Get COM to initialize initial_offset_from_com
-    v3d com = get_com_of_particle_group(group);
-    for(u32 particle_index = 0;
-            particle_index < group->count;
-            ++particle_index)
-    {
-        PBDParticle *particle = group->particles + particle_index;
-        particle->initial_offset_from_com = particle->p - com;
-    }
-
-    group->inv_distance_stiffness = inv_edge_stiffness;
+    populate_pbd_shape_matching_info(result, 
+                                     group,
+                                     linear_shape_matching_coefficient);
 
     return result;
 }
@@ -224,7 +255,7 @@ add_pbd_vox_entity(GameState *game_state,
                     LoadedVOXResult *loaded_vox,
                     v3d left_bottom_corner, 
                     v3d v,
-                    f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
+                    f32 linear_shape_matching_coefficient, f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
     result->color = color;
@@ -249,18 +280,10 @@ add_pbd_vox_entity(GameState *game_state,
         }
     }
     end_particle_allocation_from_pool(&game_state->particle_pool, group);
-
-    // Get COM to initialize initial_offset_from_com
-    v3d com = get_com_of_particle_group(group);
-    for(u32 particle_index = 0;
-            particle_index < group->count;
-            ++particle_index)
-    {
-        PBDParticle *particle = group->particles + particle_index;
-        particle->initial_offset_from_com = particle->p - com;
-    }
-
-    group->inv_distance_stiffness = inv_edge_stiffness;
+    
+    populate_pbd_shape_matching_info(result, 
+                                     group,
+                                     linear_shape_matching_coefficient);
 
     return result;
 }

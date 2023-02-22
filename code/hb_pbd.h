@@ -147,13 +147,22 @@ struct PBDParticleGroup
     // Used as an initial value of shape match rotation matrix extraction quaternion
     quatd shape_match_quat;
 
+#if 1
     DistanceConstraint *distance_constraints;
     u32 distance_constraint_count;
     f32 inv_distance_stiffness;
 
     VolumeConstraint *volume_constraints;
     u32 volume_constraint_count;
-    // f32 inv_volume_stiffness;
+#endif
+
+    // NOTE(gh) This is used for getting the linear deformation matrix,
+    // and will be pre-computed upon entity creation
+    m3x3d inv_Aqq;
+
+    // NOTE(gh) Controlls how linear and 'linear' it looks,
+    // should range from 0 to 1
+    f32 linear_shape_matching_coefficient;
 };
 
 
