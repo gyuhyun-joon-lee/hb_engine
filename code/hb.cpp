@@ -137,7 +137,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
         }
 #endif
-        game_state->random_series = start_random_series(12312);
+        game_state->random_series = start_random_series(12312312);
 
         add_floor_entity(game_state, V3(), V2(1000, 1000), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
@@ -159,7 +159,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                              tran_state->loaded_voxs + 1,
                             V3d(-9, -9, 5), V3d(0, 0, 0),
                             0.5f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
         {
 
