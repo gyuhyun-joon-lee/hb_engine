@@ -57,7 +57,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         // NOTE(gh) Initialize the arenas
         game_state->render_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));        
-        game_state->pbd_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));
 
         game_state->game_camera = init_fps_camera(V3(0, -10, 22), 1.0f, 135, 1.0f, 1000.0f);
         game_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
@@ -130,7 +129,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
-            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+            add_pbd_vox_entity(game_state, 
                              game_state->loaded_voxs + game_state->loaded_vox_count,
                             V3d(1, 1, 3), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
@@ -146,7 +145,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
-            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+            add_pbd_vox_entity(game_state,  
                              game_state->loaded_voxs + game_state->loaded_vox_count,
                             V3d(-9, -9, 5), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
@@ -163,7 +162,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
-            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+            add_pbd_vox_entity(game_state, 
                              game_state->loaded_voxs + game_state->loaded_vox_count,
                             V3d(3, 3, 12), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 50, 200)), color, 
@@ -180,7 +179,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
-            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+            add_pbd_vox_entity(game_state,  
                              game_state->loaded_voxs + game_state->loaded_vox_count,
                             V3d(7, 7, 5), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
@@ -196,7 +195,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
-            add_pbd_vox_entity(game_state, &game_state->pbd_arena, 
+            add_pbd_vox_entity(game_state, 
                              game_state->loaded_voxs + game_state->loaded_vox_count,
                             V3d(-15, -15, 5), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 800, 1000)), color, 
@@ -222,6 +221,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         game_state->is_initialized = true;
     }
+
+    u64 size = sizeof(*game_state);
 
     Camera *game_camera = &game_state->game_camera;
     Camera *debug_camera = &game_state->debug_camera;
@@ -294,7 +295,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     if(platform_input->space.is_down && can_shoot)
     {
-        add_pbd_single_particle_entity(game_state, &game_state->pbd_arena, 
+        add_pbd_single_particle_entity(game_state, 
                                         V3d(render_camera->p), V3d(50*camera_dir), 
                                         0.0f, 1.0f/10.0f, V3(0, 1, 0), EntityFlag_Movable|EntityFlag_Collides);
 

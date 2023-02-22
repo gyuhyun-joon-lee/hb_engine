@@ -472,6 +472,8 @@ push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 colo
     entry->header.type = RenderEntryType_MeshPN;
     entry->header.size = sizeof(*entry);
 
+    // TODO(gh) Although necessary, I don't like passing the pointer to the mesh asset ID
+    // which is 'inside' the entity. Any way to avoid this?
     MeshAsset *mesh_asset = get_mesh_asset(asset, mesh_assetID, tag);
     entry->vertex_buffer_handle = mesh_asset->vertex_buffer.handle;
     entry->vertex_count = mesh_asset->vertex_count;
@@ -540,6 +542,14 @@ push_arbitrary_mesh(PlatformRenderPushBuffer *render_push_buffer, v3 color, Vert
                                             indices, sizeof(indices[0]) * index_count);
     entry->index_count = index_count; 
 }
+
+#if 0
+internal RenderEntryHeader *
+push_mesh_pn(PlatformRenderPushBuffer *render_push_buffer, v3 p, v3 dim, v3 color, 
+            u32 *mesh_assetID, AssetTag tag, GameAssets *asset)
+{
+}
+#endif
 
 internal RenderEntryHeader *
 start_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer, 

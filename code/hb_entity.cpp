@@ -159,141 +159,10 @@ add_volume_constraint(PBDParticleGroup *group,
     c->rest_volume = get_tetrahedron_volume(particle0->p, particle1->p, particle2->p, particle3->p);
 }
 
-// bottom 3 point should be in counter clockwise order
-internal Entity *
-add_pbd_soft_body_tetrahedron_entity(GameState *game_state, 
-                                MemoryArena *arena,
-                                v3d top,
-                                v3d bottom_p0, v3d bottom_p1, v3d bottom_p2, 
-                                v3d v,
-                                f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
-{
-    Entity *result = add_entity(game_state, EntityType_PBD, flags);
-    result->color = color;
-
-    f32 inv_particle_mass = 4 * inv_mass;
-
-    PBDParticleGroup *group = &result->particle_group;
-
-    start_particle_allocation_from_pool(&game_state->particle_pool, group);
-
-    allocate_particle_from_pool(&game_state->particle_pool,
-                                top, v,
-                                particle_radius,
-                                inv_particle_mass);
-
-    allocate_particle_from_pool(&game_state->particle_pool, 
-                                bottom_p0, v,
-                                particle_radius,
-                                inv_particle_mass);
-
-    allocate_particle_from_pool(&game_state->particle_pool, 
-                                bottom_p1, v,
-                                particle_radius,
-                                inv_particle_mass);
-
-    allocate_particle_from_pool(&game_state->particle_pool, 
-                                bottom_p2, v,
-                                particle_radius,
-                                inv_particle_mass);
-
-    end_particle_allocation_from_pool(&game_state->particle_pool, group);
-
-    group->distance_constraints = push_array(arena, DistanceConstraint, 6);
-    group->distance_constraint_count = 0;
-    group->inv_distance_stiffness = inv_edge_stiffness;
-    add_distance_constraint(group, 0, 1);
-    add_distance_constraint(group, 0, 2);
-    add_distance_constraint(group, 1, 2);
-    add_distance_constraint(group, 0, 3);
-    add_distance_constraint(group, 1, 3);
-    add_distance_constraint(group, 2, 3);
-
-    group->volume_constraints = push_array(arena, VolumeConstraint, 1);
-    group->volume_constraint_count = 0;
-    add_volume_constraint(group, 0, 1, 2, 3);
-
-    return result;
-}
-
-// NOTE(gh) top p0 and p1 are the vertices perpendicular to the 
-// bottom triangle
-internal Entity *
-add_pbd_soft_body_bipyramid_entity(GameState *game_state, 
-                                MemoryArena *arena,
-                                v3d top_p0, 
-                                v3d bottom_p0, v3d bottom_p1, v3d bottom_p2,
-                                v3d top_p1,
-                                v3d v,
-                                f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
-{
-    Entity *result = add_entity(game_state, EntityType_PBD, flags);
-    result->color = color;
-
-    u32 vertex_count = 5;
-    f32 inv_particle_mass = vertex_count * inv_mass;
-
-    PBDParticleGroup *group = &result->particle_group;
-
-    start_particle_allocation_from_pool(&game_state->particle_pool, group);
-    {
-        allocate_particle_from_pool(&game_state->particle_pool,
-                                    top_p0, v,
-                                    particle_radius,
-                                    inv_particle_mass);
-
-        allocate_particle_from_pool(&game_state->particle_pool, 
-                                    bottom_p0, v,
-                                    particle_radius,
-                                    inv_particle_mass);
-
-        allocate_particle_from_pool(&game_state->particle_pool, 
-                                    bottom_p1, v,
-                                    particle_radius,
-                                    inv_particle_mass);
-
-        allocate_particle_from_pool(&game_state->particle_pool, 
-                                    bottom_p2, v,
-                                    particle_radius,
-                                    inv_particle_mass);
-
-        allocate_particle_from_pool(&game_state->particle_pool, 
-                                    top_p1, v,
-                                    particle_radius,
-                                    inv_particle_mass);
-    }
-    end_particle_allocation_from_pool(&game_state->particle_pool, group);
-
-    group->distance_constraints = push_array(arena, DistanceConstraint, 9);
-    group->distance_constraint_count = 0;
-    group->inv_distance_stiffness = inv_edge_stiffness;
-    add_distance_constraint(group, 0, 1);
-    add_distance_constraint(group, 1, 2);
-    add_distance_constraint(group, 0, 2);
-
-    add_distance_constraint(group, 0, 3);
-    add_distance_constraint(group, 1, 3);
-    add_distance_constraint(group, 2, 3);
-
-    add_distance_constraint(group, 0, 4);
-    add_distance_constraint(group, 1, 4);
-    add_distance_constraint(group, 2, 4);
-
-    group->volume_constraints = push_array(arena, VolumeConstraint, 2);
-    group->volume_constraint_count = 0;
-    add_volume_constraint(group, 0, 1, 2, 3);
-    // TODO(gh) This weird order is due to how we are constructing the vertices
-    // dynamically
-    add_volume_constraint(group, 1, 2, 3, 4);
-
-    return result;
-}
-
 // TODO(gh) Later, we would want this is voxelize any mesh
 // we throw in
 internal Entity *
 add_pbd_cube_entity(GameState *game_state, 
-                    MemoryArena *arena,
                     v3d center, v3d dim, 
                     v3d v,
                     f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)
@@ -352,7 +221,6 @@ add_pbd_cube_entity(GameState *game_state,
 
 internal Entity *
 add_pbd_vox_entity(GameState *game_state, 
-                    MemoryArena *arena,
                     LoadedVOXResult *loaded_vox,
                     v3d left_bottom_corner, 
                     v3d v,
@@ -399,7 +267,6 @@ add_pbd_vox_entity(GameState *game_state,
 
 internal Entity *
 add_pbd_single_particle_entity(GameState *game_state, 
-                                MemoryArena *arena,
                                 v3d p, 
                                 v3d v,
                                 f32 inv_edge_stiffness, f32 inv_mass, v3 color, u32 flags)

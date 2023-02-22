@@ -10,7 +10,7 @@ struct GameState
     b32 is_initialized;
 
     // TODO(gh) Temp thing
-    LoadedVOXResult loaded_voxs[256];
+    LoadedVOXResult loaded_voxs[64];
     u32 loaded_vox_count;
 
     Entity *entities;
@@ -22,10 +22,14 @@ struct GameState
     Camera debug_camera;
     CircleCamera circle_camera;
 
+    // IMPORTANT(gh) Always make sure that we are recording a certain amount of
+    // frames, and it is hard to keep track of new memory allocations 
+    // happening within the frames - which means that we should preferably use
+    // this arenas as a temp memory or as something that we can use while 
+    // initializing thigs.
     MemoryArena render_arena;
     // NOTE(gh) Where all non permanent things should go inside
     MemoryArena transient_arena; 
-    MemoryArena pbd_arena;
 
     RandomSeries random_series;
 
