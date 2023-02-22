@@ -45,18 +45,50 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
 extern "C" 
 GAME_UPDATE_AND_RENDER(update_and_render)
 {
+    TranState *tran_state = (TranState *)platform_memory->transient_memory;
+    if(!tran_state->is_initialized)
+    {
+        // NOTE(gh) Should start AFTER the tran state!!
+        tran_state->transient_arena = start_memory_arena((u8 *)platform_memory->transient_memory + sizeof(TranState), 
+                                                        megabytes(512));
+
+        {
+        PlatformReadFileResult vox_file = platform_api->read_file("../data/3x3x3.vox");
+        tran_state->loaded_voxs[tran_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
+        }
+
+        {
+        PlatformReadFileResult vox_file = platform_api->read_file("../data/4x4x4.vox");
+        tran_state->loaded_voxs[tran_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
+        }
+
+        {
+        PlatformReadFileResult vox_file = platform_api->read_file("../data/5x5x5.vox");
+        tran_state->loaded_voxs[tran_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
+        }
+
+        {
+        PlatformReadFileResult vox_file = platform_api->read_file("../data/6x6x6.vox");
+        tran_state->loaded_voxs[tran_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
+        }
+
+        {
+        PlatformReadFileResult vox_file = platform_api->read_file("../data/8x8x8.vox");
+        tran_state->loaded_voxs[tran_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
+        }
+
+        load_game_assets(&tran_state->assets, &tran_state->transient_arena, platform_api, gpu_work_queue);
+
+        tran_state->is_initialized = true;
+    }
+
     GameState *game_state = (GameState *)platform_memory->permanent_memory;
+
     if(!game_state->is_initialized)
     {
         assert(platform_render_push_buffer->transient_buffer);
 
-        game_state->transient_arena = start_memory_arena(platform_memory->transient_memory, megabytes(512));
-
-        game_state->max_entity_count = 8192;
-        game_state->entities = push_array(&game_state->transient_arena, Entity, game_state->max_entity_count);
-
         // NOTE(gh) Initialize the arenas
-        game_state->render_arena = start_sub_arena(&game_state->transient_arena, megabytes(4));        
 
         game_state->game_camera = init_fps_camera(V3(0, -10, 22), 1.0f, 135, 1.0f, 1000.0f);
         game_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
@@ -104,104 +136,59 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #endif
         game_state->random_series = start_random_series(12312);
 
-        add_floor_entity(game_state, &game_state->transient_arena, V3(), V2(1000, 1000), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
+        add_floor_entity(game_state, V3(), V2(1000, 1000), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
-#if 0
-        add_pbd_cube_entity(game_state, &game_state->pbd_arena, 
-                            V3d(0, 0, 2), V3d(1, 1, 1), 
-                            V3d(0, 0, 0),
-                            0.f, 1/10.0f, V3(0, 0.2f, 1), EntityFlag_Movable|EntityFlag_Collides);
-#endif
-#if 0
         {
-            PlatformReadFileResult vox_file = platform_api->read_file("../data/chr_knight.vox");
-            game_state->loaded_voxs[game_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
-        }
-        {
-            PlatformReadFileResult vox_file = platform_api->read_file("../data/chr_sword.vox");
-            game_state->loaded_voxs[game_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
-        }
-#endif
-        {
-            PlatformReadFileResult vox_file = platform_api->read_file("../data/3x3x3.vox");
-            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
-
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
             add_pbd_vox_entity(game_state, 
-                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                             tran_state->loaded_voxs + 0,
                             V3d(1, 1, 3), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
                             EntityFlag_Movable|EntityFlag_Collides);
-
-            game_state->loaded_vox_count++;
         }
-#if 1
         {
-            PlatformReadFileResult vox_file = platform_api->read_file("../data/4x4x4.vox");
-            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
-
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
             add_pbd_vox_entity(game_state,  
-                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                             tran_state->loaded_voxs + 1,
                             V3d(-9, -9, 5), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
                             EntityFlag_Movable|EntityFlag_Collides);
-
-            game_state->loaded_vox_count++;
         }
-#endif
-#if 1
         {
-            PlatformReadFileResult vox_file = platform_api->read_file("../data/5x5x5.vox");
-            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
+
 
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
             add_pbd_vox_entity(game_state, 
-                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                             tran_state->loaded_voxs + 2,
                             V3d(3, 3, 12), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 50, 200)), color, 
                             EntityFlag_Movable|EntityFlag_Collides);
-
-            game_state->loaded_vox_count++;
         }
-#endif
-#if 1
         {
-            PlatformReadFileResult vox_file = platform_api->read_file("../data/6x6x6.vox");
-            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
-
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
             add_pbd_vox_entity(game_state,  
-                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                             tran_state->loaded_voxs + 3,
                             V3d(7, 7, 5), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
                             EntityFlag_Movable|EntityFlag_Collides);
-
-            game_state->loaded_vox_count++;
         }
-#endif
         {
-            PlatformReadFileResult vox_file = platform_api->read_file("../data/8x8x8.vox");
-            game_state->loaded_voxs[game_state->loaded_vox_count] = load_vox(vox_file.memory, vox_file.size);
-
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
                            random_between_0_1(&game_state->random_series));
             add_pbd_vox_entity(game_state, 
-                             game_state->loaded_voxs + game_state->loaded_vox_count,
+                             tran_state->loaded_voxs + 4,
                             V3d(-15, -15, 5), V3d(0, 0, 0),
                             0.f, 1.0f/(random_between(&game_state->random_series, 800, 1000)), color, 
                             EntityFlag_Movable|EntityFlag_Collides);
-            
-            game_state->loaded_vox_count++;
         }
 
 
@@ -217,10 +204,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                     fluid_cell_left_bottom_p, V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 
                                     fluid_cell_dim);
 #endif
-        load_game_assets(&game_state->assets, &game_state->transient_arena, platform_api, gpu_work_queue);
 
         game_state->is_initialized = true;
     }
+
 
     u64 size = sizeof(*game_state);
 
@@ -356,7 +343,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         u32 max_environment_constraint_count = 2048;
         TempMemory environment_constraint_memory = 
-            start_temp_memory(&game_state->transient_arena, 
+            start_temp_memory(&tran_state->transient_arena, 
                     sizeof(EnvironmentConstraint)*max_environment_constraint_count);
         EnvironmentConstraint *environment_constraints = 
             push_array(&environment_constraint_memory, EnvironmentConstraint, max_environment_constraint_count);
@@ -401,7 +388,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         u32 max_collision_constraint_count = 2048;
         TempMemory collision_constraint_memory = 
-            start_temp_memory(&game_state->transient_arena, 
+            start_temp_memory(&tran_state->transient_arena, 
                     sizeof(CollisionConstraint)*max_collision_constraint_count);
         CollisionConstraint *collision_constraints = 
             push_array(&collision_constraint_memory, CollisionConstraint, max_collision_constraint_count);
@@ -678,20 +665,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         end_temp_memory(&environment_constraint_memory);
     }
 
-
-    FluidCubeMAC *fluid_cube = &game_state->fluid_cube_mac;
-    // TODO(gh) Only a temporary thing, remove this when we move the whole fluid simluation to the GPU
-    platform_render_push_buffer->fluid_cube_v_x = &fluid_cube->v_x;
-    platform_render_push_buffer->fluid_cube_v_y = &fluid_cube->v_y;
-    platform_render_push_buffer->fluid_cube_v_z = &fluid_cube->v_z;
-    platform_render_push_buffer->fluid_cube_min = fluid_cube->min;
-    platform_render_push_buffer->fluid_cube_max = fluid_cube->max;
-    platform_render_push_buffer->fluid_cube_cell_count = fluid_cube->cell_count;
-    platform_render_push_buffer->fluid_cube_cell_dim = fluid_cube->cell_dim;
-    platform_render_push_buffer->fluid_cube_v_x_offset = clamp(0, (i32)((i64)fluid_cube->v_x_dest - (i64)fluid_cube->v_x_source), INT32_MAX);
-    platform_render_push_buffer->fluid_cube_v_y_offset = clamp(0, (i32)((i64)fluid_cube->v_y_dest - (i64)fluid_cube->v_y_source), INT32_MAX);
-    platform_render_push_buffer->fluid_cube_v_z_offset = clamp(0, (i32)((i64)fluid_cube->v_z_dest - (i64)fluid_cube->v_z_source), INT32_MAX);
-
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1
     m4x4 view = camera_transform(game_camera);
@@ -704,10 +677,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     // TODO(gh) Grid z is assumed to be 15(z+floor), and we need to be more conservative on these
     for(u32 grass_grid_index = 0;
-            grass_grid_index < game_state->grass_grid_count_x*game_state->grass_grid_count_y;
+            grass_grid_index < tran_state->grass_grid_count_x*tran_state->grass_grid_count_y;
             ++grass_grid_index)
     {
-        GrassGrid *grid = game_state->grass_grids + grass_grid_index;
+        GrassGrid *grid = tran_state->grass_grids + grass_grid_index;
 
         f32 z = 15.0f;
         // TODO(gh) This will not work if the grid was big enough to contain the frustum
@@ -752,7 +725,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
     // NOTE(gh) render entity start
     init_render_push_buffer(platform_render_push_buffer, render_camera, game_camera,
-            game_state->grass_grids, game_state->grass_grid_count_x, game_state->grass_grid_count_y, 
+            tran_state->grass_grids, tran_state->grass_grid_count_x, tran_state->grass_grid_count_y, 
             V3(), true);
     platform_render_push_buffer->enable_shadow = true;
     platform_render_push_buffer->enable_grass_rendering = true;
@@ -779,7 +752,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                           entity->generic_entity_info.position, entity->generic_entity_info.dim, entity->color, 
                           &entity->mesh_assetID,
                           AssetTag_FloorMesh,
-                          &game_state->assets);
+                          &tran_state->assets);
 #endif
             }break;
 
@@ -799,7 +772,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                                 V3(particle->p), particle->r*V3(1, 1, 1), entity->color, 
                                 0,
                                 AssetTag_SphereMesh,
-                                &game_state->assets);
+                                &tran_state->assets);
                     }
                 }
                 else
@@ -903,7 +876,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
 
         // TODO(gh) This prevents us from timing the game update and render loop itself 
-        output_debug_records(debug_platform_render_push_buffer, &game_state->assets, V2(0, 0));
+        output_debug_records(debug_platform_render_push_buffer, &tran_state->assets, V2(0, 0));
     }
     
     thread_work_queue->complete_all_thread_work_queue_items(thread_work_queue, true);

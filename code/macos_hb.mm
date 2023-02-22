@@ -988,6 +988,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)grid->grass_instance_data_buffer.handle, 0, 1);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &grid_info, sizeof(grid_info), 2);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &game_proj_view, sizeof(game_proj_view), 3);
+#if 0
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_x->handle, render_push_buffer->fluid_cube_v_x_offset, 4);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_y->handle, render_push_buffer->fluid_cube_v_y_offset, 5);
                 metal_set_compute_buffer(fill_grass_instance_compute_encoder, (id<MTLBuffer>)render_push_buffer->fluid_cube_v_z->handle, render_push_buffer->fluid_cube_v_z_offset, 6);
@@ -995,6 +996,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_max, sizeof(render_push_buffer->fluid_cube_max), 8);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_count, sizeof(render_push_buffer->fluid_cube_cell_count), 9);
                 metal_set_compute_bytes(fill_grass_instance_compute_encoder, &render_push_buffer->fluid_cube_cell_dim, sizeof(render_push_buffer->fluid_cube_cell_dim), 10);
+#endif
                 metal_set_compute_texture(fill_grass_instance_compute_encoder, render_context->wind_noise_texture.texture, 0);
 
                 metal_dispatch_compute_threads(fill_grass_instance_compute_encoder, V3u(grid->grass_count_x, grid->grass_count_y, 1), V3u(wavefront_x, wavefront_y, 1));

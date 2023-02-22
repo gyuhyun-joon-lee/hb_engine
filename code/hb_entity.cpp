@@ -24,7 +24,7 @@ add_entity(GameState *game_state, EntityType type, u32 flags)
 {
     Entity *entity = game_state->entities + game_state->entity_count++;
 
-    assert(game_state->entity_count <= game_state->max_entity_count);
+    assert(game_state->entity_count <= array_count(game_state->entities));
 
     entity->type = type;
     entity->flags = flags;
@@ -96,7 +96,7 @@ f32 cube_vertices[] =
 };
 
 internal Entity *
-add_floor_entity(GameState *game_state, MemoryArena *arena, v3 center, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count,
+add_floor_entity(GameState *game_state, v3 center, v2 dim, v3 color, u32 x_quad_count, u32 y_quad_count,
                  f32 max_height)
 {
     Entity *result = add_entity(game_state, EntityType_Floor, EntityFlag_Collides);

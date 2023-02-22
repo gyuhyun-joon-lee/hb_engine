@@ -5,17 +5,13 @@
 #ifndef HB_H
 #define HB_H
 
+// NOTE(gh) Things we have to preserve for the time machine
 struct GameState
 {
     b32 is_initialized;
 
-    // TODO(gh) Temp thing
-    LoadedVOXResult loaded_voxs[64];
-    u32 loaded_vox_count;
-
-    Entity *entities;
+    Entity entities[512];
     u32 entity_count;
-    u32 max_entity_count;
 
     // NOTE(gh) rendering related stuffs
     Camera game_camera;
@@ -28,24 +24,30 @@ struct GameState
     // this arenas as a temp memory or as something that we can use while 
     // initializing thigs.
     MemoryArena render_arena;
-    // NOTE(gh) Where all non permanent things should go inside
-    MemoryArena transient_arena; 
+    MemoryArena entity_arena;
 
     RandomSeries random_series;
+
+    PBDParticlePool particle_pool;
+};
+
+// NOTE(gh) Things we don't need to preserve
+struct TranState
+{
+    b32 is_initialized;
 
     GrassGrid *grass_grids;
     u32 grass_grid_count_x;
     u32 grass_grid_count_y;
 
-    FluidCubeMAC fluid_cube_mac;
+    // TODO(gh) Temp thing
+    LoadedVOXResult loaded_voxs[64];
+    u32 loaded_vox_count;
+
+    // NOTE(gh) Where all non permanent things should go inside
+    MemoryArena transient_arena; 
 
     GameAssets assets;
-
-    PBDParticlePool particle_pool;
-
-    // TODO(gh) More structured light information
-
-    // TODO(gh) some sort of asset system
 };
 
 #endif

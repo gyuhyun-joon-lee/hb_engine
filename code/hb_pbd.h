@@ -37,7 +37,7 @@ struct PBDParticlePool
     // TODO(gh) Probably not a good idea, 
     // but works well with the time machine, since the game state is the 
     // one who are holding the particle pool
-    PBDParticle particles[4096];
+    PBDParticle particles[2048];
     u32 count;
 };
 
