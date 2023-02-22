@@ -50,7 +50,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         // NOTE(gh) Should start AFTER the tran state!!
         tran_state->transient_arena = start_memory_arena((u8 *)platform_memory->transient_memory + sizeof(TranState), 
-                                                        megabytes(512));
+                                                        gigabytes(1));
 
         {
         PlatformReadFileResult vox_file = platform_api->read_file("../data/3x3x3.vox");
@@ -77,6 +77,19 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         tran_state->loaded_voxs[tran_state->loaded_vox_count++] = load_vox(vox_file.memory, vox_file.size);
         }
 
+        tran_state->game_camera = init_fps_camera(V3(0, -10, 22), 1.0f, 135, 1.0f, 1000.0f);
+        tran_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
+
+        // 30 seconds worth of frames
+        tran_state->max_saved_game_state_count = round_f32_to_u32(1.0f/platform_input->dt_per_frame) * 30;
+        tran_state->saved_game_states = push_array(&tran_state->transient_arena, GameState, tran_state->max_saved_game_state_count);
+        tran_state->saved_game_state_read_cursor = 0;
+        tran_state->saved_game_state_write_cursor = 0;
+        tran_state->is_wrapped = false;
+
+        tran_state->max_pbd_substep_count = 32;
+        tran_state->remaining_pbd_substep_count = tran_state->max_pbd_substep_count*1*60;
+
         load_game_assets(&tran_state->assets, &tran_state->transient_arena, platform_api, gpu_work_queue);
 
         tran_state->is_initialized = true;
@@ -88,16 +101,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         assert(platform_render_push_buffer->transient_buffer);
 
-        // NOTE(gh) Initialize the arenas
-
-        game_state->game_camera = init_fps_camera(V3(0, -10, 22), 1.0f, 135, 1.0f, 1000.0f);
-        game_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
-        // Close camera
-        // game_state->circle_camera = init_circle_camera(V3(0, 0, 5), V3(), 5.0f, 135, 0.01f, 10000.0f);
-        // Far away camera
-        game_state->circle_camera = init_circle_camera(V3(0, 0, 20), V3(), 20.0f, 135, 0.01f, 10000.0f);
-        // Really far away camera
-        // game_state->circle_camera = init_circle_camera(V3(0, 0, 50), V3(), 50.0f, 135, 0.01f, 10000.0f);
 
 #if 0
         v2 grid_dim = V2(80, 80); // TODO(gh) just temporary, need to 'gather' the floors later
@@ -209,10 +212,24 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 
 
-    u64 size = sizeof(*game_state);
+    u64 game_state_size = sizeof(*game_state);
+    u64 tran_state_size = sizeof(*tran_state);
+    u64 entity_size = sizeof(game_state->entities);
+    u64 particle_pool_size = sizeof(game_state->particle_pool);
 
-    Camera *game_camera = &game_state->game_camera;
-    Camera *debug_camera = &game_state->debug_camera;
+    // Time machine start
+#if HB_SLOW
+    tran_state->saved_game_states[tran_state->saved_game_state_write_cursor++] = *game_state;
+
+    if(tran_state->saved_game_state_write_cursor >= tran_state->max_saved_game_state_count)
+    {
+        tran_state->saved_game_state_write_cursor = 0;
+        tran_state->is_wrapped = true;
+    }
+#endif
+
+    Camera *game_camera = &tran_state->game_camera;
+    Camera *debug_camera = &tran_state->debug_camera;
 
     Camera *render_camera = game_camera;
     //render_camera = debug_camera;
@@ -334,12 +351,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     */
 
     // TODO(gh) Need to think about how many sub step we need!
-    u32 substep_count = 64;
-    f64 sub_dt = (f64)platform_input->dt_per_frame/(f64)substep_count;
+    f64 sub_dt = (f64)platform_input->dt_per_frame/(f64)tran_state->max_pbd_substep_count;
     f64 sub_dt_square = square(sub_dt);
-    for(u32 substep_index = 0;
-            substep_index < substep_count;
-            ++substep_index)
+    for(u32 i = 0;
+        (i < tran_state->max_pbd_substep_count) && (tran_state->remaining_pbd_substep_count-- > 0);
+        ++i)
     {
         u32 max_environment_constraint_count = 2048;
         TempMemory environment_constraint_memory = 
