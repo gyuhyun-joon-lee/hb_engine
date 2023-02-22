@@ -588,10 +588,10 @@ end_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer)
 }
 
 internal void
-render_all_entities(PlatformRenderPushBuffer *platform_render_push_buffer, 
-                    GameState *game_state, GameAssets *game_assets)
+render_all_entities(PlatformRenderPushBuffer *render_push_buffer, 
+                    GameState *game_state, GameAssets *game_assets,
+                    b32 draw_particles, b32 draw_v_vector)
 {
-    b32 draw_particles = true;
     for(u32 entity_index = 0;
         entity_index < game_state->entity_count;
         ++entity_index)
@@ -602,7 +602,7 @@ render_all_entities(PlatformRenderPushBuffer *platform_render_push_buffer,
             case EntityType_Floor:
             {
                 // TODO(gh) Don't pass mesh asset ID!!!
-                push_mesh_pn(platform_render_push_buffer, 
+                push_mesh_pn(render_push_buffer, 
                           entity->generic_entity_info.position, entity->generic_entity_info.dim, entity->color, 
                           &entity->mesh_assetID,
                           AssetTag_FloorMesh,
@@ -621,11 +621,20 @@ render_all_entities(PlatformRenderPushBuffer *platform_render_push_buffer,
                     {
                         PBDParticle *particle = group->particles + particle_index;
 
-                        push_mesh_pn(platform_render_push_buffer, 
-                                V3(particle->p), particle->r*V3(1, 1, 1), entity->color, 
+                        v3 p = V3(particle->p);
+                        v3 v = V3(particle->v);
+
+                        push_mesh_pn(render_push_buffer, 
+                                p, particle->r*V3(1, 1, 1), entity->color, 
                                 0,
                                 AssetTag_SphereMesh,
                                 game_assets);
+
+                        v3 normalized_v = normalize(v);
+                        f32 line_length = 1.0f;
+                        v3 line_start = p + particle->r*normalized_v;
+                        v3 line_end = line_start + line_length * v;
+                        push_line(render_push_buffer, line_start, line_end, V3(0.8f, 0.2f, 0.5f));
                     }
                 }
                 else

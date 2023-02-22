@@ -81,7 +81,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         tran_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
 
         // 30 seconds worth of frames
-        tran_state->max_saved_game_state_count = round_f32_to_u32(1.0f/platform_input->dt_per_frame) * 3;
+        tran_state->max_saved_game_state_count = round_f32_to_u32(1.0f/platform_input->dt_per_frame) * 30;
         tran_state->saved_game_states = push_array(&tran_state->transient_arena, GameState, tran_state->max_saved_game_state_count);
         tran_state->saved_game_state_read_cursor = 0;
         tran_state->saved_game_state_write_cursor = 0;
@@ -216,7 +216,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     u64 tran_state_size = sizeof(*tran_state);
     u64 entity_size = sizeof(game_state->entities);
     u64 particle_pool_size = sizeof(game_state->particle_pool);
-
 
     Camera *game_camera = &tran_state->game_camera;
     Camera *debug_camera = &tran_state->debug_camera;
@@ -845,7 +844,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     }
 #endif
 
-    render_all_entities(platform_render_push_buffer, game_state, &tran_state->assets);
+    render_all_entities(platform_render_push_buffer, game_state, &tran_state->assets, true, true);
 
     if(debug_platform_render_push_buffer)
     {

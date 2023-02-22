@@ -1351,7 +1351,6 @@ macos_load_game_code(MacOSGameCode *game_code, char *file_name)
     }
 }
 
-
 int main(void)
 { 
     // srand(time(NULL));
