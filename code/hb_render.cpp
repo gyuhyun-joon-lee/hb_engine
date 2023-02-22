@@ -587,6 +587,58 @@ end_instanced_rendering(PlatformRenderPushBuffer *render_push_buffer)
     render_push_buffer->recording_instanced_rendering = false;
 }
 
+internal void
+render_all_entities(PlatformRenderPushBuffer *platform_render_push_buffer, 
+                    GameState *game_state, GameAssets *game_assets)
+{
+    b32 draw_particles = true;
+    for(u32 entity_index = 0;
+        entity_index < game_state->entity_count;
+        ++entity_index)
+    {
+        Entity *entity = game_state->entities + entity_index;
+        switch(entity->type)
+        {
+            case EntityType_Floor:
+            {
+                // TODO(gh) Don't pass mesh asset ID!!!
+                push_mesh_pn(platform_render_push_buffer, 
+                          entity->generic_entity_info.position, entity->generic_entity_info.dim, entity->color, 
+                          &entity->mesh_assetID,
+                          AssetTag_FloorMesh,
+                          game_assets);
+            }break;
+
+            case EntityType_PBD:
+            {
+                PBDParticleGroup *group = &entity->particle_group;
+
+                if(draw_particles)
+                {
+                    for(u32 particle_index = 0;
+                            particle_index < group->count;
+                            ++particle_index)
+                    {
+                        PBDParticle *particle = group->particles + particle_index;
+
+                        push_mesh_pn(platform_render_push_buffer, 
+                                V3(particle->p), particle->r*V3(1, 1, 1), entity->color, 
+                                0,
+                                AssetTag_SphereMesh,
+                                game_assets);
+                    }
+                }
+                else
+                {
+                    // TODO(gh) Instead of arbitrary mesh, push mesh pn 
+                    // using the rotation matrix(or quaternion) which can be extracted from
+                    // the polar decomposition
+                }
+            }break;
+        }
+    }
+}
+
 
 
 

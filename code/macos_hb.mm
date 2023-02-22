@@ -173,10 +173,9 @@ display_link_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* current_t
 }
 
 internal void
-register_platform_key_input(PlatformKey *key, b32 is_down, b32 was_down)
+register_platform_key_input(PlatformInput *input, PlatformKeyID ID, b32 is_down)
 {
-    key->is_down = is_down;
-    key->was_down = was_down;
+    input->keys[ID].is_down = is_down;
 }
 
 internal void
@@ -260,59 +259,62 @@ macos_handle_event(NSApplication *app, NSWindow *window, PlatformInput *platform
                         }
                         else if(key_code == kVK_ANSI_W)
                         {
-                            register_platform_key_input(&platform_input->move_up, is_down, was_down);
+                            register_platform_key_input(platform_input, PlatformKeyID_MoveUp, is_down);
                         }
                         else if(key_code == kVK_ANSI_A)
                         {
-                            register_platform_key_input(&platform_input->move_left, is_down, was_down);
+                            register_platform_key_input(platform_input, PlatformKeyID_MoveLeft, is_down);
                         }
                         else if(key_code == kVK_ANSI_S)
                         {
-                            register_platform_key_input(&platform_input->move_down, is_down, was_down);
+                            register_platform_key_input(platform_input, PlatformKeyID_MoveDown, is_down);
                         }
                         else if(key_code == kVK_ANSI_D)
                         {
-                            register_platform_key_input(&platform_input->move_right, is_down, was_down);
-                        }
-
-                        else if(key_code == kVK_ANSI_I)
-                        {
-                            register_platform_key_input(&platform_input->action_up, is_down, was_down);
-                        }
-                        else if(key_code == kVK_ANSI_J)
-                        {
-                            register_platform_key_input(&platform_input->action_left, is_down, was_down);
-                        }
-                        else if(key_code == kVK_ANSI_K)
-                        {
-                            register_platform_key_input(&platform_input->action_down, is_down, was_down);
-                        }
-                        else if(key_code == kVK_ANSI_L)
-                        {
-                            register_platform_key_input(&platform_input->action_right, is_down, was_down);
+                            register_platform_key_input(platform_input, PlatformKeyID_MoveRight, is_down);
                         }
 
                         else if(key_code == kVK_LeftArrow)
                         {
-                            register_platform_key_input(&platform_input->action_left, is_down, was_down);
+                            register_platform_key_input(platform_input, PlatformKeyID_ActionLeft, is_down);
                         }
                         else if(key_code == kVK_RightArrow)
                         {
-                            register_platform_key_input(&platform_input->action_right, is_down, was_down);
+                            register_platform_key_input(platform_input, PlatformKeyID_ActionRight, is_down);
                         }
                         else if(key_code == kVK_UpArrow)
                         {
-                            register_platform_key_input(&platform_input->action_up, is_down, was_down);
+                            register_platform_key_input(platform_input, PlatformKeyID_ActionUp, is_down);
                         }
                         else if(key_code == kVK_DownArrow)
                         {
-                            register_platform_key_input(&platform_input->action_down, is_down, was_down);
+                            register_platform_key_input(platform_input, PlatformKeyID_ActionDown, is_down);
+                        }
+
+                        else if(key_code == kVK_ANSI_P)
+                        {
+                            register_platform_key_input(platform_input, PlatformKeyID_ToggleSimulation, is_down);
+                        }
+                        else if(key_code == kVK_ANSI_L)
+                        {
+                            register_platform_key_input(platform_input, PlatformKeyID_AdvanceSubstep, is_down);
+                        }
+                        else if(key_code == kVK_ANSI_K)
+                        {
+                            register_platform_key_input(platform_input, PlatformKeyID_FallbackSubstep, is_down);
+                        }
+                        else if(key_code == kVK_ANSI_O)
+                        {
+                            register_platform_key_input(platform_input, PlatformKeyID_AdvanceFrame, is_down);
+                        }
+                        else if(key_code == kVK_ANSI_I)
+                        {
+                            register_platform_key_input(platform_input, PlatformKeyID_FallbackFrame, is_down);
                         }
 
                         else if(key_code == kVK_Space)
                         {
-                            register_platform_key_input(&platform_input->space, is_down, was_down);
-                            printf("%d, isDown : %d, WasDown : %d\n", key_code, platform_input->space.is_down, platform_input->space.was_down);
+                            register_platform_key_input(platform_input, PlatformKeyID_Shoot, is_down);
                         }
 
                         else if(key_code == kVK_Return)
@@ -1990,44 +1992,55 @@ int main(void)
                 }
                 metal_display(&metal_render_context);
 
-                u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
-                u32 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
-                f32 time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
-                if(time_passed_in_nsec < target_nano_seconds_per_frame)
-                {
-                    // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
-                    // we need to undersleep and spend time in a loop
-                    u64 undersleep_nano_seconds = target_nano_seconds_per_frame / 5;
-                    if(time_passed_in_nsec + undersleep_nano_seconds < target_nano_seconds_per_frame)
-                    {
-                        timespec time_spec = {};
-                        time_spec.tv_nsec = target_nano_seconds_per_frame - time_passed_in_nsec -  undersleep_nano_seconds;
 
-                        nanosleep(&time_spec, 0);
-                    }
-
-                    // For a short period of time, loop
-                    time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
-                    while(time_passed_in_nsec < target_nano_seconds_per_frame)
-                    {
-                        time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
-                    }
-                    time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
-                    time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
-                }
-                else
-                {
-                    // TODO : Missed Frame!
-                    // TODO(gh) : Whenever we miss the frame re-sync with the display link
-                    // printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
-                }
-
-                time_elasped_from_start += target_seconds_per_frame;
-                printf("%dms elasped, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
-                // printf("CPU:%llu, GPU:%llu\n", metal_render_context.grass_rendering_end_timestamp.cpu - metal_render_context.grass_rendering_start_timestamp.cpu,
-                                             // metal_render_context.grass_rendering_end_timestamp.gpu - metal_render_context.grass_rendering_start_timestamp.gpu);
             }
 
+            // NOTE(gh) Copy the current input to the old input, 
+            // so that we can register key_down, key_hold, key_up
+            for(u32 key_index = 0;
+                    key_index < array_count(platform_input.keys);
+                    ++key_index)
+            {
+                PlatformKey *key = platform_input.keys + key_index;
+                key->was_down = key->is_down;
+            }
+
+            u64 time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+            u32 time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
+            f32 time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
+            if(time_passed_in_nsec < target_nano_seconds_per_frame)
+            {
+                // NOTE(gh): Because nanosleep is such a high resolution sleep method, for precise timing,
+                // we need to undersleep and spend time in a loop
+                u64 undersleep_nano_seconds = target_nano_seconds_per_frame / 5;
+                if(time_passed_in_nsec + undersleep_nano_seconds < target_nano_seconds_per_frame)
+                {
+                    timespec time_spec = {};
+                    time_spec.tv_nsec = target_nano_seconds_per_frame - time_passed_in_nsec -  undersleep_nano_seconds;
+
+                    nanosleep(&time_spec, 0);
+                }
+
+                // For a short period of time, loop
+                time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+                while(time_passed_in_nsec < target_nano_seconds_per_frame)
+                {
+                    time_passed_in_nsec = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - last_time;
+                }
+                time_passed_in_msec = (u32)(time_passed_in_nsec / sec_to_millisec);
+                time_passed_in_sec = (f32)time_passed_in_nsec / sec_to_nanosec;
+            }
+            else
+            {
+                // TODO : Missed Frame!
+                // TODO(gh) : Whenever we miss the frame re-sync with the display link
+                // printf("Missed frame, exceeded by %dms(%.6fs)!\n", time_passed_in_msec, time_passed_in_sec);
+            }
+
+            time_elasped_from_start += target_seconds_per_frame;
+            printf("%dms elasped, fps : %.6f\n", time_passed_in_msec, 1.0f/time_passed_in_sec);
+            // printf("CPU:%llu, GPU:%llu\n", metal_render_context.grass_rendering_end_timestamp.cpu - metal_render_context.grass_rendering_start_timestamp.cpu,
+                                             // metal_render_context.grass_rendering_end_timestamp.gpu - metal_render_context.grass_rendering_start_timestamp.gpu);
             // update the time stamp
             last_time = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
         }

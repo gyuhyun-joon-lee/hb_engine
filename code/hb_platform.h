@@ -44,27 +44,60 @@ struct PlatformAPI
 
 struct PlatformKey
 {
+    // NOTE(gh) was_down will copy from is_down at the end of the frame,
+    // which solves the granurarity of the keyboard event not being good enough. 
     b32 is_down;
     b32 was_down;
 };
 
+enum PlatformKeyID
+{
+    PlatformKeyID_MoveUp,
+    PlatformKeyID_MoveDown,
+    PlatformKeyID_MoveLeft,
+    PlatformKeyID_MoveRight,
+
+    PlatformKeyID_ActionUp,
+    PlatformKeyID_ActionDown,
+    PlatformKeyID_ActionLeft,
+    PlatformKeyID_ActionRight,
+
+    PlatformKeyID_Shoot,
+
+    PlatformKeyID_ToggleSimulation,
+    PlatformKeyID_AdvanceSubstep,
+    PlatformKeyID_FallbackSubstep,
+    PlatformKeyID_AdvanceFrame,
+    PlatformKeyID_FallbackFrame,
+};
+
 struct PlatformInput
 {
-    PlatformKey move_up;
-    PlatformKey move_down;
-    PlatformKey move_left;
-    PlatformKey move_right;
-
-    PlatformKey action_up;
-    PlatformKey action_down;
-    PlatformKey action_left;
-    PlatformKey action_right;
+    // NOTE(gh) 256 is a random number that is big enough to hold most of the keys,
+    // but the keys that are actually being used are the ones that have effective enum ID
+    PlatformKey keys[256];
 
     PlatformKey space;
 
     f32 dt_per_frame;
     f32 time_elasped_from_start;
 };
+
+inline b32
+is_key_pressed(PlatformInput *platform_input, PlatformKeyID ID)
+{
+    b32 result = platform_input->keys[ID].is_down && !platform_input->keys[ID].was_down;
+
+    return result;
+}
+
+inline b32
+is_key_down(PlatformInput *platform_input, PlatformKeyID ID)
+{
+    b32 result = platform_input->keys[ID].is_down;
+
+    return result;
+}
 
 // TODO(gh) Make this string to be similar to what Casey has done in his HH project
 // which is non-null terminated string with the size

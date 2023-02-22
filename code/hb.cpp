@@ -81,14 +81,15 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         tran_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
 
         // 30 seconds worth of frames
-        tran_state->max_saved_game_state_count = round_f32_to_u32(1.0f/platform_input->dt_per_frame) * 30;
+        tran_state->max_saved_game_state_count = round_f32_to_u32(1.0f/platform_input->dt_per_frame) * 3;
         tran_state->saved_game_states = push_array(&tran_state->transient_arena, GameState, tran_state->max_saved_game_state_count);
         tran_state->saved_game_state_read_cursor = 0;
         tran_state->saved_game_state_write_cursor = 0;
-        tran_state->is_wrapped = false;
+        tran_state->has_entire_buffer_filled_at_least_once = false;
 
         tran_state->max_pbd_substep_count = 32;
-        tran_state->remaining_pbd_substep_count = tran_state->max_pbd_substep_count*1*60;
+        tran_state->remaining_pbd_substep_count = tran_state->max_pbd_substep_count*50*60;
+        tran_state->is_simulating_in_realtime = true;
 
         load_game_assets(&tran_state->assets, &tran_state->transient_arena, platform_api, gpu_work_queue);
 
@@ -211,22 +212,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         game_state->is_initialized = true;
     }
 
-
     u64 game_state_size = sizeof(*game_state);
     u64 tran_state_size = sizeof(*tran_state);
     u64 entity_size = sizeof(game_state->entities);
     u64 particle_pool_size = sizeof(game_state->particle_pool);
 
-    // Time machine start
-#if HB_SLOW
-    tran_state->saved_game_states[tran_state->saved_game_state_write_cursor++] = *game_state;
-
-    if(tran_state->saved_game_state_write_cursor >= tran_state->max_saved_game_state_count)
-    {
-        tran_state->saved_game_state_write_cursor = 0;
-        tran_state->is_wrapped = true;
-    }
-#endif
 
     Camera *game_camera = &tran_state->game_camera;
     Camera *debug_camera = &tran_state->debug_camera;
@@ -250,19 +240,19 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     v3 camera_up = normalize(cross(camera_right, camera_dir)); 
 
     f32 camera_rotation_speed = 3.0f * platform_input->dt_per_frame;
-    if(platform_input->action_up.is_down)
+    if(is_key_down(platform_input, PlatformKeyID_ActionUp))
     {
         camera_rotation += camera_rotation_speed * camera_right;
     }
-    if(platform_input->action_down.is_down)
+    if(is_key_down(platform_input, PlatformKeyID_ActionDown))
     {
         camera_rotation -= camera_rotation_speed * camera_right;
     }
-    if(platform_input->action_left.is_down)
+    if(is_key_down(platform_input, PlatformKeyID_ActionLeft))
     {
         camera_rotation += camera_rotation_speed * V3(0, 0, 1);
     }
-    if(platform_input->action_right.is_down)
+    if(is_key_down(platform_input, PlatformKeyID_ActionRight))
     {
         camera_rotation -= camera_rotation_speed * V3(0, 0, 1);
     }
@@ -276,40 +266,115 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
 #if 1
     f32 camera_speed = 15.0f * platform_input->dt_per_frame;
-    if(platform_input->move_up.is_down)
+    if(is_key_down(platform_input, PlatformKeyID_MoveUp))
     {
         render_camera->p += camera_speed*camera_dir;
     }
-    if(platform_input->move_down.is_down)
+    if(is_key_down(platform_input, PlatformKeyID_MoveDown))
     {
         render_camera->p -= camera_speed*camera_dir;
     }
-    if(platform_input->move_right.is_down)
+    if(is_key_down(platform_input, PlatformKeyID_MoveRight))
     {
         render_camera->p += camera_speed*camera_right;
     }
-    if(platform_input->move_left.is_down)
+    if(is_key_down(platform_input, PlatformKeyID_MoveLeft))
     {
         render_camera->p += -camera_speed*camera_right;
     }
 #endif
 
-    // TODO(gh) Remove this!
-    local_persist b32 can_shoot = true;
-
-    if(platform_input->space.is_down && can_shoot)
+    // TODO(gh) It's really hard to keep track of which code should run or not
+    // depending on whether the game is being simulated or not...
+    if(tran_state->is_simulating_in_realtime)
     {
-        add_pbd_single_particle_entity(game_state, 
-                                        V3d(render_camera->p), V3d(50*camera_dir), 
-                                        0.0f, 1.0f/10.0f, V3(0, 1, 0), EntityFlag_Movable|EntityFlag_Collides);
+        tran_state->saved_game_states[tran_state->saved_game_state_write_cursor++] = *game_state;
+        if(tran_state->saved_game_state_write_cursor >= tran_state->max_saved_game_state_count)
+        {
+            tran_state->saved_game_state_write_cursor = 0;
+            tran_state->has_entire_buffer_filled_at_least_once = true;
+        }
+        tran_state->remaining_pbd_substep_count = tran_state->max_pbd_substep_count;
 
-        can_shoot = false;
+        if(is_key_pressed(platform_input, PlatformKeyID_Shoot))
+        {
+            add_pbd_single_particle_entity(game_state, 
+                                            V3d(render_camera->p), V3d(50*camera_dir), 
+                                            0.0f, 1.0f/10.0f, V3(0, 1, 0), EntityFlag_Movable|EntityFlag_Collides);
+        }
+
+        if(is_key_pressed(platform_input, PlatformKeyID_ToggleSimulation))
+        {
+            // Pause the simulation
+
+            tran_state->saved_game_state_read_cursor = tran_state->saved_game_state_write_cursor - 1;
+            tran_state->remaining_pbd_substep_count = 0;
+            tran_state->is_simulating_in_realtime = false;
+        }
     }
-
-    if(!platform_input->space.is_down)
+    else // not simulating
     {
-        can_shoot = true;
+#if HB_SLOW
+        if(is_key_pressed(platform_input, PlatformKeyID_ToggleSimulation))
+        {
+            // Resume the simulation
+
+            // TODO(gh) This will get set in next frame anyway, so might be an overkill
+            // to initialize it here once more
+            tran_state->remaining_pbd_substep_count = tran_state->max_pbd_substep_count;
+            // NOTE(gh) We reset the write & read cursor, so that no weird time overlapping happens 
+            tran_state->saved_game_state_write_cursor = 0;
+            tran_state->saved_game_state_read_cursor = 0;
+            tran_state->has_entire_buffer_filled_at_least_once = false;
+            tran_state->is_simulating_in_realtime = true;
+        }
+
+        if(is_key_down(platform_input, PlatformKeyID_FallbackFrame))
+        {
+            if(tran_state->has_entire_buffer_filled_at_least_once)
+            {
+                if(tran_state->saved_game_state_read_cursor >= tran_state->max_saved_game_state_count)
+                {
+                    tran_state->saved_game_state_read_cursor = tran_state->max_saved_game_state_count-1;
+                }
+            }
+            else
+            {
+                if(tran_state->saved_game_state_read_cursor >= tran_state->saved_game_state_write_cursor)
+                {
+                    tran_state->saved_game_state_read_cursor = tran_state->saved_game_state_write_cursor-1;
+                }
+            }
+
+            *game_state = tran_state->saved_game_states[tran_state->saved_game_state_read_cursor--];
+        }
+
+        if(is_key_down(platform_input, PlatformKeyID_AdvanceFrame))
+        {
+            if(tran_state->has_entire_buffer_filled_at_least_once)
+            {
+                if(tran_state->saved_game_state_read_cursor >= tran_state->max_saved_game_state_count)
+                {
+                    tran_state->saved_game_state_read_cursor = 0;
+                }
+            }
+            else
+            {
+                if(tran_state->saved_game_state_read_cursor >= tran_state->saved_game_state_write_cursor)
+                {
+                    tran_state->saved_game_state_read_cursor = 0;
+                }
+            }
+
+            *game_state = tran_state->saved_game_states[tran_state->saved_game_state_read_cursor++];
+        }
+
+        if(is_key_down(platform_input, PlatformKeyID_AdvanceSubstep))
+        {
+            tran_state->remaining_pbd_substep_count = 1;
+        }
     }
+#endif
 
     /*
        NOTE(gh) A little bit about how PBD works
@@ -739,6 +804,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
+    GameState *game_state0 = tran_state->saved_game_states;
+    GameState *game_state1 = tran_state->saved_game_states + 1;
+
     // NOTE(gh) render entity start
     init_render_push_buffer(platform_render_push_buffer, render_camera, game_camera,
             tran_state->grass_grids, tran_state->grass_grid_count_x, tran_state->grass_grid_count_y, 
@@ -752,54 +820,32 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     0, 0, 0, V3(), false);
     }
 
-    b32 draw_particles = true;
-    for(u32 entity_index = 0;
-        entity_index < game_state->entity_count;
-        ++entity_index)
+#if 0
+    // NOTE(gh) Render all saved game states, especially the particles
+    if(!tran_state->is_simulating_in_realtime)
     {
-        Entity *entity = game_state->entities + entity_index;
-        switch(entity->type)
+        u32 one_past_last_index = 0;
+        if(tran_state->has_entire_buffer_filled_at_least_once)
         {
-            case EntityType_Floor:
-            {
-#if 1
-                // TODO(gh) Don't pass mesh asset ID!!!
-                push_mesh_pn(platform_render_push_buffer, 
-                          entity->generic_entity_info.position, entity->generic_entity_info.dim, entity->color, 
-                          &entity->mesh_assetID,
-                          AssetTag_FloorMesh,
-                          &tran_state->assets);
-#endif
-            }break;
+            one_past_last_index = tran_state->max_saved_game_state_count;
+        }
+        else
+        {
+            one_past_last_index = tran_state->saved_game_state_write_cursor;
+        }
 
-            case EntityType_PBD:
-            {
-                PBDParticleGroup *group = &entity->particle_group;
-
-                if(draw_particles)
-                {
-                    for(u32 particle_index = 0;
-                            particle_index < group->count;
-                            ++particle_index)
-                    {
-                        PBDParticle *particle = group->particles + particle_index;
-
-                        push_mesh_pn(platform_render_push_buffer, 
-                                V3(particle->p), particle->r*V3(1, 1, 1), entity->color, 
-                                0,
-                                AssetTag_SphereMesh,
-                                &tran_state->assets);
-                    }
-                }
-                else
-                {
-                    // TODO(gh) Instead of arbitrary mesh, push mesh pn 
-                    // using the rotation matrix(or quaternion) which can be extracted from
-                    // the polar decomposition
-                }
-            }break;
+        // TODO(gh) This doesn't care about the 'order' now,
+        // but we wanna differentiate the color based on the order later!!
+        for(u32 game_state_index = 0;
+                game_state_index < 5;
+                ++game_state_index)
+        {
+            render_all_entities(platform_render_push_buffer, tran_state->saved_game_states + game_state_index, &tran_state->assets);
         }
     }
+#endif
+
+    render_all_entities(platform_render_push_buffer, game_state, &tran_state->assets);
 
     if(debug_platform_render_push_buffer)
     {

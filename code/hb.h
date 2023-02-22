@@ -31,6 +31,8 @@ struct TranState
 {
     b32 is_initialized;
 
+    b32 is_simulating_in_realtime;
+
     u32 max_pbd_substep_count;
     // NOTE(gh) In realtime, this would be like max_pbd_substep_count in maximum.
     // In time machine, this will be 1 and be replenished when the user presses the key or something.
@@ -53,11 +55,14 @@ struct TranState
 
     GameAssets assets;
 
+    // TODO(gh) Would it be possible to collapse the 'active' game state
+    // and all these save files by just having a pointer that moves one by one 
+    // like write cursor
     GameState *saved_game_states;
     u32 max_saved_game_state_count;
     u32 saved_game_state_read_cursor; // Will be starting from the write cursor, and decrement by 1
     u32 saved_game_state_write_cursor; // When the time machine starts, we will going to start the read cursor from the write cursor
-    b32 is_wrapped;
+    b32 has_entire_buffer_filled_at_least_once; // whether the entire buffer has ben fulled at least once, and the write cursor has wrapped
 };
 
 #endif
