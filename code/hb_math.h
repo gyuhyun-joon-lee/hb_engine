@@ -803,7 +803,7 @@ norm(v4 a)
 }
 
 inline v4
-operator+(v4 &a, v4 &b)
+operator+(const v4 &a, const v4 &b)
 {
     v4 result = {};
 
@@ -816,7 +816,7 @@ operator+(v4 &a, v4 &b)
 }
 
 inline v4
-operator-(v4 &a, v4 &b)
+operator-(const v4 &a, const v4 &b)
 {
     v4 result = {};
 
@@ -829,7 +829,7 @@ operator-(v4 &a, v4 &b)
 }
 
 inline v4
-operator*(f32 value, v4 &a)
+operator*(f32 value, const v4 &a)
 {
     v4 result = {};
 
@@ -848,6 +848,240 @@ operator*=(v4 &a, f32 value)
     a.y *= value;
     a.z *= value;
     a.w *= value;
+
+    return a;
+}
+
+inline v9
+V9(void)
+{
+    v9 result = {};
+    return result;
+}
+
+inline v9
+V9(f32 e0, f32 e1, f32 e2,
+    f32 e3, f32 e4, f32 e5,
+    f32 e6, f32 e7, f32 e8)
+{
+    v9 result = {};
+
+    result.e0 = e0;
+    result.e1 = e1;
+    result.e2 = e2;
+    result.e3 = e3;
+    result.e4 = e4;
+    result.e5 = e5;
+    result.e6 = e6;
+    result.e7 = e7;
+    result.e8 = e8;
+
+    return result;
+}
+
+inline f32
+dot(const v9 &a, const v9 &b)
+{
+    f32 result = 0;
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result += a.e[i]*b.e[i];
+    }
+
+    return result;
+}
+
+inline v9
+operator/(v9 &a, f32 value)
+{
+    v9 result = {};
+
+    f32 one_over_value = 1.0f/value;
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result.e[i] *= one_over_value;
+    }
+
+    return result;
+}
+
+inline v9
+operator+(const v9 &a, const v9 &b)
+{
+    v9 result = {};
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result.e[i] = a.e[i]+b.e[i];
+    }
+
+    return result;
+}
+
+inline v9
+operator-(const v9 &a, const v9 &b)
+{
+    v9 result = {};
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result.e[i] = a.e[i]-b.e[i];
+    }
+
+    return result;
+}
+
+inline v9
+operator*(f32 value, const v9 &a)
+{
+    v9 result = {};
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result.e[i] = value*a.e[i];
+    }
+
+    return result;
+}
+
+inline v9&
+operator*=(v9 &a, f32 value)
+{
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        a.e[i] *= value;
+    }
+
+    return a;
+}
+
+inline v9d
+V9d(void)
+{
+    v9d result = {};
+    return result;
+}
+
+inline v9d
+V9d(f32 e0, f32 e1, f32 e2,
+    f32 e3, f32 e4, f32 e5,
+    f32 e6, f32 e7, f32 e8)
+{
+    v9d result = {};
+
+    result.e0 = e0;
+    result.e1 = e1;
+    result.e2 = e2;
+    result.e3 = e3;
+    result.e4 = e4;
+    result.e5 = e5;
+    result.e6 = e6;
+    result.e7 = e7;
+    result.e8 = e8;
+
+    return result;
+}
+
+inline f32
+dot(const v9d &a, const v9d &b)
+{
+    f32 result = 0;
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result += a.e[i]*b.e[i];
+    }
+
+    return result;
+}
+
+inline v9d
+operator/(v9d &a, f32 value)
+{
+    v9d result = {};
+
+    f32 one_over_value = 1.0f/value;
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result.e[i] *= one_over_value;
+    }
+
+    return result;
+}
+
+inline v9d
+operator+(const v9d &a, const v9d &b)
+{
+    v9d result = {};
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result.e[i] = a.e[i]+b.e[i];
+    }
+
+    return result;
+}
+
+inline v9d
+operator-(const v9d &a, const v9d &b)
+{
+    v9d result = {};
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result.e[i] = a.e[i]-b.e[i];
+    }
+
+    return result;
+}
+
+inline v9d
+operator*(f32 value, const v9d &a)
+{
+    v9d result = {};
+
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        result.e[i] = value*a.e[i];
+    }
+
+    return result;
+}
+
+inline v9d&
+operator*=(v9d &a, f32 value)
+{
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        a.e[i] *= value;
+    }
 
     return a;
 }
@@ -879,7 +1113,7 @@ identity_m3x3(void)
 }
 
 inline m3x3
-M3x3(m4x4 m)
+M3x3(const m4x4 &m)
 {
     m3x3 result = {};
     result.rows[0] = m.rows[0].xyz;
@@ -890,7 +1124,7 @@ M3x3(m4x4 m)
 }
 
 inline m3x3
-operator *(m3x3 a, m3x3 b)
+operator *(const m3x3 &a, const m3x3 &b)
 {
     m3x3 result = {}; 
     result.e[0][0] = a.e[0][0]*b.e[0][0] + a.e[0][1]*b.e[1][0] + a.e[0][2]*b.e[2][0];
@@ -909,7 +1143,7 @@ operator *(m3x3 a, m3x3 b)
 }
 
 inline m3x3
-operator *(f32 value, m3x3 m)
+operator *(f32 value, const m3x3 &m)
 {
     m3x3 result = m;
     for(u32 i = 0;
@@ -923,7 +1157,7 @@ operator *(f32 value, m3x3 m)
 }
 
 inline m3x3
-operator +(m3x3 a, m3x3 b)
+operator +(const m3x3 &a, const m3x3 &b)
 {
     m3x3 result = {};
 
@@ -935,7 +1169,7 @@ operator +(m3x3 a, m3x3 b)
 }
 
 inline m3x3
-operator -(m3x3 a, m3x3 b)
+operator -(const m3x3 &a, const m3x3 &b)
 {
     m3x3 result = {};
 
@@ -949,7 +1183,7 @@ operator -(m3x3 a, m3x3 b)
 // NOTE(gh) Can also work as inverse matrix, only if the matrix is orthogonal.
 // In fact, the definition of orthogonal matrix is tranpose == inverse
 inline m3x3
-transpose(m3x3 m)
+transpose(const m3x3 &m)
 {
     m3x3 result = {};
 
@@ -969,7 +1203,7 @@ transpose(m3x3 m)
 }
 
 inline v3
-operator *(m3x3 a, v3 b)
+operator *(const m3x3 &a, v3 b)
 {
     v3 result = {};
 
@@ -991,20 +1225,20 @@ operator *=(m3x3 &m, f32 value)
 }
 
 inline f32
-get_determinant(m3x3 *m)
+get_determinant(const m3x3 &m)
 {
-    f32 result = m->e[0][0]*m->e[1][1]*m->e[2][2] + 
-              m->e[1][0]*m->e[2][1]*m->e[0][2] + 
-              m->e[2][0]*m->e[0][1]*m->e[1][2] - 
-              m->e[0][0]*m->e[2][1]*m->e[1][2] - 
-              m->e[2][0]*m->e[1][1]*m->e[0][2] - 
-              m->e[1][0]*m->e[0][1]*m->e[2][2];
+    f32 result = m.e[0][0]*m.e[1][1]*m.e[2][2] + 
+              m.e[1][0]*m.e[2][1]*m.e[0][2] + 
+              m.e[2][0]*m.e[0][1]*m.e[1][2] - 
+              m.e[0][0]*m.e[2][1]*m.e[1][2] - 
+              m.e[2][0]*m.e[1][1]*m.e[0][2] - 
+              m.e[1][0]*m.e[0][1]*m.e[2][2];
 
     return result;
 }
 
 inline b32
-is_inversable(m3x3 *m)
+is_inversable(const m3x3 &m)
 {
     b32 result = true;
 
@@ -1019,7 +1253,7 @@ is_inversable(m3x3 *m)
 // TODO(gh) Because we _have to_ check whether it is invertable or not
 // by checking the determinant, maybe we can just pass that in?
 inline m3x3
-inverse(m3x3 *m)
+inverse(const m3x3 &m)
 {
     m3x3 result = {};
 
@@ -1027,17 +1261,17 @@ inverse(m3x3 *m)
 
     assert(!compare_with_epsilon(det, 0.0f));
 
-    result.e[0][0] = m->e[1][1]*m->e[2][2] - m->e[1][2]*m->e[2][1];
-    result.e[0][1] = m->e[0][2]*m->e[2][1] - m->e[0][1]*m->e[2][2];
-    result.e[0][2] = m->e[0][1]*m->e[1][2] - m->e[0][2]*m->e[1][1];
+    result.e[0][0] = m.e[1][1]*m.e[2][2] - m.e[1][2]*m.e[2][1];
+    result.e[0][1] = m.e[0][2]*m.e[2][1] - m.e[0][1]*m.e[2][2];
+    result.e[0][2] = m.e[0][1]*m.e[1][2] - m.e[0][2]*m.e[1][1];
 
-    result.e[1][0] = m->e[1][2]*m->e[2][0] - m->e[1][0]*m->e[2][2];
-    result.e[1][1] = m->e[0][0]*m->e[2][2] - m->e[0][2]*m->e[2][0];
-    result.e[1][2] = m->e[0][2]*m->e[1][0] - m->e[0][0]*m->e[1][2];
+    result.e[1][0] = m.e[1][2]*m.e[2][0] - m.e[1][0]*m.e[2][2];
+    result.e[1][1] = m.e[0][0]*m.e[2][2] - m.e[0][2]*m.e[2][0];
+    result.e[1][2] = m.e[0][2]*m.e[1][0] - m.e[0][0]*m.e[1][2];
 
-    result.e[2][0] = m->e[1][0]*m->e[2][1] - m->e[1][1]*m->e[2][0];
-    result.e[2][1] = m->e[0][1]*m->e[2][0] - m->e[0][0]*m->e[2][1];
-    result.e[2][2] = m->e[0][0]*m->e[1][1] - m->e[0][1]*m->e[1][0];
+    result.e[2][0] = m.e[1][0]*m.e[2][1] - m.e[1][1]*m.e[2][0];
+    result.e[2][1] = m.e[0][1]*m.e[2][0] - m.e[0][0]*m.e[2][1];
+    result.e[2][2] = m.e[0][0]*m.e[1][1] - m.e[0][1]*m.e[1][0];
 
     result *= (1.0f/det);
 
@@ -1127,7 +1361,7 @@ identity_m3x3d()
 }
 
 inline v3d
-operator *(m3x3d a, v3d b)
+operator *(const m3x3d &a, const v3d &b)
 {
     v3d result = {};
 
@@ -1139,7 +1373,7 @@ operator *(m3x3d a, v3d b)
 }
 
 inline m3x3d
-operator *(m3x3d a, m3x3d b)
+operator *(const m3x3d &a, const m3x3d &b)
 {
     m3x3d result = {}; 
     result.e[0][0] = a.e[0][0]*b.e[0][0] + a.e[0][1]*b.e[1][0] + a.e[0][2]*b.e[2][0];
@@ -1158,7 +1392,7 @@ operator *(m3x3d a, m3x3d b)
 }
 
 inline m3x3d
-operator *(f64 value, m3x3d m)
+operator *(f64 value, const m3x3d &m)
 {
     m3x3d result = m;
     for(u32 i = 0;
@@ -1172,7 +1406,7 @@ operator *(f64 value, m3x3d m)
 }
 
 inline m3x3d
-operator +(m3x3d a, m3x3d b)
+operator +(const m3x3d &a, const m3x3d &b)
 {
     m3x3d result = {};
 
@@ -1184,7 +1418,7 @@ operator +(m3x3d a, m3x3d b)
 }
 
 inline m3x3d
-operator -(m3x3d a, m3x3d b)
+operator -(const m3x3d &a, const m3x3d &b)
 {
     m3x3d result = {};
 
@@ -1198,7 +1432,7 @@ operator -(m3x3d a, m3x3d b)
 // NOTE(gh) Can also work as inverse matrix, only if the matrix is orthogonal.
 // In fact, the definition of orthogonal matrix is tranpose == inverse
 inline m3x3d
-transpose(m3x3d m)
+transpose(const m3x3d &m)
 {
     m3x3d result = {};
 
@@ -1228,20 +1462,20 @@ operator *=(m3x3d &m, f64 value)
 }
 
 inline f64
-get_determinant(m3x3d *m)
+get_determinant(const m3x3d &m)
 {
-    f64 result = m->e[0][0]*m->e[1][1]*m->e[2][2] + 
-              m->e[1][0]*m->e[2][1]*m->e[0][2] + 
-              m->e[2][0]*m->e[0][1]*m->e[1][2] - 
-              m->e[0][0]*m->e[2][1]*m->e[1][2] - 
-              m->e[2][0]*m->e[1][1]*m->e[0][2] - 
-              m->e[1][0]*m->e[0][1]*m->e[2][2];
+    f64 result = m.e[0][0]*m.e[1][1]*m.e[2][2] + 
+              m.e[1][0]*m.e[2][1]*m.e[0][2] + 
+              m.e[2][0]*m.e[0][1]*m.e[1][2] - 
+              m.e[0][0]*m.e[2][1]*m.e[1][2] - 
+              m.e[2][0]*m.e[1][1]*m.e[0][2] - 
+              m.e[1][0]*m.e[0][1]*m.e[2][2];
 
     return result;
 }
 
 inline b32
-is_inversable(m3x3d *m)
+is_inversable(const m3x3d &m)
 {
     b32 result = true;
 
@@ -1256,7 +1490,7 @@ is_inversable(m3x3d *m)
 // TODO(gh) Because we _have to_ check whether it is invertable or not
 // by checking the determinant, maybe we can just pass that in?
 inline m3x3d
-inverse(m3x3d *m)
+inverse(const m3x3d &m)
 {
     m3x3d result = {};
 
@@ -1264,17 +1498,17 @@ inverse(m3x3d *m)
 
     assert(!compare_with_epsilon(det, 0.0f));
 
-    result.e[0][0] = m->e[1][1]*m->e[2][2] - m->e[1][2]*m->e[2][1];
-    result.e[0][1] = m->e[0][2]*m->e[2][1] - m->e[0][1]*m->e[2][2];
-    result.e[0][2] = m->e[0][1]*m->e[1][2] - m->e[0][2]*m->e[1][1];
+    result.e[0][0] = m.e[1][1]*m.e[2][2] - m.e[1][2]*m.e[2][1];
+    result.e[0][1] = m.e[0][2]*m.e[2][1] - m.e[0][1]*m.e[2][2];
+    result.e[0][2] = m.e[0][1]*m.e[1][2] - m.e[0][2]*m.e[1][1];
 
-    result.e[1][0] = m->e[1][2]*m->e[2][0] - m->e[1][0]*m->e[2][2];
-    result.e[1][1] = m->e[0][0]*m->e[2][2] - m->e[0][2]*m->e[2][0];
-    result.e[1][2] = m->e[0][2]*m->e[1][0] - m->e[0][0]*m->e[1][2];
+    result.e[1][0] = m.e[1][2]*m.e[2][0] - m.e[1][0]*m.e[2][2];
+    result.e[1][1] = m.e[0][0]*m.e[2][2] - m.e[0][2]*m.e[2][0];
+    result.e[1][2] = m.e[0][2]*m.e[1][0] - m.e[0][0]*m.e[1][2];
 
-    result.e[2][0] = m->e[1][0]*m->e[2][1] - m->e[1][1]*m->e[2][0];
-    result.e[2][1] = m->e[0][1]*m->e[2][0] - m->e[0][0]*m->e[2][1];
-    result.e[2][2] = m->e[0][0]*m->e[1][1] - m->e[0][1]*m->e[1][0];
+    result.e[2][0] = m.e[1][0]*m.e[2][1] - m.e[1][1]*m.e[2][0];
+    result.e[2][1] = m.e[0][1]*m.e[2][0] - m.e[0][0]*m.e[2][1];
+    result.e[2][2] = m.e[0][0]*m.e[1][1] - m.e[0][1]*m.e[1][0];
 
     result *= (1.0f/det);
 
@@ -1341,6 +1575,14 @@ M4x4(void)
 {
     m4x4 result = {};
 
+    return result;
+}
+
+inline m4x4
+identity_m4x4(void)
+{
+    m4x4 result = {};
+
     result.e[0][0] = 1.0f;
     result.e[1][1] = 1.0f;
     result.e[2][2] = 1.0f;
@@ -1362,7 +1604,7 @@ M4x4(m3x3 m)
 }
 
 inline m4x4
-operator *(m4x4 a, m4x4 b)
+operator *(const m4x4 &a, const m4x4 &b)
 {
     m4x4 result = {}; 
     result.e[0][0] = a.e[0][0]*b.e[0][0] + a.e[0][1]*b.e[1][0] + a.e[0][2]*b.e[2][0] + a.e[0][3]*b.e[3][0];
@@ -1389,7 +1631,7 @@ operator *(m4x4 a, m4x4 b)
 }
 
 inline m4x4
-operator *(f32 value, m4x4 m)
+operator *(f32 value, const m4x4 &m)
 {
     m4x4 result = m;
     for(u32 i = 0;
@@ -1403,7 +1645,7 @@ operator *(f32 value, m4x4 m)
 }
 
 inline m4x4
-operator +(m4x4 a, m4x4 b)
+operator +(const m4x4 &a, const m4x4 &b)
 {
     m4x4 result = {};
 
@@ -1416,7 +1658,7 @@ operator +(m4x4 a, m4x4 b)
 }
 
 inline m4x4
-operator -(m4x4 a, m4x4 b)
+operator -(const m4x4 &a, const m4x4 &b)
 {
     m4x4 result = {};
 
@@ -1429,7 +1671,7 @@ operator -(m4x4 a, m4x4 b)
 }
 
 inline m4x4
-transpose(m4x4 m)
+transpose(const m4x4 &m)
 {
     m4x4 result = {};
 
@@ -1449,7 +1691,7 @@ transpose(m4x4 m)
 }
 
 inline v4
-operator *(m4x4 a, v4 b)
+operator *(const m4x4 &a, v4 b)
 {
     v4 result = {};
 
@@ -1977,7 +2219,7 @@ scale_m3x3(v3 xyz)
 inline m4x4
 translate(f32 x, f32 y, f32 z, f32 w = 1.0f)
 {
-    m4x4 result = M4x4();
+    m4x4 result = identity_m4x4();
     result.e[0][3] = x;
     result.e[1][3] = y;
     result.e[2][3] = z;

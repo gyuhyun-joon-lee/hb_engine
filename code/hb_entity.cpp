@@ -192,8 +192,8 @@ populate_pbd_shape_matching_info(Entity *entity,
         // TODO(gh) Is this even possible?
 
         group->linear_shape_matching_coefficient = linear_shape_matching_coefficient;
-        assert(is_inversable(&Aqq));
-        group->inv_Aqq = inverse(&Aqq);
+        assert(is_inversable(Aqq));
+        group->inv_Aqq = inverse(Aqq);
     }
 }
 

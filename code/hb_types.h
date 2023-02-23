@@ -202,7 +202,28 @@ struct v4
 
 struct v9
 {
-    f32 e[9];
+    union
+    {
+        struct
+        {
+            f32 e0, e1, e2, e3, e4, e5, e6, e7, e8;
+        };
+
+        f32 e[9];
+    };
+};
+
+struct v9d
+{
+    union
+    {
+        struct
+        {
+            f64 e0, e1, e2, e3, e4, e5, e6, e7, e8;
+        };
+
+        f64 e[9];
+    };
 };
 
 // NOTE(joon) quat is RHS
@@ -250,19 +271,9 @@ struct quatd
     };
 };
 
-
-struct m4
-{
-    union
-    {
-        struct 
-        {
-            v4 column[4];
-        };
-        
-        f32 e[16];
-    };
-};
+// TODO(gh) For these matrices, we should check whether 
+// the compiler is smart enough to inline the math functions,
+// since the matrix can be huge m3x3d = 8 * 3 * 3 = 72 bytes!!! (or maybe just use &...)
 
 // row major
 // e[0][0] e[0][1] e[0][2]

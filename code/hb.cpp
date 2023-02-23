@@ -732,7 +732,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     Apq.rows[2] += offset.z * particle->initial_offset_from_com;
                 }
                 m3x3d A = Apq * group->inv_Aqq;
-                A = (1.0f/cbrt(get_determinant(&A))) * A;
+                A = (1.0f/cbrt(get_determinant(A))) * A;
 
                 group->shape_match_quat = 
                     extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);

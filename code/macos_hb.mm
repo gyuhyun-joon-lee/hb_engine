@@ -802,7 +802,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                     RenderEntryArbitraryMesh *entry = (RenderEntryArbitraryMesh *)((u8 *)render_push_buffer->base + consumed);
                     consumed += sizeof(*entry);
 
-                    m4x4 model = M4x4();
+                    m4x4 model = identity_m4x4();
 
                     metal_set_vertex_buffer(shadowmap_render_encoder, 
                                             render_context->transient_buffer.buffer, 
@@ -1132,7 +1132,7 @@ metal_render(MetalRenderContext *render_context, PlatformRenderPushBuffer *rende
                 consumed += sizeof(*entry);
 
                 PerObjectData per_object_data = {};
-                per_object_data.model = M4x4();
+                per_object_data.model = identity_m4x4();
                 per_object_data.color = entry->color;
 
                 metal_set_render_pipeline(g_buffer_render_encoder, render_context->render_to_g_buffer_pipeline);

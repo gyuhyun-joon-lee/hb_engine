@@ -131,7 +131,7 @@ camera_transform(Camera *camera)
                                     dot(camera_y_axis, -camera->p),
                                     dot(camera_z_axis, -camera->p));
 
-    m4x4 result = M4x4();
+    m4x4 result = identity_m4x4();
     result.rows[0] = V4(camera_x_axis, multiplied_translation.x);
     result.rows[1] = V4(camera_y_axis, multiplied_translation.y);
     result.rows[2] = V4(camera_z_axis, multiplied_translation.z);
