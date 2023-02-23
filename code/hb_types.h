@@ -21,7 +21,7 @@ typedef uint64_t u64;
 
 typedef uintptr_t uintptr;
 
-typedef float r32;
+typedef float f32;
 typedef float f32;
 typedef double f64;
 
@@ -90,8 +90,8 @@ typedef double f64;
 
 typedef struct v2
 {
-    r32 x;
-    r32 y;
+    f32 x;
+    f32 y;
 }v2;
 
 typedef struct v2d
@@ -112,23 +112,23 @@ typedef struct v3
     {
         struct 
         {
-            r32 x;
-            r32 y;
-            r32 z;
+            f32 x;
+            f32 y;
+            f32 z;
         };
         struct 
         {
-            r32 r;
-            r32 g;
-            r32 b;
+            f32 r;
+            f32 g;
+            f32 b;
         };
         struct 
         {
             v2 xy;
-            r32 ignored;
+            f32 ignored;
         };
 
-        r32 e[3];
+        f32 e[3];
     };
 }v3;
 
@@ -178,26 +178,31 @@ struct v4
     {
         struct 
         {
-            r32 x, y, z, w;
+            f32 x, y, z, w;
         };
 
         struct 
         {
-            r32 r, g, b, a;
+            f32 r, g, b, a;
         };
         struct 
         {
             v3 xyz; 
-            r32 ignored;
+            f32 ignored;
         };
         struct 
         {
             v3 rgb; 
-            r32 ignored1;
+            f32 ignored1;
         };
 
-        r32 e[4];
+        f32 e[4];
     };
+};
+
+struct v9
+{
+    f32 e[9];
 };
 
 // NOTE(joon) quat is RHS

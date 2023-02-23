@@ -13,7 +13,7 @@ MACOS_FRAMEWORK = -framework Cocoa -framework CoreFoundation -framework CoreGrap
 
 # -O0 = unoptimized, -O2 = compiler optimized
 # HB_DEBUG = Normally for O0 only, HB_SLOW = Debugging funtionality on(i.e step by step physics engine)
-COMPILER_FLAGS = -g -Wall -O0 -std=c++11 -lstdc++ -lm -pthread -D HB_DEBUG=1 -D HB_SLOW=1 -D HB_ARM=1 -D HB_X86_X64=0 -D HB_LLVM=1 -D HB_MSVC=0 -D HB_WINDOWS=0 -D HB_MACOS=1 -D HB_LINUX=0 -D HB_VULKAN=0 -D HB_METAL=1
+COMPILER_FLAGS = -g -Wall -O2 -std=c++11 -lstdc++ -lm -pthread -D HB_DEBUG=1 -D HB_SLOW=1 -D HB_ARM=1 -D HB_X86_X64=0 -D HB_LLVM=1 -D HB_MSVC=0 -D HB_WINDOWS=0 -D HB_MACOS=1 -D HB_LINUX=0 -D HB_VULKAN=0 -D HB_METAL=1
 # This is a nightmare.. :(
 # to disable warning, prefix the name of the warning with no-
 COMPILER_IGNORE_WARNINGS = -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-writable-strings -Wno-switch -Wno-objc-missing-super-calls -Wno-missing-braces -Wnonportable-include-path -Wno-uninitialized -Wno-nonportable-include-path -Wno-tautological-bitwise-compare -Wno-unused-but-set-variable

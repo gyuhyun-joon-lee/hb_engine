@@ -141,6 +141,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         add_floor_entity(game_state, V3(), V2(1000, 1000), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
+#if 1
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -151,6 +152,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             0.5f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
+#endif
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -158,7 +160,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state,  
                              tran_state->loaded_voxs + 1,
                             V3d(-9, -9, 5), V3d(0, 0, 0),
-                            0.5f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
+                            0.1f, 1.0f/(random_between(&game_state->random_series, 5, 40)), color, 
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
         {
@@ -170,7 +172,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state, 
                              tran_state->loaded_voxs + 2,
                             V3d(3, 3, 12), V3d(0, 0, 0),
-                            0.3f, 1.0f/(random_between(&game_state->random_series, 50, 200)), color, 
+                            0.8f, 1.0f/(random_between(&game_state->random_series, 50, 200)), color, 
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
         {
@@ -180,9 +182,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state,  
                              tran_state->loaded_voxs + 3,
                             V3d(7, 7, 5), V3d(0, 0, 0),
-                            0.2f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
+                            0.1f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
+#if 1
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -193,6 +196,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             0.3f, 1.0f/(random_between(&game_state->random_series, 800, 1000)), color, 
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
+#endif
 
 
 #if 0
@@ -662,11 +666,27 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 #if 1
         /*
            NOTE(gh) Solve shape matching constraints.
+           http://www.beosil.com/download/MeshlessDeformations_SIG05.pdf
+
+           The basic idea behind this is about finding a 'rotation matrix' that 
+           when applied each of the initial offset from the COM, produces the 'goal position'
+           that would match the shape.
+
            This _must_ be the last step, especially for the rigid bodies.
-           For the rigid bodies,
+
+           1. Rigid bodies
            m3x3d A = sum((xi - com) * transpose(ri)),
            where xi is the position, and ri is the offset from the COM when resting.
-           */
+           The rotational part, R, can be retrieved using the polar decomposition,
+           which is explained in 
+           https://matthias-research.github.io/pages/publications/stablePolarDecomp.pdf
+
+           2. Linear deformation
+           Similar to rigid bodies, but support stretching.
+
+           3. Quadratic deformation
+
+        */
         // TODO/IMPORTANT(gh) Make sure the polar decomposition math checks out!
         for(u32 entity_index = 0;
                 entity_index < game_state->entity_count;
@@ -712,6 +732,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     Apq.rows[2] += offset.z * particle->initial_offset_from_com;
                 }
                 m3x3d A = Apq * group->inv_Aqq;
+                A = (1.0f/cbrt(get_determinant(&A))) * A;
 
                 group->shape_match_quat = 
                     extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);
@@ -732,10 +753,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     ++particle_index)
             {
                 PBDParticle *particle = group->particles + particle_index;
-                v3d shape_match_delta = 
-                    (shape_match_rotation_matrix*particle->initial_offset_from_com + com) - particle->p;
-
-                particle->p += shape_match_delta;
+                particle->p = (shape_match_rotation_matrix*particle->initial_offset_from_com + com);
             }
         }
 #endif

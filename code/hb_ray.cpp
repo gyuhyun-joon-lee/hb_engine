@@ -5,17 +5,17 @@
 #if 0
 struct material
 {
-    r32 reflectivity; // 0.0f being very rough like a chalk, and 1 being really relfective(like mirror)
+    f32 reflectivity; // 0.0f being very rough like a chalk, and 1 being really relfective(like mirror)
     v3 emit_color; // things like sky, lightbulb have this value
     v3 reflection_color;
 
-    r32 *brdf_table;
+    f32 *brdf_table;
 };
 
 // TODO(joon): SIMD these!
 struct plane
 {
-    r32 d;
+    f32 d;
     v3 normal;
 
     u32 material_index;
@@ -24,7 +24,7 @@ struct plane
 struct sphere
 {
     v3 center;
-    r32 radius;
+    f32 radius;
 
     u32 material_index;
 };
@@ -64,7 +64,7 @@ struct RayIntersectResult
 {
     // NOTE(joon): instead of having a boolean value inside the struct, this value will be initialized to a negative value
     // and when we want to check if there was a hit, we just check if hit_t >= 0.0f 
-    r32 hit_t;
+    f32 hit_t;
 
     v3 hit_normal;
 };
@@ -168,7 +168,7 @@ ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_origin, v3 ray_dir)
        Note that there are a lot of same cross products, which we can calculate just once and reuse
        Also, v0, v1, v2 can be in any order
     */
-    r32 hit_t_threshold = 0.0001f;
+    f32 hit_t_threshold = 0.0001f;
 
     RayIntersectResult result = {};
     result.hit_t = -1.0f;
@@ -177,18 +177,18 @@ ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_origin, v3 ray_dir)
     v3 e2 = v2 - v0;
     v3 cross_ray_e2 = cross(ray_dir, e2);
 
-    r32 det = dot(cross_ray_e2, e1);
+    f32 det = dot(cross_ray_e2, e1);
     v3 T = ray_origin - v0;
 
     // TODO(joon) : completely made up number
-    r32 tolerance = 0.0001f;
+    f32 tolerance = 0.0001f;
     if(det <= -tolerance || det >= tolerance) // if the determinant is 0, it means the ray is parallel to the triangle
     {
         v3 a = cross(T, e1);
 
-        r32 t = dot(a, e2) / det;
-        r32 u = dot(cross_ray_e2, T) / det;
-        r32 v = dot(a, ray_dir) / det;
+        f32 t = dot(a, e2) / det;
+        f32 u = dot(cross_ray_e2, T) / det;
+        f32 v = dot(a, ray_dir) / det;
 
         if(t >= hit_t_threshold && u >= 0.0f && v >= 0.0f && u+v <= 1.0f)
         {
@@ -205,19 +205,19 @@ ray_intersect_with_triangle(v3 v0, v3 v1, v3 v2, v3 ray_origin, v3 ray_dir)
 
 
 internal RayIntersectResult
-ray_intersect_with_plane(v3 normal, r32 d, v3 ray_origin, v3 ray_dir)
+ray_intersect_with_plane(v3 normal, f32 d, v3 ray_origin, v3 ray_dir)
 {
     RayIntersectResult result = {};
     result.hit_t = -1.0f;
-    r32 hit_t_threshold = 0.0001f;
+    f32 hit_t_threshold = 0.0001f;
 
     // NOTE(joon) : if the denominator is 0, it means that the ray is parallel to the plane
-    r32 denom = dot(normal, ray_dir);
+    f32 denom = dot(normal, ray_dir);
 
-    r32 tolerance = 0.00001f;
+    f32 tolerance = 0.00001f;
     if(denom < -tolerance || denom > tolerance)
     {
-        r32 t = (dot(-normal, ray_origin) - d)/denom;
+        f32 t = (dot(-normal, ray_origin) - d)/denom;
         if(t >= hit_t_threshold)
         {
             result.hit_t = t;
@@ -229,30 +229,30 @@ ray_intersect_with_plane(v3 normal, r32 d, v3 ray_origin, v3 ray_dir)
 
 // NOTE(joon) : c(center of the sphere), r(radius of the sphere)
 internal RayIntersectResult
-ray_intersect_with_sphere(v3 center, r32 r, v3 ray_origin, v3 ray_dir)
+ray_intersect_with_sphere(v3 center, f32 r, v3 ray_origin, v3 ray_dir)
 {
-    r32 hit_t_threshold = 0.0001f;
+    f32 hit_t_threshold = 0.0001f;
 
     RayIntersectResult result = {};
     result.hit_t = -1.0f;
     
     v3 rel_ray_origin = ray_origin - center;
-    r32 a = dot(ray_dir, ray_dir);
-    r32 b = 2.0f*dot(ray_dir, rel_ray_origin);
-    r32 c = dot(rel_ray_origin, rel_ray_origin) - r*r;
+    f32 a = dot(ray_dir, ray_dir);
+    f32 b = 2.0f*dot(ray_dir, rel_ray_origin);
+    f32 c = dot(rel_ray_origin, rel_ray_origin) - r*r;
 
-    r32 root_term = b*b - 4.0f*a*c;
-    r32 sqrt_root_term = sqrt(root_term);
+    f32 root_term = b*b - 4.0f*a*c;
+    f32 sqrt_root_term = sqrt(root_term);
 
 
-    r32 tolerance = 0.00001f;
+    f32 tolerance = 0.00001f;
     if(root_term > tolerance)
     {
-        r32 tn = (-b - sqrt_root_term)/a;
-        r32 tp = (-b + sqrt_root_term)/a;
+        f32 tn = (-b - sqrt_root_term)/a;
+        f32 tp = (-b + sqrt_root_term)/a;
 
         // two intersection points
-        r32 t = (-b - sqrt(root_term))/(2*a);
+        f32 t = (-b - sqrt(root_term))/(2*a);
         if(t > hit_t_threshold)
         {
             result.hit_t = t;
@@ -261,7 +261,7 @@ ray_intersect_with_sphere(v3 center, r32 r, v3 ray_origin, v3 ray_dir)
     else if(root_term < tolerance && root_term > -tolerance)
     {
         // one intersection point
-        r32 t = (-b)/(2*a);
+        f32 t = (-b)/(2*a);
         if(t > hit_t_threshold)
         {
             result.hit_t = t;
@@ -276,10 +276,10 @@ ray_intersect_with_sphere(v3 center, r32 r, v3 ray_origin, v3 ray_dir)
 }
 
 // TODO(joon): is this really all for linear to srgb?
-internal r32
-linear_to_srgb(r32 linear_value)
+internal f32
+linear_to_srgb(f32 linear_value)
 {
-    r32 result = 0.0f;
+    f32 result = 0.0f;
 
     assert(linear_value >= 0.0f && linear_value <= 1.0f);
 
@@ -305,8 +305,8 @@ struct raytracer_data
     u32 ray_per_pixel_count;
 
     v3 film_center; 
-    r32 film_width; 
-    r32 film_height;
+    f32 film_width; 
+    f32 film_height;
 
     v3 camera_p;
     v3 camera_x_axis; 
@@ -392,14 +392,14 @@ render_raytraced_image_tile_simd(raytracer_data *data)
             y < one_past_max_y;
             ++y)
     {
-        simd_f32 film_y = simd_f32_(2.0f*((r32)y/(r32)output_height) - 1.0f);
+        simd_f32 film_y = simd_f32_(2.0f*((f32)y/(f32)output_height) - 1.0f);
         u32 *pixel = row;
 
         for(u32 x = min_x;
                 x < one_past_max_x;
                 ++x)
         {
-            simd_f32 film_x = simd_f32_(2.0f*((r32)x/(r32)output_width) - 1.0f);
+            simd_f32 film_x = simd_f32_(2.0f*((f32)x/(f32)output_width) - 1.0f);
             simd_v3 result_color = simd_V30;
 
             for(u32 ray_per_pixel_index = 0;
@@ -650,9 +650,9 @@ render_raytraced_image_tile_simd(raytracer_data *data)
             f32 result_g_f32 = linear_to_srgb(clamp01(add_all_lanes(result_color.g)));
             f32 result_b_f32 = linear_to_srgb(clamp01(add_all_lanes(result_color.b)));
 
-            u32 result_r = round_r32_u32(255.0f*result_r_f32) << 16;
-            u32 result_g = round_r32_u32(255.0f*result_g_f32) << 8;
-            u32 result_b =  round_r32_u32(255.0f*result_b_f32) << 0;
+            u32 result_r = round_f32_u32(255.0f*result_r_f32) << 16;
+            u32 result_g = round_f32_u32(255.0f*result_g_f32) << 8;
+            u32 result_b =  round_f32_u32(255.0f*result_b_f32) << 0;
 
             u32 result_pixel_color = 0xff << 24 |
                                     result_r |
@@ -742,8 +742,8 @@ render_raytraced_image_tile(raytracer_data *data)
     u32 ray_per_pixel_count = data->ray_per_pixel_count;
 
     v3 film_center = data->film_center; 
-    r32 film_width = data->film_width; 
-    r32 film_height = data->film_height;
+    f32 film_width = data->film_width; 
+    f32 film_height = data->film_height;
 
     v3 camera_p = data->camera_p;
     v3 camera_x_axis = data->camera_x_axis; 
@@ -763,11 +763,11 @@ render_raytraced_image_tile(raytracer_data *data)
     // TODO(joon): These values should be more realistic
     // for example, when we ever have a concept of an acutal senser size, 
     // we should use that value to calculate this!
-    r32 x_per_pixel = film_width/output_width;
-    r32 y_per_pixel = film_height/output_height;
+    f32 x_per_pixel = film_width/output_width;
+    f32 y_per_pixel = film_height/output_height;
 
-    r32 half_film_width = film_width/2.0f;
-    r32 half_film_height = film_height/2.0f;
+    f32 half_film_width = film_width/2.0f;
+    f32 half_film_height = film_height/2.0f;
 
     u32 *row = pixels + min_y*output_width + min_x;
 
@@ -777,7 +777,7 @@ render_raytraced_image_tile(raytracer_data *data)
             y < one_past_max_y;
             ++y)
     {
-        r32 film_y = 2.0f*((r32)y/(r32)output_height) - 1.0f;
+        f32 film_y = 2.0f*((f32)y/(f32)output_height) - 1.0f;
         u32 *pixel = row;
 
         for(u32 x = min_x;
@@ -792,13 +792,13 @@ render_raytraced_image_tile(raytracer_data *data)
             {
                 // NOTE(joon): These values are inside the loop because as we are casting multiple lights anyway,
                 // we can slightly 'jitter' the ray direction to get the anti-aliasing effect 
-                r32 film_x = 2.0f*((r32)x/(r32)output_width) - 1.0f;
+                f32 film_x = 2.0f*((f32)x/(f32)output_width) - 1.0f;
 
-                r32 jitter_x = x_per_pixel*random_between_0_1(&series);
-                r32 jitter_y = x_per_pixel*random_between_0_1(&series);
+                f32 jitter_x = x_per_pixel*random_between_0_1(&series);
+                f32 jitter_y = x_per_pixel*random_between_0_1(&series);
 
-                r32 offset_x = film_x + jitter_x;
-                r32 offset_y = film_y + jitter_y;
+                f32 offset_x = film_x + jitter_x;
+                f32 offset_y = film_y + jitter_y;
 
                 // axis(which are defined in world coordinate, so by multiplying them, we can get the world coodinates)
                 v3 film_p = film_center + offset_y*half_film_height*camera_y_axis + offset_x*half_film_width*camera_x_axis;
@@ -812,7 +812,7 @@ render_raytraced_image_tile(raytracer_data *data)
                         bounce_index < 8;
                         ++bounce_index)
                 {
-                    r32 min_hit_t = Flt_Max;
+                    f32 min_hit_t = Flt_Max;
 
                     u32 hit_mat_index = 0;
 
@@ -898,7 +898,7 @@ render_raytraced_image_tile(raytracer_data *data)
                 }
             }
 
-            result_color /= (r32)ray_per_pixel_count;
+            result_color /= (f32)ray_per_pixel_count;
 
             result_color.r = clamp01(result_color.r);
             result_color.g = clamp01(result_color.g);
@@ -909,9 +909,9 @@ render_raytraced_image_tile(raytracer_data *data)
             result_color.b = linear_to_srgb(result_color.b);
 #endif
 
-            u32 result_r = round_r32_u32(255.0f*result_color.r) << 16;
-            u32 result_g = round_r32_u32(255.0f*result_color.g) << 8;
-            u32 result_b =  round_r32_u32(255.0f*result_color.b) << 0;
+            u32 result_r = round_f32_u32(255.0f*result_color.r) << 16;
+            u32 result_g = round_f32_u32(255.0f*result_color.g) << 8;
+            u32 result_b =  round_f32_u32(255.0f*result_color.b) << 0;
 
             u32 result_pixel_color = 0xff << 24 |
                                     result_r |

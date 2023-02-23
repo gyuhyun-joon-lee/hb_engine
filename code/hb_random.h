@@ -42,29 +42,29 @@ random_between_0_1(RandomSeries *series)
     return result;
 }
 
-internal r32
-random_between(RandomSeries *series, r32 min, r32 max)
+internal f32
+random_between(RandomSeries *series, f32 min, f32 max)
 {
     xor_shift_32(&series->next_random);
 
     return min + (max-min)*random_between_0_1(series);
 }
 
-internal r32
+internal f32
 random_between_minus_1_1(RandomSeries *series)
 {
     xor_shift_32(&series->next_random);
 
-    r32 result = 2.0f*((r32)series->next_random/(r32)U32_Max) - 1.0f;
+    f32 result = 2.0f*((f32)series->next_random/(f32)U32_Max) - 1.0f;
     return result;
 }
 
-inline r32
-random_range(RandomSeries *series, r32 value, r32 range)
+inline f32
+random_range(RandomSeries *series, f32 value, f32 range)
 {
-    r32 half_range = range/2.0f;
+    f32 half_range = range/2.0f;
 
-    r32 result = value + half_range*random_between_minus_1_1(series);
+    f32 result = value + half_range*random_between_minus_1_1(series);
 
     return result;
 }

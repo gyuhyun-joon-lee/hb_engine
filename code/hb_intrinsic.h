@@ -82,28 +82,28 @@ find_most_significant_bit(u8 value)
 #define acos(value) acos_(value)
 #define atan2(y, x) atan2_(y, x)
 
-inline r32
-sin_(r32 rad)
+inline f32
+sin_(f32 rad)
 {
     // TODO(gh) : intrinsic?
     return sinf(rad);
 }
 
-inline r32
-cos_(r32 rad)
+inline f32
+cos_(f32 rad)
 {
     // TODO(gh) : intrinsic?
     return cosf(rad);
 }
 
-inline r32
-acos_(r32 rad)
+inline f32
+acos_(f32 rad)
 {
     return acosf(rad);
 }
 
-inline r32
-atan2_(r32 y, r32 x)
+inline f32
+atan2_(f32 y, f32 x)
 {
     return atan2f(y, x);
 }
@@ -140,10 +140,10 @@ floor_f32(f32 value)
     return floorf(value);
 }
 
-inline r32
-power(r32 base, u32 exponent)
+inline f32
+power(f32 base, u32 exponent)
 {
-    r32 result = powf(base, exponent);
+    f32 result = powf(base, exponent);
     return result;
 }
 
