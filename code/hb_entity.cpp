@@ -193,7 +193,45 @@ populate_pbd_shape_matching_info(Entity *entity,
 
         group->linear_shape_matching_coefficient = linear_shape_matching_coefficient;
         assert(is_inversable(Aqq));
-        group->inv_Aqq = inverse(Aqq);
+        group->linear_inv_Aqq = inverse(Aqq);
+    }
+    else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
+    {
+        v9d q[9] = {};
+
+        m9x9d Aqq = {};
+        for(u32 particle_index = 0;
+                particle_index < group->count;
+                ++particle_index)
+        {
+            PBDParticle *particle = group->particles + particle_index;
+
+            v9d q9 = V9d(particle->initial_offset_from_com.x,
+                         particle->initial_offset_from_com.y,
+                         particle->initial_offset_from_com.z,
+                         square(particle->initial_offset_from_com.x),
+                         square(particle->initial_offset_from_com.y),
+                         square(particle->initial_offset_from_com.z),
+                         particle->initial_offset_from_com.x*particle->initial_offset_from_com.y,
+                         particle->initial_offset_from_com.y*particle->initial_offset_from_com.z,
+                         particle->initial_offset_from_com.z*particle->initial_offset_from_com.x);
+
+            // NOTE(gh) This is equivalent to q9 * transpose(q9),
+            // which results with 9x9 matrix.
+            Aqq.rows[0] += q9.e[0] * q9;
+            Aqq.rows[1] += q9.e[1] * q9;
+            Aqq.rows[2] += q9.e[2] * q9;
+            Aqq.rows[3] += q9.e[3] * q9;
+            Aqq.rows[4] += q9.e[4] * q9;
+            Aqq.rows[5] += q9.e[5] * q9;
+            Aqq.rows[6] += q9.e[6] * q9;
+            Aqq.rows[7] += q9.e[7] * q9;
+            Aqq.rows[8] += q9.e[8] * q9;
+        }
+
+        // TODO(gh) Is this even possible?
+        // assert(is_inversable(Aqq));
+        group->quadratic_inv_Aqq = inverse(Aqq);
     }
 }
 

@@ -731,7 +731,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     Apq.rows[1] += offset.y * particle->initial_offset_from_com;
                     Apq.rows[2] += offset.z * particle->initial_offset_from_com;
                 }
-                m3x3d A = Apq * group->inv_Aqq;
+                m3x3d A = Apq * group->linear_inv_Aqq;
                 A = (1.0f/cbrt(get_determinant(A))) * A;
 
                 group->shape_match_quat = 
@@ -745,6 +745,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
             else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
             {
+                invalid_code_path;
             }
 
             // Apply the shape matching rotation

@@ -1059,7 +1059,7 @@ operator-(const v9d &a, const v9d &b)
 }
 
 inline v9d
-operator*(f32 value, const v9d &a)
+operator *(f32 value, const v9d &a)
 {
     v9d result = {};
 
@@ -1074,13 +1074,26 @@ operator*(f32 value, const v9d &a)
 }
 
 inline v9d&
-operator*=(v9d &a, f32 value)
+operator *=(v9d &a, f32 value)
 {
     for(u32 i = 0;
             i < 9;
             ++i)
     {
         a.e[i] *= value;
+    }
+
+    return a;
+}
+
+inline v9d&
+operator +=(v9d &a, const v9d &b)
+{
+    for(u32 i = 0;
+            i < 9;
+            ++i)
+    {
+        a.e[i] += b.e[i];
     }
 
     return a;
@@ -1276,6 +1289,26 @@ inverse(const m3x3 &m)
     result *= (1.0f/det);
 
     return result;
+}
+
+// TODO(gh) Let's use L_U decomposition to see
+// if it actually works, without werid edge cases
+inline m3x3
+inverse_temp(const m3x3 &m)
+{
+    f32 a = 0.0f;
+    f32 b = 0.0f;
+    f32 c = 0.0f;
+
+    f32 d = 0.0f;
+    f32 e = 0.0f;
+    f32 f = 0.0f;
+
+    f32 g = 0.0f;
+    f32 h = 0.0f;
+    f32 i = 0.0f;
+
+    for(u32 i = 0;)
 }
 
 // NOTE(gh) rotate along x axis
@@ -1699,6 +1732,24 @@ operator *(const m4x4 &a, v4 b)
     result.y = dot(a.rows[1], b);
     result.z = dot(a.rows[2], b);
     result.w = dot(a.rows[3], b);
+
+    return result;
+}
+
+inline m9x9d
+M9x9d()
+{
+    m9x9d result = {};
+
+    return result;
+}
+
+// NOTE(gh) Uses Gauss-Seidel relaxation to get the apporximate
+// of the inverse matrix
+inline m9x9d
+inverse(const m9x9d &m)
+{
+    m9x9d result = {};
 
     return result;
 }

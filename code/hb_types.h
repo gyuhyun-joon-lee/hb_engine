@@ -350,6 +350,22 @@ struct m4x4
     };
 };
 
+// NOTE(gh) This matrix is hardly ever used,
+// except when getting the shape matching matrix
+struct m9x9d
+{
+    union
+    {
+        struct 
+        {
+            v9d rows[9];
+        };
+
+        // [row][column]
+        f64 e[9][9];
+    };
+};
+
 
 #endif
 
