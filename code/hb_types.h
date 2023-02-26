@@ -276,6 +276,24 @@ struct quatd
 // since the matrix can be huge m3x3d = 8 * 3 * 3 = 72 bytes!!! (or maybe just use &...)
 
 // row major
+// e[0][0] e[0][1] 
+// e[1][0] e[1][1]
+// e[2][0] e[2][1]
+struct m2x2
+{
+    union
+    {
+        struct
+        {
+            v2 rows[2];
+        };
+
+        // [row][column]
+        f32 e[2][2];
+    };
+};
+
+// row major
 // e[0][0] e[0][1] e[0][2]
 // e[1][0] e[1][1] e[1][2]
 // e[2][0] e[2][1] e[2][2]

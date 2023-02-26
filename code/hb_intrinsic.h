@@ -164,6 +164,24 @@ power(u32 base, u32 exponent)
     return result; 
 }
 
+#if 1
+inline f32
+abs_f32(f32 value)
+{
+    f32 result = fabsf(value);
+
+    return result;
+}
+
+inline f64
+abs_f64(f64 value)
+{
+    f64 result = fabs(value);
+
+    return result;
+}
+#endif
+
 // TODO(gh) this function can go wrong so easily...
 inline u64
 pointer_diff(void *start, void *end)

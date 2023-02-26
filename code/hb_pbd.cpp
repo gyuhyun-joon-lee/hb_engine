@@ -116,7 +116,7 @@ solve_collision_constraint(CollisionSolution *solution,
 
             solution->contact_normal = gradient0;
             // TODO(gh) C or -C
-            solution->penetration_depth = abs(C);
+            solution->penetration_depth = abs_f64(C);
         }
     }
 }

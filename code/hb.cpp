@@ -80,8 +80,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         tran_state->game_camera = init_fps_camera(V3(0, -10, 22), 1.0f, 135, 1.0f, 1000.0f);
         tran_state->debug_camera = init_fps_camera(V3(0, 0, 22), 1.0f, 135, 0.1f, 10000.0f);
 
+
         // 30 seconds worth of frames
-        tran_state->max_saved_game_state_count = round_f32_to_u32(1.0f/platform_input->dt_per_frame) * 30;
+        tran_state->max_saved_game_state_count = round_f32_to_u32(1.0f/platform_input->dt_per_frame) * 15;
         tran_state->saved_game_states = push_array(&tran_state->transient_arena, GameState, tran_state->max_saved_game_state_count);
         tran_state->saved_game_state_read_cursor = 0;
         tran_state->saved_game_state_write_cursor = 0;

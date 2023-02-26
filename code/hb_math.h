@@ -28,6 +28,21 @@ compare_with_epsilon(f32 a, f32 b, f32 epsilon = 0.000001f)
     return result;
 }
 
+inline b32
+compare_with_epsilon_f64(f64 a, f64 b, f64 epsilon = 0.000001)
+{
+    b32 result = true;
+
+    f64 d = a - b;
+
+    if(d < -epsilon || d > epsilon)
+    {
+        result = false;
+    }
+
+    return result;
+}
+
 inline f32
 safe_ratio(f32 nom, f32 denom)
 {
@@ -268,9 +283,9 @@ abs(v3 a)
 {
     v3 result = {};
 
-    result.x = abs(a.x);
-    result.y = abs(a.y);
-    result.z = abs(a.z);
+    result.x = abs_f32(a.x);
+    result.y = abs_f32(a.y);
+    result.z = abs_f32(a.z);
 
     return result; 
 }
@@ -549,9 +564,9 @@ abs(v3d a)
 {
     v3d result = {};
 
-    result.x = abs(a.x);
-    result.y = abs(a.y);
-    result.z = abs(a.z);
+    result.x = abs_f64(a.x);
+    result.y = abs_f64(a.y);
+    result.z = abs_f64(a.z);
 
     return result; 
 }
@@ -1291,25 +1306,6 @@ inverse(const m3x3 &m)
     return result;
 }
 
-// TODO(gh) Let's use L_U decomposition to see
-// if it actually works, without werid edge cases
-inline m3x3
-inverse_temp(const m3x3 &m)
-{
-    f32 a = 0.0f;
-    f32 b = 0.0f;
-    f32 c = 0.0f;
-
-    f32 d = 0.0f;
-    f32 e = 0.0f;
-    f32 f = 0.0f;
-
-    f32 g = 0.0f;
-    f32 h = 0.0f;
-    f32 i = 0.0f;
-
-    for(u32 i = 0;)
-}
 
 // NOTE(gh) rotate along x axis
 inline m3x3
@@ -1744,12 +1740,106 @@ M9x9d()
     return result;
 }
 
-// NOTE(gh) Uses Gauss-Seidel relaxation to get the apporximate
-// of the inverse matrix
-inline m9x9d
+// NOTE(gh) When selecting the pivot while getting the inverse matrix,
+// we can't choose the pivot with same row nor column with the previous pivot.
+// For example, in m3x3 matrix, if we previously chose m.e[0][1] as pivot,
+// we can no longer choose m.e[0][0], m.e[0][2], m.e[1][1], m.e[2][1] as pivot.
+struct Pivot
+{
+    u32 row; // TODO(gh) Since there should be only one pivot per row, We don't need to store this.
+    u32 column;
+};
+
+// NOTE(gh) This works with any non-singular square matrix.
+internal m9x9d
 inverse(const m9x9d &m)
 {
-    m9x9d result = {};
+    m9x9d result = m;
+
+    Pivot pivots[9] = {};
+    u32 matrix_size = array_count(pivots);
+
+    for(u32 pivot_row = 0;
+            pivot_row < matrix_size;
+            ++pivot_row)
+    {
+        f64 pivot = 0.0;
+        for(u32 j = 0;
+                j < matrix_size;
+                ++j)
+        {
+            b32 is_pivot_valid = true;
+            if(compare_with_epsilon_f64(abs_f64(result.e[pivot_row][j]), 0.0))
+            {
+                for(u32 pivot_index = 0;
+                        pivot_index < pivot_row;
+                        ++pivot_index)
+                {
+                    Pivot *p = pivots + pivot_index;
+                    if(j == p->column)
+                    {
+                        is_pivot_valid = false;
+                    }
+                }
+            }
+
+            if(is_pivot_valid)
+            {
+                pivot = result.e[pivot_row][j];
+                pivots[pivot_row].row = pivot_row;
+                pivots[pivot_row].column = j;
+                break;
+            }
+        }
+
+
+        // TODO(gh) When calling this inverse function,
+        // one should first check if there is one to start with.
+        assert(!compare_with_epsilon_f64(abs_f64(pivot), 0.0));
+
+        f64 one_over_pivot = 1.0/pivot;
+        u32 pivot_column = pivots[pivot_row].column;
+
+        for(u32 i = 0;
+                i < matrix_size;
+                ++i)
+        {
+            if(i != pivot_row)
+            {
+                result.e[i][pivot_column] *= -one_over_pivot;
+            }
+        }
+
+        for(u32 i = 0;
+                i < matrix_size;
+                ++i)
+        {
+            if(i != pivot_row)
+            {
+                for(u32 j = 0;
+                        j < matrix_size;
+                        ++j)
+                {
+                    if(j != pivot_column)
+                    {
+                        result.e[i][j] += result.e[pivot_row][j]*result.e[i][pivot_column];
+                    }
+                }
+            }
+        }
+
+        for(u32 j = 0;
+                j < matrix_size;
+                ++j)
+        {
+            if(j != pivot_column)
+            {
+                result.e[pivot_row][j] *= one_over_pivot;
+            }
+        }
+
+        result.e[pivot_row][pivot_column] = one_over_pivot;
+    }
 
     return result;
 }
@@ -2456,7 +2546,7 @@ extract_rotation_from_polar_decomposition(m3x3d *A, quatd *initial_q, u32 max_it
         // TODO(gh) Double check if the column here means actual column, not the row
         v3d a = cross(R_column0, A_column0) + cross(R_column1, A_column1) + 
                 cross(R_column2, A_column2);
-        f64 b = 1.0/fabs(dot(R_column0, A_column0) + dot(R_column1, A_column1) + dot(R_column2, A_column2)) + epsilon;
+        f64 b = 1.0/abs_f64(dot(R_column0, A_column0) + dot(R_column1, A_column1) + dot(R_column2, A_column2)) + epsilon;
         v3d w = b*a;
         f64 length_w = length(w);
 

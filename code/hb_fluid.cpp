@@ -1371,10 +1371,10 @@ intersect_plane_aab(v3 min, v3 max, v3 normal, f32 d)
     v3 center = 0.5f*(min + max);
     v3 half_dim = max - center;
 
-    f32 r = half_dim.x*abs(normal.x) + half_dim.y*abs(normal.y) + half_dim.z*abs(normal.z);
+    f32 r = half_dim.x*abs_f32(normal.x) + half_dim.y*abs_f32(normal.y) + half_dim.z*abs_f32(normal.z);
     f32 s = dot(normal, center) - d;
 
-    b32 result = (abs(s) <= r);
+    b32 result = (abs_f32(s) <= r);
 
     return result;
 }
