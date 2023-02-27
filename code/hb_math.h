@@ -2572,6 +2572,8 @@ extract_rotation_from_polar_decomposition(m3x3d *A, quatd *initial_q, u32 max_it
         }
     }
 
+    result = normalize(result);
+
     return result;
 }
 

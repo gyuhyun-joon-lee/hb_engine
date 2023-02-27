@@ -189,8 +189,11 @@ populate_pbd_shape_matching_info(Entity *entity,
         particle->initial_offset_from_com = particle->p - com;
     }
 
-    if(is_entity_flag_set(entity, EntityFlag_Quadratic))
+    if(is_entity_flag_set(entity, EntityFlag_Quadratic) || 
+        is_entity_flag_set(entity, EntityFlag_Linear))
     {
+        // NOTE(gh) Aqq should be a symmetric matrix, meaning that 
+        // it contains only scaling but no rotation
         m3x3d Aqq = M3x3d();
         for(u32 particle_index = 0;
                 particle_index < group->count;
@@ -203,39 +206,41 @@ populate_pbd_shape_matching_info(Entity *entity,
             Aqq.rows[2] += particle->initial_offset_from_com.z * particle->initial_offset_from_com;
         }
 
-        // TODO(gh) Is this even possible?
-
         group->linear_shape_matching_coefficient = linear_shape_matching_coefficient;
+        // TODO(gh) Is this even possible?
         assert(is_inversable(Aqq));
         group->linear_inv_Aqq = inverse(Aqq);
 
-        m9x9d quadratic_Aqq = {};
-        for(u32 particle_index = 0;
-                particle_index < group->count;
-                ++particle_index)
+        if(is_entity_flag_set(entity, EntityFlag_Quadratic))
         {
-            PBDParticle *particle = group->particles + particle_index;
+            m9x9d quadratic_Aqq = {};
+            for(u32 particle_index = 0;
+                    particle_index < group->count;
+                    ++particle_index)
+            {
+                PBDParticle *particle = group->particles + particle_index;
 
-            // TODO(gh) We can store this, but the problem is that 
-            // this is so huge
-            v9d q = get_quadratic_deformation_q(particle->initial_offset_from_com);
+                // TODO(gh) We can store this, but the problem is that 
+                // this is so huge
+                v9d q = get_quadratic_deformation_q(particle->initial_offset_from_com);
 
-            // NOTE(gh) This is equivalent to q * transpose(q),
-            // which results with 9x9 matrix.
-            quadratic_Aqq.rows[0] += q.e[0] * q;
-            quadratic_Aqq.rows[1] += q.e[1] * q;
-            quadratic_Aqq.rows[2] += q.e[2] * q;
-            quadratic_Aqq.rows[3] += q.e[3] * q;
-            quadratic_Aqq.rows[4] += q.e[4] * q;
-            quadratic_Aqq.rows[5] += q.e[5] * q;
-            quadratic_Aqq.rows[6] += q.e[6] * q;
-            quadratic_Aqq.rows[7] += q.e[7] * q;
-            quadratic_Aqq.rows[8] += q.e[8] * q;
+                // NOTE(gh) This is equivalent to q * transpose(q),
+                // which results with 9x9 matrix.
+                quadratic_Aqq.rows[0] += q.e[0] * q;
+                quadratic_Aqq.rows[1] += q.e[1] * q;
+                quadratic_Aqq.rows[2] += q.e[2] * q;
+                quadratic_Aqq.rows[3] += q.e[3] * q;
+                quadratic_Aqq.rows[4] += q.e[4] * q;
+                quadratic_Aqq.rows[5] += q.e[5] * q;
+                quadratic_Aqq.rows[6] += q.e[6] * q;
+                quadratic_Aqq.rows[7] += q.e[7] * q;
+                quadratic_Aqq.rows[8] += q.e[8] * q;
+            }
+
+            // TODO(gh) Can Aqq even be non-inversable??
+            // assert(is_inversable(Aqq));
+            group->quadratic_inv_Aqq = inverse(quadratic_Aqq);
         }
-
-        // TODO(gh) Can Aqq even be non-inversable??
-        // assert(is_inversable(Aqq));
-        group->quadratic_inv_Aqq = inverse(quadratic_Aqq);
     }
 }
 

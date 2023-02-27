@@ -25,7 +25,8 @@ enum EntityFlag
     // NOTE(gh) Shape matching properties,
     // these flags will produce different rigid body deformation matrices
     EntityFlag_RigidBody = (1<<3),
-    EntityFlag_Quadratic = (1<<4),
+    EntityFlag_Linear = (1<<4),
+    EntityFlag_Quadratic = (1<<5),
 };
 
 // TODO(gh) For some entities such as rigid body or pbd based entities

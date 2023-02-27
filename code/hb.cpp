@@ -143,7 +143,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         add_floor_entity(game_state, V3(), V2(1000, 1000), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
-#if 0
+#if 1
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -155,6 +155,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
 #endif
+#if 1
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -163,9 +164,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                              tran_state->loaded_voxs + 1,
                             V3d(-9, -9, 20), V3d(0, 0, 0),
                             0.1f, 1.0f/(random_between(&game_state->random_series, 5, 40)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
-#if 0
+#endif
+#if 1
         {
 
 
@@ -175,9 +177,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state, 
                              tran_state->loaded_voxs + 2,
                             V3d(3, 3, 12), V3d(0, 0, 0),
-                            0.8f, 1.0f/(random_between(&game_state->random_series, 50, 200)), color, 
+                            0.8f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
         }
+#if 0
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -185,11 +188,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state,  
                              tran_state->loaded_voxs + 3,
                             V3d(7, 7, 5), V3d(0, 0, 0),
-                            0.1f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
+                            0.1f, 1.0f/(random_between(&game_state->random_series, 10, 50)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
 #endif
-#if 0
+#endif
+#if 1
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -197,8 +201,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state, 
                              tran_state->loaded_voxs + 4,
                             V3d(-15, -15, 5), V3d(0, 0, 0),
-                            0.3f, 1.0f/(random_between(&game_state->random_series, 800, 1000)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
+                            0.3f, 1.0f/(random_between(&game_state->random_series, 80, 100)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
         }
 #endif
 
@@ -701,9 +705,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             PBDParticleGroup *group = &entity->particle_group;
 
             v3d com = get_com_of_particle_group(group);
-
             if(is_entity_flag_set(entity, EntityFlag_RigidBody))
             {
+
                 m3x3d A = M3x3d();
                 for(u32 particle_index = 0;
                         particle_index < group->count;
@@ -730,28 +734,25 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     particle->p = (shape_match_rotation_matrix*particle->initial_offset_from_com + com);
                 }
             }
-            else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
+            else if(is_entity_flag_set(entity, EntityFlag_Linear))
             {
-                // NOTE(gh) Quadratic deformation is done on top of 
-                // linea deformation, so we need to caculate linear deformation first.
-                m3x3d linear_Apq = M3x3d(); 
+                m3x3d R = 
+                    get_shape_matching_linear_deformation_rotation_matrix(group);
+
                 for(u32 particle_index = 0;
                         particle_index < group->count;
                         ++particle_index)
                 {
                     PBDParticle *particle = group->particles + particle_index;
-                    v3d offset = particle->p - com;
-                    linear_Apq.rows[0] += offset.x * particle->initial_offset_from_com;
-                    linear_Apq.rows[1] += offset.y * particle->initial_offset_from_com;
-                    linear_Apq.rows[2] += offset.z * particle->initial_offset_from_com;
+                    particle->p = R*particle->initial_offset_from_com + com;
                 }
-                m3x3d linear_A = linear_Apq * group->linear_inv_Aqq;
-                linear_A = (1.0f/cbrt(get_determinant(linear_A))) * linear_A;
-
-                group->shape_match_quat = 
-                    extract_rotation_from_polar_decomposition(&linear_A, &group->shape_match_quat, 32);
-                m3x3d linear_R = 
-                    orientation_quatd_to_m3x3d(group->shape_match_quat);
+            }
+            else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
+            {
+                // NOTE(gh) Quadratic deformation is done on top of 
+                // linea deformation, so we need to caculate linear deformation first.
+                m3x3d R = 
+                    get_shape_matching_linear_deformation_rotation_matrix(group);
 
                 // This is 3x9 matrix
                 m3x9d quadratic_Apq = {};
@@ -769,26 +770,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     quadratic_Apq.rows[2] += offset.z * q;
                 }
 
-                m9x9d temp1 = 
-                {2, 2, 2, 1, 3, 5, 4, 3, 3,
-                               1, 3, 100, 1, 2, 2, 4, 6, 3,
-                               1, 3, 1, 20, 0, -5, 4, 3, 4,
-                               10, 3, 10, 1, 2, 0, 4, 6, 3,
-                               1, 3, 2, -2, 3, 2, 4, 3, 3,
-                               1, 3, 10, 3, 6, 1, 4, 3, 4,
-                               1, 3, 1, 1, 30, 2, 40, 6, 3,
-                               1, -1, 1, 1, 5, 2, 3, 6, 3,
-                               1, 3, 1, 1, 2, 2, 4, 1, 3};
-                m9x9d temp2 = inverse(temp1);
-
                 m3x9d quadratic_A = quadratic_Apq*group->quadratic_inv_Aqq;
                 // quadratric_R = [R 0 0], which results in 3x9 matrix
                 m3x9d quadratric_R = {};
-                quadratric_R.rows[0] = V9d(linear_R.e[0][0], linear_R.e[0][1], linear_R.e[0][2],
+                quadratric_R.rows[0] = V9d(R.e[0][0], R.e[0][1], R.e[0][2],
                                             0, 0, 0, 0, 0, 0);
-                quadratric_R.rows[1] = V9d(linear_R.e[1][0], linear_R.e[1][1], linear_R.e[1][2],
+                quadratric_R.rows[1] = V9d(R.e[1][0], R.e[1][1], R.e[1][2],
                                             0, 0, 0, 0, 0, 0);
-                quadratric_R.rows[2] = V9d(linear_R.e[2][0], linear_R.e[2][1], linear_R.e[2][2],
+                quadratric_R.rows[2] = V9d(R.e[2][0], R.e[2][1], R.e[2][2],
                                             0, 0, 0, 0, 0, 0);
 
                 f64 quadratic_coefficient = 0.5;
@@ -803,7 +792,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                     v9d q = get_quadratic_deformation_q(particle->initial_offset_from_com);
 
-                    particle->p = shape_match_rotation_matrix*q + V3d(0, 0, 5);
+                    particle->p = shape_match_rotation_matrix*q + com;
                 }
             }
         }
