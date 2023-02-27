@@ -156,14 +156,13 @@ struct PBDParticleGroup
     u32 volume_constraint_count;
 #endif
 
-    // NOTE(gh) These are used for getting the linear or quadratic deformation matrix,
-    // and will be pre-computed upon entity creation
+    // Used for linear deformation
     m3x3d linear_inv_Aqq;
-    m9x9d quadratic_inv_Aqq; // basically m9x9d
+    f32 linear_shape_matching_coefficient; // should range from 0 to 1
 
-    // NOTE(gh) Controlls how linear and 'linear' it looks,
-    // should range from 0 to 1
-    f32 linear_shape_matching_coefficient;
+    // NOTE(gh) Used for quadratic deformation
+    m9x9d quadratic_inv_Aqq;
+    f32 quadratic_shape_matching_coefficient; // should range from 0 to 1
 };
 
 

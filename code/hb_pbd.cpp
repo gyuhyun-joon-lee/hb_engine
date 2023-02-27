@@ -162,4 +162,3 @@ solve_environment_constraint(EnvironmentSolution *solution,
 
 
 
-

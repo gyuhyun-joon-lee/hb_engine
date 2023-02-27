@@ -1751,6 +1751,7 @@ struct Pivot
 };
 
 // NOTE(gh) This works with any non-singular square matrix.
+// https://www.researchgate.net/publication/220337321_An_Efficient_and_Generic_Algorithm_for_Matrix_Inversion
 internal m9x9d
 inverse(const m9x9d &m)
 {
@@ -1763,13 +1764,19 @@ inverse(const m9x9d &m)
             pivot_row < matrix_size;
             ++pivot_row)
     {
+        if(pivot_row == 1)
+        {
+            int a=  1;
+        }
+
         f64 pivot = 0.0;
         for(u32 j = 0;
                 j < matrix_size;
                 ++j)
         {
             b32 is_pivot_valid = true;
-            if(compare_with_epsilon_f64(abs_f64(result.e[pivot_row][j]), 0.0))
+
+            if(!compare_with_epsilon_f64(abs_f64(result.e[pivot_row][j]), 0.0))
             {
                 for(u32 pivot_index = 0;
                         pivot_index < pivot_row;
@@ -1779,8 +1786,13 @@ inverse(const m9x9d &m)
                     if(j == p->column)
                     {
                         is_pivot_valid = false;
+                        break;
                     }
                 }
+            }
+            else
+            {
+                is_pivot_valid = false;
             }
 
             if(is_pivot_valid)

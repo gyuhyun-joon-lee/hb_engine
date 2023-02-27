@@ -5,6 +5,7 @@
 #include "hb_simd.h"
 #include "hb_intrinsic.h"
 #include "hb_math.h"
+#include "hb_matrix.h"
 #include "hb_random.h"
 #include "hb_font.h"
 #include "hb_shared_with_shader.h"
@@ -142,7 +143,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         add_floor_entity(game_state, V3(), V2(1000, 1000), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
-#if 1
+#if 0
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -160,10 +161,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                            random_between_0_1(&game_state->random_series));
             add_pbd_vox_entity(game_state,  
                              tran_state->loaded_voxs + 1,
-                            V3d(-9, -9, 5), V3d(0, 0, 0),
+                            V3d(-9, -9, 20), V3d(0, 0, 0),
                             0.1f, 1.0f/(random_between(&game_state->random_series, 5, 40)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
         }
+#if 0
         {
 
 
@@ -174,7 +176,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                              tran_state->loaded_voxs + 2,
                             V3d(3, 3, 12), V3d(0, 0, 0),
                             0.8f, 1.0f/(random_between(&game_state->random_series, 50, 200)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
         }
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
@@ -184,9 +186,10 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                              tran_state->loaded_voxs + 3,
                             V3d(7, 7, 5), V3d(0, 0, 0),
                             0.1f, 1.0f/(random_between(&game_state->random_series, 100, 300)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
         }
-#if 1
+#endif
+#if 0
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -207,6 +210,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         i32 fluid_cell_count_z = 16;
         f32 fluid_cell_dim = 12;
         v3 fluid_cell_left_bottom_p = V3(-fluid_cell_dim*fluid_cell_count_x/2, -fluid_cell_dim*fluid_cell_count_y/2, 0);
+
 
         initialize_fluid_cube_mac(&game_state->fluid_cube_mac, &game_state->transient_arena, gpu_work_queue,
                                     fluid_cell_left_bottom_p, V3i(fluid_cell_count_x, fluid_cell_count_y, fluid_cell_count_z), 
@@ -698,11 +702,9 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             v3d com = get_com_of_particle_group(group);
 
-            m3x3d shape_match_rotation_matrix = M3x3d();
             if(is_entity_flag_set(entity, EntityFlag_RigidBody))
             {
                 m3x3d A = M3x3d();
-
                 for(u32 particle_index = 0;
                         particle_index < group->count;
                         ++particle_index)
@@ -716,46 +718,93 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 group->shape_match_quat = 
                     extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);
-                shape_match_rotation_matrix = 
+                m3x3d shape_match_rotation_matrix = 
                     orientation_quatd_to_m3x3d(group->shape_match_quat);
+
+                // Apply the shape matching rotation
+                for(u32 particle_index = 0;
+                        particle_index < group->count;
+                        ++particle_index)
+                {
+                    PBDParticle *particle = group->particles + particle_index;
+                    particle->p = (shape_match_rotation_matrix*particle->initial_offset_from_com + com);
+                }
             }
-            else if(is_entity_flag_set(entity, EntityFlag_Linear))
+            else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
             {
-                m3x3d Apq = M3x3d(); 
+                // NOTE(gh) Quadratic deformation is done on top of 
+                // linea deformation, so we need to caculate linear deformation first.
+                m3x3d linear_Apq = M3x3d(); 
                 for(u32 particle_index = 0;
                         particle_index < group->count;
                         ++particle_index)
                 {
                     PBDParticle *particle = group->particles + particle_index;
                     v3d offset = particle->p - com;
-                    Apq.rows[0] += offset.x * particle->initial_offset_from_com;
-                    Apq.rows[1] += offset.y * particle->initial_offset_from_com;
-                    Apq.rows[2] += offset.z * particle->initial_offset_from_com;
+                    linear_Apq.rows[0] += offset.x * particle->initial_offset_from_com;
+                    linear_Apq.rows[1] += offset.y * particle->initial_offset_from_com;
+                    linear_Apq.rows[2] += offset.z * particle->initial_offset_from_com;
                 }
-                m3x3d A = Apq * group->linear_inv_Aqq;
-                A = (1.0f/cbrt(get_determinant(A))) * A;
+                m3x3d linear_A = linear_Apq * group->linear_inv_Aqq;
+                linear_A = (1.0f/cbrt(get_determinant(linear_A))) * linear_A;
 
                 group->shape_match_quat = 
-                    extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);
-                m3x3d Q = 
+                    extract_rotation_from_polar_decomposition(&linear_A, &group->shape_match_quat, 32);
+                m3x3d linear_R = 
                     orientation_quatd_to_m3x3d(group->shape_match_quat);
 
-                shape_match_rotation_matrix = 
-                    group->linear_shape_matching_coefficient*A + 
-                    (1-group->linear_shape_matching_coefficient)*Q;
-            }
-            else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
-            {
-                invalid_code_path;
-            }
+                // This is 3x9 matrix
+                m3x9d quadratic_Apq = {};
+                for(u32 particle_index = 0;
+                        particle_index < group->count;
+                        ++particle_index)
+                {
+                    PBDParticle *particle = group->particles + particle_index;
 
-            // Apply the shape matching rotation
-            for(u32 particle_index = 0;
-                    particle_index < group->count;
-                    ++particle_index)
-            {
-                PBDParticle *particle = group->particles + particle_index;
-                particle->p = (shape_match_rotation_matrix*particle->initial_offset_from_com + com);
+                    v3d offset = particle->p - com;
+                    v9d q = get_quadratic_deformation_q(particle->initial_offset_from_com);
+
+                    quadratic_Apq.rows[0] += offset.x * q;
+                    quadratic_Apq.rows[1] += offset.y * q;
+                    quadratic_Apq.rows[2] += offset.z * q;
+                }
+
+                m9x9d temp1 = 
+                {2, 2, 2, 1, 3, 5, 4, 3, 3,
+                               1, 3, 100, 1, 2, 2, 4, 6, 3,
+                               1, 3, 1, 20, 0, -5, 4, 3, 4,
+                               10, 3, 10, 1, 2, 0, 4, 6, 3,
+                               1, 3, 2, -2, 3, 2, 4, 3, 3,
+                               1, 3, 10, 3, 6, 1, 4, 3, 4,
+                               1, 3, 1, 1, 30, 2, 40, 6, 3,
+                               1, -1, 1, 1, 5, 2, 3, 6, 3,
+                               1, 3, 1, 1, 2, 2, 4, 1, 3};
+                m9x9d temp2 = inverse(temp1);
+
+                m3x9d quadratic_A = quadratic_Apq*group->quadratic_inv_Aqq;
+                // quadratric_R = [R 0 0], which results in 3x9 matrix
+                m3x9d quadratric_R = {};
+                quadratric_R.rows[0] = V9d(linear_R.e[0][0], linear_R.e[0][1], linear_R.e[0][2],
+                                            0, 0, 0, 0, 0, 0);
+                quadratric_R.rows[1] = V9d(linear_R.e[1][0], linear_R.e[1][1], linear_R.e[1][2],
+                                            0, 0, 0, 0, 0, 0);
+                quadratric_R.rows[2] = V9d(linear_R.e[2][0], linear_R.e[2][1], linear_R.e[2][2],
+                                            0, 0, 0, 0, 0, 0);
+
+                f64 quadratic_coefficient = 0.5;
+                m3x9d shape_match_rotation_matrix = quadratic_coefficient*quadratic_A + 
+                                                    (1-quadratic_coefficient)*quadratric_R;
+
+                for(u32 particle_index = 0;
+                        particle_index < group->count;
+                        ++particle_index)
+                {
+                    PBDParticle *particle = group->particles + particle_index;
+
+                    v9d q = get_quadratic_deformation_q(particle->initial_offset_from_com);
+
+                    particle->p = shape_match_rotation_matrix*q + V3d(0, 0, 5);
+                }
             }
         }
 #endif

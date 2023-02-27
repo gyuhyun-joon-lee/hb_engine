@@ -141,7 +141,6 @@ add_distance_constraint(PBDParticleGroup *group, u32 index0, u32 index1)
     }
 }
 
-
 internal void
 add_volume_constraint(PBDParticleGroup *group, 
                      u32 top, u32 bottom0, u32 bottom1, u32 bottom2)
@@ -159,13 +158,28 @@ add_volume_constraint(PBDParticleGroup *group,
     c->rest_volume = get_tetrahedron_volume(particle0->p, particle1->p, particle2->p, particle3->p);
 }
 
+internal v9d
+get_quadratic_deformation_q(v3d initial_offset_from_com)
+{
+    v9d result = V9d(initial_offset_from_com.x,
+            initial_offset_from_com.y,
+            initial_offset_from_com.z,
+            square(initial_offset_from_com.x),
+            square(initial_offset_from_com.y),
+            square(initial_offset_from_com.z),
+            initial_offset_from_com.x*initial_offset_from_com.y,
+            initial_offset_from_com.y*initial_offset_from_com.z,
+            initial_offset_from_com.z*initial_offset_from_com.x);
+
+    return result;
+}
+
 // NOTE(gh) This has to happen after the particle allocation is done!!!
 internal void
 populate_pbd_shape_matching_info(Entity *entity, 
                                 PBDParticleGroup *group,
                                 f32 linear_shape_matching_coefficient)
 {
-    // Get COM to initialize initial_offset_from_com
     v3d com = get_com_of_particle_group(group);
     for(u32 particle_index = 0;
             particle_index < group->count;
@@ -175,7 +189,7 @@ populate_pbd_shape_matching_info(Entity *entity,
         particle->initial_offset_from_com = particle->p - com;
     }
 
-    if(is_entity_flag_set(entity, EntityFlag_Linear))
+    if(is_entity_flag_set(entity, EntityFlag_Quadratic))
     {
         m3x3d Aqq = M3x3d();
         for(u32 particle_index = 0;
@@ -194,46 +208,37 @@ populate_pbd_shape_matching_info(Entity *entity,
         group->linear_shape_matching_coefficient = linear_shape_matching_coefficient;
         assert(is_inversable(Aqq));
         group->linear_inv_Aqq = inverse(Aqq);
-    }
-    else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
-    {
-        v9d q[9] = {};
 
-        m9x9d Aqq = {};
+        m9x9d quadratic_Aqq = {};
         for(u32 particle_index = 0;
                 particle_index < group->count;
                 ++particle_index)
         {
             PBDParticle *particle = group->particles + particle_index;
 
-            v9d q9 = V9d(particle->initial_offset_from_com.x,
-                         particle->initial_offset_from_com.y,
-                         particle->initial_offset_from_com.z,
-                         square(particle->initial_offset_from_com.x),
-                         square(particle->initial_offset_from_com.y),
-                         square(particle->initial_offset_from_com.z),
-                         particle->initial_offset_from_com.x*particle->initial_offset_from_com.y,
-                         particle->initial_offset_from_com.y*particle->initial_offset_from_com.z,
-                         particle->initial_offset_from_com.z*particle->initial_offset_from_com.x);
+            // TODO(gh) We can store this, but the problem is that 
+            // this is so huge
+            v9d q = get_quadratic_deformation_q(particle->initial_offset_from_com);
 
-            // NOTE(gh) This is equivalent to q9 * transpose(q9),
+            // NOTE(gh) This is equivalent to q * transpose(q),
             // which results with 9x9 matrix.
-            Aqq.rows[0] += q9.e[0] * q9;
-            Aqq.rows[1] += q9.e[1] * q9;
-            Aqq.rows[2] += q9.e[2] * q9;
-            Aqq.rows[3] += q9.e[3] * q9;
-            Aqq.rows[4] += q9.e[4] * q9;
-            Aqq.rows[5] += q9.e[5] * q9;
-            Aqq.rows[6] += q9.e[6] * q9;
-            Aqq.rows[7] += q9.e[7] * q9;
-            Aqq.rows[8] += q9.e[8] * q9;
+            quadratic_Aqq.rows[0] += q.e[0] * q;
+            quadratic_Aqq.rows[1] += q.e[1] * q;
+            quadratic_Aqq.rows[2] += q.e[2] * q;
+            quadratic_Aqq.rows[3] += q.e[3] * q;
+            quadratic_Aqq.rows[4] += q.e[4] * q;
+            quadratic_Aqq.rows[5] += q.e[5] * q;
+            quadratic_Aqq.rows[6] += q.e[6] * q;
+            quadratic_Aqq.rows[7] += q.e[7] * q;
+            quadratic_Aqq.rows[8] += q.e[8] * q;
         }
 
-        // TODO(gh) Is this even possible?
+        // TODO(gh) Can Aqq even be non-inversable??
         // assert(is_inversable(Aqq));
-        group->quadratic_inv_Aqq = inverse(Aqq);
+        group->quadratic_inv_Aqq = inverse(quadratic_Aqq);
     }
 }
+
 
 // TODO(gh) Later, we would want this is voxelize any mesh
 // we throw in

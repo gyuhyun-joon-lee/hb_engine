@@ -329,6 +329,20 @@ struct m3x3d
     };
 };
 
+struct m3x9d
+{
+    union
+    {
+        struct
+        {
+            v9d rows[3];
+        };
+
+        // [row][column]
+        f64 e[3][9];
+    };
+};
+
 // row major
 // e[0][0] e[0][1] e[0][2] e[0][3]
 // e[1][0] e[1][1] e[1][2] e[1][3]
