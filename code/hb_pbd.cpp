@@ -166,7 +166,7 @@ get_shape_matching_linear_deformation_rotation_matrix(PBDParticleGroup *group)
         linear_Apq.rows[1] += offset.y * particle->initial_offset_from_com;
         linear_Apq.rows[2] += offset.z * particle->initial_offset_from_com;
     }
-    // NOTE(gh) Note that R should be retrieved from Apq, not from full A!!!
+    // NOTE(gh) Note that R should be retrieved from Apq, not from full A.
     group->shape_match_quat = 
         extract_rotation_from_polar_decomposition(&linear_Apq, &group->shape_match_quat, 32);
     m3x3d R = 
@@ -176,7 +176,9 @@ get_shape_matching_linear_deformation_rotation_matrix(PBDParticleGroup *group)
     // Volume preservation
     linear_A = (1.0f/cbrt(get_determinant(linear_A))) * linear_A;
 
-    f64 linear_deformation_coefficient = 0.9999;
+    // R is the matrix that we were using for the rigid body deformation,
+    // which means that it will try to recover in a 'rigid body' way.
+    f64 linear_deformation_coefficient = 0.9998;
     m3x3d result = linear_deformation_coefficient*linear_A + (1.0-linear_deformation_coefficient)*R;
 
     return result;
