@@ -192,8 +192,9 @@ populate_pbd_shape_matching_info(Entity *entity,
     if(is_entity_flag_set(entity, EntityFlag_Quadratic) || 
         is_entity_flag_set(entity, EntityFlag_Linear))
     {
-        // NOTE(gh) Aqq should be a symmetric matrix, meaning that 
-        // it contains only scaling but no rotation
+        // NOTE(gh) 
+        // Aqq = inverse(mi * qi * transpose(qi)), which should result in 3x3 matrix
+        // Aqq should be a symmetric matrix, meaning that it contains only scaling but no rotation.
         m3x3d Aqq = M3x3d();
         for(u32 particle_index = 0;
                 particle_index < group->count;
@@ -201,12 +202,16 @@ populate_pbd_shape_matching_info(Entity *entity,
         {
             PBDParticle *particle = group->particles + particle_index;
 
-            Aqq.rows[0] += particle->initial_offset_from_com.x * particle->initial_offset_from_com;
-            Aqq.rows[1] += particle->initial_offset_from_com.y * particle->initial_offset_from_com;
-            Aqq.rows[2] += particle->initial_offset_from_com.z * particle->initial_offset_from_com;
+            assert(!compare_with_epsilon_f64(particle->inv_mass, 0.0));
+            f64 particle_mass = 1.0/particle->inv_mass;
+
+            Aqq.rows[0] += particle_mass * particle->initial_offset_from_com.x * particle->initial_offset_from_com;
+            Aqq.rows[1] += particle_mass * particle->initial_offset_from_com.y * particle->initial_offset_from_com;
+            Aqq.rows[2] += particle_mass * particle->initial_offset_from_com.z * particle->initial_offset_from_com;
         }
 
-        group->linear_shape_matching_coefficient = linear_shape_matching_coefficient;
+        assert(is_symmetric(Aqq));
+        // group->linear_shape_matching_coefficient = linear_shape_matching_coefficient;
         // TODO(gh) Is this even possible?
         assert(is_inversable(Aqq));
         group->linear_inv_Aqq = inverse(Aqq);

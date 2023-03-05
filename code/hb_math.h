@@ -29,7 +29,7 @@ compare_with_epsilon(f32 a, f32 b, f32 epsilon = 0.000001f)
 }
 
 inline b32
-compare_with_epsilon_f64(f64 a, f64 b, f64 epsilon = 0.000001)
+compare_with_epsilon_f64(f64 a, f64 b, f64 epsilon = 0.00000001)
 {
     b32 result = true;
 
@@ -1378,6 +1378,19 @@ M3x3d()
 }
 
 inline m3x3d
+M3x3d(f64 e00, f64 e01, f64 e02,
+    f64 e10, f64 e11, f64 e12, 
+    f64 e20, f64 e21, f64 e22)
+{
+    m3x3d result = {};
+    result.rows[0] = V3d(e00, e01, e02);
+    result.rows[1] = V3d(e10, e11, e12);
+    result.rows[2] = V3d(e20, e21, e22);
+
+    return result;
+}
+
+inline m3x3d
 identity_m3x3d()
 {
     m3x3d result = M3x3d();
@@ -1544,7 +1557,22 @@ inverse(const m3x3d &m)
     return result;
 }
 
+inline b32
+is_symmetric(const m3x3d m)
+{
+    b32 result = false;
+    if(compare_with_epsilon_f64(m.e[0][1], 0) &&
+        compare_with_epsilon_f64(m.e[0][2], 0) && 
+        compare_with_epsilon_f64(m.e[1][0], 0) && 
+        compare_with_epsilon_f64(m.e[1][2], 0) && 
+        compare_with_epsilon_f64(m.e[2][0], 0) && 
+        compare_with_epsilon_f64(m.e[2][1], 0))
+    {
+        result = true;
+    }
 
+    return result;
+}
 
 inline m3x4
 M3x4(f32 e00, f32 e01, f32 e02, f32 e03,

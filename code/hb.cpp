@@ -143,7 +143,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
         add_floor_entity(game_state, V3(), V2(1000, 1000), V3(1.0f, 1.0f, 1.0f), 1, 1, 0);
 
-#if 1
+#if 0
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -155,7 +155,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
 #endif
-#if 1
+#if 0
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -167,7 +167,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
 #endif
-#if 1
+#if 0
         {
 
 
@@ -180,7 +180,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             0.8f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
         }
-#if 0
+#endif
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -191,8 +191,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             0.1f, 1.0f/(random_between(&game_state->random_series, 10, 50)), color, 
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
-#endif
-#endif
 #if 1
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
@@ -202,7 +200,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                              tran_state->loaded_voxs + 4,
                             V3d(-15, -15, 5), V3d(0, 0, 0),
                             0.3f, 1.0f/(random_between(&game_state->random_series, 80, 100)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
 #endif
 
@@ -243,8 +241,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
     {
         // game_camera->roll += 0.8f * platform_input->dt_per_frame;
     }
-    quat temp = Quat(cosf(pi_32/6.0f), V3(sinf(pi_32/6.0f), 0, 0));
-    m3x3 temp0 = orientation_quat_to_m3x3(temp);
 
     v3 camera_dir = get_camera_lookat(render_camera);
     v3 camera_right = get_camera_right(render_camera);
@@ -704,27 +700,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             Entity *entity = game_state->entities + entity_index;
             PBDParticleGroup *group = &entity->particle_group;
 
-            v3d com = get_com_of_particle_group(group);
             if(is_entity_flag_set(entity, EntityFlag_RigidBody))
             {
-
-                m3x3d A = M3x3d();
-                for(u32 particle_index = 0;
-                        particle_index < group->count;
-                        ++particle_index)
-                {
-                    PBDParticle *particle = group->particles + particle_index;
-                    v3d offset = particle->p - com;
-                    A.rows[0] += offset.x * particle->initial_offset_from_com;
-                    A.rows[1] += offset.y * particle->initial_offset_from_com;
-                    A.rows[2] += offset.z * particle->initial_offset_from_com;
-                }
+                m3x3d A = get_shape_matching_rigid_body_deformation_matrix(group);
 
                 group->shape_match_quat = 
                     extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);
                 m3x3d shape_match_rotation_matrix = 
                     orientation_quatd_to_m3x3d(group->shape_match_quat);
 
+                v3d com = get_com_of_particle_group(group);
                 // Apply the shape matching rotation
                 for(u32 particle_index = 0;
                         particle_index < group->count;
@@ -736,15 +721,16 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             }
             else if(is_entity_flag_set(entity, EntityFlag_Linear))
             {
-                m3x3d R = 
+                m3x3d shape_matching_matrix = 
                     get_shape_matching_linear_deformation_rotation_matrix(group);
 
+                v3d com = get_com_of_particle_group(group);
                 for(u32 particle_index = 0;
                         particle_index < group->count;
                         ++particle_index)
                 {
                     PBDParticle *particle = group->particles + particle_index;
-                    particle->p = R*particle->initial_offset_from_com + com;
+                    particle->p = shape_matching_matrix*particle->initial_offset_from_com + com;
                 }
             }
             else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
@@ -754,7 +740,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 m3x3d R = 
                     get_shape_matching_linear_deformation_rotation_matrix(group);
 
-                // This is 3x9 matrix
+                v3d com = get_com_of_particle_group(group);
                 m3x9d quadratic_Apq = {};
                 for(u32 particle_index = 0;
                         particle_index < group->count;
@@ -765,9 +751,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                     v3d offset = particle->p - com;
                     v9d q = get_quadratic_deformation_q(particle->initial_offset_from_com);
 
-                    quadratic_Apq.rows[0] += offset.x * q;
-                    quadratic_Apq.rows[1] += offset.y * q;
-                    quadratic_Apq.rows[2] += offset.z * q;
+                    f64 particle_mass = 1.0/particle->inv_mass;
+
+                    quadratic_Apq.rows[0] += particle_mass*offset.x * q;
+                    quadratic_Apq.rows[1] += particle_mass*offset.y * q;
+                    quadratic_Apq.rows[2] += particle_mass*offset.z * q;
                 }
 
                 m3x9d quadratic_A = quadratic_Apq*group->quadratic_inv_Aqq;
@@ -780,7 +768,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 quadratric_R.rows[2] = V9d(R.e[2][0], R.e[2][1], R.e[2][2],
                                             0, 0, 0, 0, 0, 0);
 
-                f64 quadratic_coefficient = 0.5;
+                f64 quadratic_coefficient = 0.6;
                 m3x9d shape_match_rotation_matrix = quadratic_coefficient*quadratic_A + 
                                                     (1-quadratic_coefficient)*quadratric_R;
 
@@ -832,6 +820,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         end_temp_memory(&collision_constraint_memory);
         end_temp_memory(&environment_constraint_memory);
     }
+
+    m3x3d temp = M3x3d(1, 3, 2, 5, 10, 12, 3, 5, 2);
+    assert(is_inversable(temp));
+    m3x3d inv_temp = inverse(temp);
+    m3x3d mul = temp*inv_temp;
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1

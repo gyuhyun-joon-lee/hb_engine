@@ -149,37 +149,52 @@ solve_environment_constraint(EnvironmentSolution *solution,
     }
 }
 
+// This returns A, which has rotational & scaling matrix based on polar decomposition
+// A = R * S
 internal m3x3d
-get_shape_matching_linear_deformation_rotation_matrix(PBDParticleGroup *group)
+get_shape_matching_rigid_body_deformation_matrix(PBDParticleGroup *group)
 {
+    m3x3d result = M3x3d();
+
+    // TODO(gh) Pass COM as a parameter?
     v3d com = get_com_of_particle_group(group);
 
-    m3x3d linear_Apq = M3x3d(); 
     for(u32 particle_index = 0;
             particle_index < group->count;
             ++particle_index)
     {
         PBDParticle *particle = group->particles + particle_index;
-
         v3d offset = particle->p - com;
-        linear_Apq.rows[0] += offset.x * particle->initial_offset_from_com;
-        linear_Apq.rows[1] += offset.y * particle->initial_offset_from_com;
-        linear_Apq.rows[2] += offset.z * particle->initial_offset_from_com;
+
+        f64 particle_mass = 1.0/particle->inv_mass;
+
+        result.rows[0] += particle_mass * offset.x * particle->initial_offset_from_com;
+        result.rows[1] += particle_mass * offset.y * particle->initial_offset_from_com;
+        result.rows[2] += particle_mass * offset.z * particle->initial_offset_from_com;
     }
-    // NOTE(gh) Note that R should be retrieved from Apq, not from full A.
-    group->shape_match_quat = 
-        extract_rotation_from_polar_decomposition(&linear_Apq, &group->shape_match_quat, 32);
-    m3x3d R = 
-        orientation_quatd_to_m3x3d(group->shape_match_quat);
+
+    return result;
+}
+
+internal m3x3d
+get_shape_matching_linear_deformation_rotation_matrix(PBDParticleGroup *group)
+{
+    m3x3d linear_Apq = get_shape_matching_rigid_body_deformation_matrix(group); 
 
     m3x3d linear_A = linear_Apq * group->linear_inv_Aqq;
     // Volume preservation
-    linear_A = (1.0f/cbrt(get_determinant(linear_A))) * linear_A;
+    linear_A = (1.0/cbrt(get_determinant(linear_A))) * linear_A;
 
+    // NOTE(gh) Note that R should be retrieved from Apq, not from full A.
+    group->shape_match_quat = 
+        extract_rotation_from_polar_decomposition(&linear_Apq, &group->shape_match_quat, 32);
     // R is the matrix that we were using for the rigid body deformation,
     // which means that it will try to recover in a 'rigid body' way.
-    f64 linear_deformation_coefficient = 0.9998;
-    m3x3d result = linear_deformation_coefficient*linear_A + (1.0-linear_deformation_coefficient)*R;
+    m3x3d rigid_body_R = 
+        orientation_quatd_to_m3x3d(group->shape_match_quat);
+
+    f64 linear_deformation_coefficient = 0.9f;
+    m3x3d result = linear_deformation_coefficient*linear_A + (1.0-linear_deformation_coefficient)*rigid_body_R;
 
     return result;
 }
