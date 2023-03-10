@@ -1256,11 +1256,11 @@ inline f32
 get_determinant(const m3x3 &m)
 {
     f32 result = m.e[0][0]*m.e[1][1]*m.e[2][2] + 
-              m.e[1][0]*m.e[2][1]*m.e[0][2] + 
-              m.e[2][0]*m.e[0][1]*m.e[1][2] - 
-              m.e[0][0]*m.e[2][1]*m.e[1][2] - 
-              m.e[2][0]*m.e[1][1]*m.e[0][2] - 
-              m.e[1][0]*m.e[0][1]*m.e[2][2];
+                  m.e[1][0]*m.e[2][1]*m.e[0][2] + 
+                  m.e[2][0]*m.e[0][1]*m.e[1][2] - 
+                  m.e[0][0]*m.e[2][1]*m.e[1][2] - 
+                  m.e[2][0]*m.e[1][1]*m.e[0][2] - 
+                  m.e[1][0]*m.e[0][1]*m.e[2][2];
 
     return result;
 }
@@ -1507,11 +1507,11 @@ inline f64
 get_determinant(const m3x3d &m)
 {
     f64 result = m.e[0][0]*m.e[1][1]*m.e[2][2] + 
-              m.e[1][0]*m.e[2][1]*m.e[0][2] + 
-              m.e[2][0]*m.e[0][1]*m.e[1][2] - 
-              m.e[0][0]*m.e[2][1]*m.e[1][2] - 
-              m.e[2][0]*m.e[1][1]*m.e[0][2] - 
-              m.e[1][0]*m.e[0][1]*m.e[2][2];
+                  m.e[1][0]*m.e[2][1]*m.e[0][2] + 
+                  m.e[2][0]*m.e[0][1]*m.e[1][2] - 
+                  m.e[0][0]*m.e[2][1]*m.e[1][2] - 
+                  m.e[2][0]*m.e[1][1]*m.e[0][2] - 
+                  m.e[1][0]*m.e[0][1]*m.e[2][2];
 
     return result;
 }
@@ -2339,6 +2339,7 @@ is_pure_quatd(quatd q)
 }
 
 // NOTE(gh) This matrix is an orthogonal matrix, so inverse == transpose
+// This is identical to performaing q * v * q-1 to whatever v that we wannt to rotate
 inline m3x3d
 orientation_quatd_to_m3x3d(quatd q)
 {
@@ -2360,6 +2361,7 @@ orientation_quatd_to_m3x3d(quatd q)
 }
 
 // NOTE(gh) This matrix is an orthogonal matrix, so inverse == transpose
+// This is identical to performaing q * v * q-1 to whatever v that we wannt to rotate
 inline m3x3
 orientation_quat_to_m3x3(quat q)
 {

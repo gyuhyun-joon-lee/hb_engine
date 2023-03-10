@@ -82,11 +82,12 @@ struct CollisionSolution
 internal void
 solve_collision_constraint(CollisionSolution *solution,
                             CollisionConstraint *c,
-                            v3d *p0, v3d *p1) 
+                            v3d *p0, v3d *p1, f64 sub_dt) 
 {
     PBDParticle *particle0 = c->particle0;
     PBDParticle *particle1 = c->particle1;
 
+    f64 inv_stiffness = 0.0;
     // TODO(gh) Since this constraint is only generated when 
     // at least one of them as finite mass anyway, maybe there's no reason
     // for this checking?
@@ -105,7 +106,7 @@ solve_collision_constraint(CollisionSolution *solution,
             v3d gradient1 = -gradient0;
 
             f64 lagrange_multiplier = 
-                -C / (particle0->inv_mass + particle1->inv_mass);
+                -C / (particle0->inv_mass + particle1->inv_mass + inv_stiffness * square(sub_dt));
 
             // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
             // inv_mass of the particles are involved
@@ -129,8 +130,9 @@ struct EnvironmentSolution
 internal void
 solve_environment_constraint(EnvironmentSolution *solution,
                              EnvironmentConstraint *c,
-                             v3d *p)
+                             v3d *p, f64 sub_dt)
 {
+    f64 inv_stiffness = 0;
     // TODO(gh) Since this constraint is only generated when 
     // the particle has finite mass anyway, maybe there's no reason
     // for this checking?
@@ -140,11 +142,10 @@ solve_environment_constraint(EnvironmentSolution *solution,
         f64 C = d - c->d - c->particle->r;
         if(C < collision_epsilon)
         {
-            // NOTE(gh) For environmental collision, we don't need the inv_mass thing
-            f64 lagrange_multiplier = -C;
+            f64 lagrange_multiplier = -C / (c->particle->inv_mass + inv_stiffness * square(sub_dt));
 
             // NOTE(gh) delta(xi) = lagrange_multiplier*inv_mass*gradient(xi);
-            solution->offset = lagrange_multiplier*(c->n);
+            solution->offset = lagrange_multiplier*c->particle->inv_mass*(c->n);
         }
     }
 }
@@ -187,14 +188,14 @@ get_shape_matching_linear_deformation_rotation_matrix(PBDParticleGroup *group)
 
     // NOTE(gh) Note that R should be retrieved from Apq, not from full A.
     group->shape_match_quat = 
-        extract_rotation_from_polar_decomposition(&linear_Apq, &group->shape_match_quat, 32);
+        extract_rotation_from_polar_decomposition(&linear_Apq, &group->shape_match_quat, 64);
     // R is the matrix that we were using for the rigid body deformation,
     // which means that it will try to recover in a 'rigid body' way.
     m3x3d rigid_body_R = 
         orientation_quatd_to_m3x3d(group->shape_match_quat);
 
-    f64 linear_deformation_coefficient = 0.9f;
-    m3x3d result = linear_deformation_coefficient*linear_A + (1.0-linear_deformation_coefficient)*rigid_body_R;
+    f64 c = 1 - group->linear_deformation_c;
+    m3x3d result = group->linear_deformation_c*linear_A + c*rigid_body_R;
 
     return result;
 }

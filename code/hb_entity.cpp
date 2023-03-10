@@ -178,8 +178,11 @@ get_quadratic_deformation_q(v3d initial_offset_from_com)
 internal void
 populate_pbd_shape_matching_info(Entity *entity, 
                                 PBDParticleGroup *group,
-                                f32 linear_shape_matching_coefficient)
+                                f32 linear_deformation_c)
+
 {
+    group->linear_deformation_c = linear_deformation_c;
+
     v3d com = get_com_of_particle_group(group);
     for(u32 particle_index = 0;
             particle_index < group->count;
@@ -193,7 +196,7 @@ populate_pbd_shape_matching_info(Entity *entity,
         is_entity_flag_set(entity, EntityFlag_Linear))
     {
         // NOTE(gh) 
-        // Aqq = inverse(mi * qi * transpose(qi)), which should result in 3x3 matrix
+        // Aqq = inverse(mi * qi * transpose(qi)) where q if xi0 - com0, which should result in 3x3 matrix
         // Aqq should be a symmetric matrix, meaning that it contains only scaling but no rotation.
         m3x3d Aqq = M3x3d();
         for(u32 particle_index = 0;
@@ -210,10 +213,8 @@ populate_pbd_shape_matching_info(Entity *entity,
             Aqq.rows[2] += particle_mass * particle->initial_offset_from_com.z * particle->initial_offset_from_com;
         }
 
-        assert(is_symmetric(Aqq));
         // group->linear_shape_matching_coefficient = linear_shape_matching_coefficient;
-        // TODO(gh) Is this even possible?
-        assert(is_inversable(Aqq));
+        assert(is_inversable(Aqq) && is_symmetric(Aqq));
         group->linear_inv_Aqq = inverse(Aqq);
 
         if(is_entity_flag_set(entity, EntityFlag_Quadratic))
@@ -256,7 +257,7 @@ internal Entity *
 add_pbd_cube_entity(GameState *game_state, 
                     v3d center, v3d dim, 
                     v3d v,
-                    f32 linear_shape_matching_coefficient, 
+                    f32 linear_deformation_c, 
                     f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
@@ -298,7 +299,7 @@ add_pbd_cube_entity(GameState *game_state,
 
     populate_pbd_shape_matching_info(result, 
                                      group,
-                                     linear_shape_matching_coefficient);
+                                     linear_deformation_c);
 
     return result;
 }
@@ -308,7 +309,7 @@ add_pbd_vox_entity(GameState *game_state,
                     LoadedVOXResult *loaded_vox,
                     v3d left_bottom_corner, 
                     v3d v,
-                    f32 linear_shape_matching_coefficient, f32 inv_mass, v3 color, u32 flags)
+                    f32 linear_deformation_c, f32 inv_mass, v3 color, u32 flags)
 {
     Entity *result = add_entity(game_state, EntityType_PBD, flags);
     result->color = color;
@@ -336,7 +337,7 @@ add_pbd_vox_entity(GameState *game_state,
     
     populate_pbd_shape_matching_info(result, 
                                      group,
-                                     linear_shape_matching_coefficient);
+                                     linear_deformation_c);
 
     return result;
 }

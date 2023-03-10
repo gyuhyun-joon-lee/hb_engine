@@ -41,7 +41,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
    TODO(gh)
    - Render Font using one of the graphics API
    - If we are going to use the packed texture, how should we correctly sample from it in the shader?
-   */
+*/
 
 extern "C" 
 GAME_UPDATE_AND_RENDER(update_and_render)
@@ -89,7 +89,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         tran_state->saved_game_state_write_cursor = 0;
         tran_state->has_entire_buffer_filled_at_least_once = false;
 
-        tran_state->max_pbd_substep_count = 32;
+        tran_state->max_pbd_substep_count = 16;
         tran_state->remaining_pbd_substep_count = tran_state->max_pbd_substep_count*50*60;
         tran_state->is_simulating_in_realtime = true;
 
@@ -167,7 +167,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_RigidBody);
         }
 #endif
-#if 0
+#if 1
         {
 
 
@@ -177,10 +177,11 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             add_pbd_vox_entity(game_state, 
                              tran_state->loaded_voxs + 2,
                             V3d(3, 3, 12), V3d(0, 0, 0),
-                            0.8f, 1.0f/(random_between(&game_state->random_series, 100, 200)), color, 
-                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Quadratic);
+                            0.8f, 1.0f/(random_between(&game_state->random_series, 10, 50)), color, 
+                            EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
 #endif
+#if 0
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -191,7 +192,8 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                             0.1f, 1.0f/(random_between(&game_state->random_series, 10, 50)), color, 
                             EntityFlag_Movable|EntityFlag_Collides|EntityFlag_Linear);
         }
-#if 1
+#endif
+#if 0
         {
             v3 color = V3(random_between_0_1(&game_state->random_series), 
                            random_between_0_1(&game_state->random_series),
@@ -543,7 +545,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
             {
                 EnvironmentConstraint *c = environment_constraints + constraint_index;
                 EnvironmentSolution solution = {};
-                solve_environment_constraint(&solution, c, &c->particle->prev_p);
+                solve_environment_constraint(&solution, c, &c->particle->prev_p, sub_dt);
 
                 c->particle->p += solution.offset;
                 c->particle->prev_p += solution.offset;
@@ -558,7 +560,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 CollisionSolution solution = {};
                 solve_collision_constraint(&solution, c,
-                                           &c->particle0->prev_p, &c->particle1->prev_p);
+                                           &c->particle0->prev_p, &c->particle1->prev_p, sub_dt);
 
                 c->particle0->p += solution.offset0;
                 c->particle0->prev_p += solution.offset0;
@@ -582,7 +584,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         {
             EnvironmentConstraint *c = environment_constraints + constraint_index;
             EnvironmentSolution solution = {};
-            solve_environment_constraint(&solution, c, &c->particle->p);
+            solve_environment_constraint(&solution, c, &c->particle->p, sub_dt);
 
            c->particle->p += solution.offset;
         }
@@ -596,7 +598,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
             CollisionSolution solution = {};
             solve_collision_constraint(&solution, c,
-                                       &c->particle0->p, &c->particle1->p);
+                                       &c->particle0->p, &c->particle1->p, sub_dt);
 
             c->particle0->p += solution.offset0;
             c->particle1->p += solution.offset1;
@@ -706,7 +708,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
 
                 group->shape_match_quat = 
                     extract_rotation_from_polar_decomposition(&A, &group->shape_match_quat, 32);
-                m3x3d shape_match_rotation_matrix = 
+                m3x3d shape_matching_matrix = 
                     orientation_quatd_to_m3x3d(group->shape_match_quat);
 
                 v3d com = get_com_of_particle_group(group);
@@ -716,7 +718,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         ++particle_index)
                 {
                     PBDParticle *particle = group->particles + particle_index;
-                    particle->p = (shape_match_rotation_matrix*particle->initial_offset_from_com + com);
+                    particle->p = shape_matching_matrix*particle->initial_offset_from_com + com;
                 }
             }
             else if(is_entity_flag_set(entity, EntityFlag_Linear))
@@ -730,16 +732,14 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                         ++particle_index)
                 {
                     PBDParticle *particle = group->particles + particle_index;
-                    particle->p = shape_matching_matrix*particle->initial_offset_from_com + com;
+
+                    // NOTE(gh) This is also from the shape-matching paper
+                    f64 alpha = sub_dt_square*group->linear_deformation_c * particle->inv_mass;
+                    particle->p += alpha*(shape_matching_matrix*particle->initial_offset_from_com + com - particle->p);
                 }
             }
             else if(is_entity_flag_set(entity, EntityFlag_Quadratic))
             {
-                // NOTE(gh) Quadratic deformation is done on top of 
-                // linea deformation, so we need to caculate linear deformation first.
-                m3x3d R = 
-                    get_shape_matching_linear_deformation_rotation_matrix(group);
-
                 v3d com = get_com_of_particle_group(group);
                 m3x9d quadratic_Apq = {};
                 for(u32 particle_index = 0;
@@ -759,7 +759,12 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 }
 
                 m3x9d quadratic_A = quadratic_Apq*group->quadratic_inv_Aqq;
+
+                // NOTE(gh) Quadratic deformation is done on top of 
+                // linea deformation, so we need to caculate linear deformation first.
                 // quadratric_R = [R 0 0], which results in 3x9 matrix
+                m3x3d R = 
+                    get_shape_matching_linear_deformation_rotation_matrix(group);
                 m3x9d quadratric_R = {};
                 quadratric_R.rows[0] = V9d(R.e[0][0], R.e[0][1], R.e[0][2],
                                             0, 0, 0, 0, 0, 0);
@@ -768,7 +773,7 @@ GAME_UPDATE_AND_RENDER(update_and_render)
                 quadratric_R.rows[2] = V9d(R.e[2][0], R.e[2][1], R.e[2][2],
                                             0, 0, 0, 0, 0, 0);
 
-                f64 quadratic_coefficient = 0.6;
+                f64 quadratic_coefficient = 0.5;
                 m3x9d shape_match_rotation_matrix = quadratic_coefficient*quadratic_A + 
                                                     (1-quadratic_coefficient)*quadratric_R;
 
@@ -820,11 +825,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         end_temp_memory(&collision_constraint_memory);
         end_temp_memory(&environment_constraint_memory);
     }
-
-    m3x3d temp = M3x3d(1, 3, 2, 5, 10, 12, 3, 5, 2);
-    assert(is_inversable(temp));
-    m3x3d inv_temp = inverse(temp);
-    m3x3d mul = temp*inv_temp;
 
     // NOTE(gh) Frustum cull the grids
     // NOTE(gh) As this is just a conceptual test, it doesn't matter whether the NDC z is 0 to 1 or -1 to 1

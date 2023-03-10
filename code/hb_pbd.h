@@ -158,7 +158,7 @@ struct PBDParticleGroup
 
     // Used for linear deformation
     m3x3d linear_inv_Aqq;
-    // f32 linear_shape_matching_coefficient; // should range from 0 to 1
+    f32 linear_deformation_c; // 0 means complete deformation, 1 is same as rigid body
 
     // NOTE(gh) Used for quadratic deformation
     m9x9d quadratic_inv_Aqq;
