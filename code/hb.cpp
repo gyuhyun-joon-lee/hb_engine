@@ -24,6 +24,7 @@
 #include "hb_mesh_generation.cpp"
 #include "hb_pbd.cpp"
 #include "hb_entity.cpp"
+#include "hb_rigidbody.cpp"
 #include "hb_asset.cpp"
 #include "hb_render.cpp"
 #include "hb_image_loader.cpp"
@@ -41,7 +42,7 @@ output_debug_records(PlatformRenderPushBuffer *platform_render_push_buffer, Game
    TODO(gh)
    - Render Font using one of the graphics API
    - If we are going to use the packed texture, how should we correctly sample from it in the shader?
-*/
+   */
 
 extern "C" 
 GAME_UPDATE_AND_RENDER(update_and_render)
@@ -884,9 +885,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    GameState *game_state0 = tran_state->saved_game_states;
-    GameState *game_state1 = tran_state->saved_game_states + 1;
-
     // NOTE(gh) render entity start
     init_render_push_buffer(platform_render_push_buffer, render_camera, game_camera,
             tran_state->grass_grids, tran_state->grass_grid_count_x, tran_state->grass_grid_count_y, 
@@ -924,7 +922,6 @@ GAME_UPDATE_AND_RENDER(update_and_render)
         }
     }
 #endif
-
     render_all_entities(platform_render_push_buffer, game_state, &tran_state->assets, true, true);
 
     if(debug_platform_render_push_buffer)

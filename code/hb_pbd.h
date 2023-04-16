@@ -5,7 +5,6 @@
     NOTE(gh) Some equations involved in PBD
     lagrange multiplier(lambda) = C(p) / sum(abs(gradient))
 */
-
 // TODO(gh) Instead of this AOS, use SOA
 struct PBDParticle
 {
@@ -30,7 +29,6 @@ struct PBDParticle
     v3 d_p_sum;
     u32 constraint_hit_count;
 };
-
 
 struct PBDParticlePool
 {

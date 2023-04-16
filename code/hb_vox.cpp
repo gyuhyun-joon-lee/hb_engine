@@ -1,5 +1,4 @@
 
-
 /*
    NOTE(gh) Each chunk in vox file has this kind of structure
    -------------------------------------------------------------------------------

@@ -2,6 +2,7 @@
  * Written by Gyuhyun Lee
  */
 
+// TODO(gh) Find out what is the difference between import and include in objc?
 #import <Cocoa/Cocoa.h> 
 #import <CoreGraphics/CoreGraphics.h> 
 #import <mach/mach_time.h> // mach_absolute_time
@@ -30,6 +31,7 @@
 #include "hb_shared_with_shader.h"
 #include "hb_platform.h"
 
+// NOTE(gh) This is the only cpp file that is not compiled with hb.cpp file.
 #include "hb_metal.cpp"
 
 // TODO(gh): Get rid of global variables?
@@ -1353,7 +1355,6 @@ macos_load_game_code(MacOSGameCode *game_code, char *file_name)
 
 int main(void)
 { 
-    // srand(time(NULL));
     RandomSeries random_series = start_random_series(rand()); 
 
     ThreadWorkQueue thread_work_queue = {};
